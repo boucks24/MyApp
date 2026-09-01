@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="App Shelf">
-<title>App Shelf</title>
+<meta name="apple-mobile-web-app-title" content="5/3/1 BBB">
+<title>5/3/1 BBB</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -44,36 +44,12 @@
     width:34px;height:34px;border-radius:0;border:1px solid var(--line);
     background:var(--panel);color:var(--chalk);font-size:18px;line-height:1;
     display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+    text-decoration:none;
   }
   header.topbar h1{font-family:var(--font-display);font-weight:600;font-size:20px;letter-spacing:0.02em;margin:0;flex:1;}
   header.topbar .sub{font-size:12px;color:var(--muted);margin-top:2px;}
 
   main{flex:1;padding:18px 20px 110px;}
-
-  /* ---- Start menu ---- */
-  .hero{padding:34px 20px 10px;}
-  .hero .mark{
-    font-family:var(--font-display);font-weight:700;font-size:44px;letter-spacing:0.01em;line-height:1;
-    display:flex;align-items:baseline;gap:10px;
-  }
-  .hero .mark span.dot{color:var(--iron);}
-  .hero .tag{color:var(--muted);font-size:14px;margin-top:8px;}
-
-  .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:10px 20px 30px;}
-  .tile{
-    background:var(--panel);border:1px solid var(--line);
-    padding:20px 16px;min-height:128px;cursor:pointer;
-    display:flex;flex-direction:column;justify-content:space-between;
-    position:relative;overflow:hidden;
-    transition:transform .12s ease, border-color .12s ease;
-  }
-  .tile:active{transform:scale(0.97);}
-  .tile .bar{width:34px;height:6px;background:var(--iron);}
-  .tile.dim .bar{background:var(--line);}
-  .tile h3{font-family:var(--font-display);font-size:17px;font-weight:600;margin:14px 0 4px;letter-spacing:0.01em;}
-  .tile p{font-size:12px;color:var(--muted);margin:0;line-height:1.4;}
-  .tile.dim{opacity:0.55;}
-  .tile.dim h3, .tile.dim p{color:var(--muted);}
 
   .toast{
     position:fixed;left:50%;bottom:36px;transform:translateX(-50%);
@@ -92,11 +68,12 @@
 
   label.field{display:block;margin-bottom:14px;}
   label.field span{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
-  input[type=number], select{
+  input[type=number], input[type=date], select{
     width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--chalk);
     padding:12px 12px;font-size:16px;font-family:var(--font-body);
   }
-  input[type=number]:focus, select:focus{outline:1px solid var(--steel);}
+  input[type=number]:focus, input[type=date]:focus, select:focus{outline:1px solid var(--steel);}
+  input[type=file]{display:none;}
 
   .btn{
     display:inline-flex;align-items:center;justify-content:center;gap:8px;
@@ -176,9 +153,28 @@
     position:fixed;inset:0;background:rgba(10,10,10,0.7);z-index:60;
     display:flex;align-items:flex-end;
   }
-  .modal{background:var(--panel);border-top:1px solid var(--line);width:100%;padding:22px 20px calc(24px + env(safe-area-inset-bottom));}
+  .modal{background:var(--panel);border-top:1px solid var(--line);width:100%;padding:22px 20px calc(24px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto;}
   .modal h2{font-family:var(--font-display);font-size:18px;margin:0 0 6px;}
   .modal p.desc{color:var(--muted);font-size:13px;margin:0 0 16px;}
+
+  .subtabs{display:flex;gap:8px;padding:16px 20px 0;}
+  .subtab{flex:1;text-align:center;padding:10px 0;border:1px solid var(--line);background:var(--panel);
+    color:var(--muted);font-family:var(--font-display);font-size:13px;font-weight:600;letter-spacing:0.02em;cursor:pointer;}
+  .subtab.active{background:var(--iron);border-color:var(--iron);color:#fff;}
+
+  .chart-card{margin-bottom:14px;}
+  .chart-empty{color:var(--muted);font-size:12px;padding:8px 0 2px;line-height:1.5;}
+  .chart-latest{font-family:var(--font-display);font-size:22px;font-weight:600;margin-top:6px;}
+  .chart-latest .u{color:var(--muted);font-size:11px;font-family:var(--font-body);font-weight:500;margin-left:6px;}
+
+  label.btn{margin:0;text-align:center;}
+
+  .sync-banner{
+    background:var(--panel-2);border:1px solid var(--steel);
+    margin:0 20px 16px;padding:14px 16px;
+  }
+  .sync-banner .sb-title{font-family:var(--font-display);font-size:14px;font-weight:600;margin-bottom:4px;}
+  .sync-banner .sb-desc{color:var(--muted);font-size:12px;margin-bottom:12px;line-height:1.5;}
 
   ::selection{background:var(--iron);color:#fff;}
 </style>
@@ -199,7 +195,10 @@
       return raw ? JSON.parse(raw) : fallback;
     }catch(e){ return fallback; }
   }
-  function save(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+  function save(key, val){
+    localStorage.setItem(key, JSON.stringify(val));
+    localStorage.setItem('531_updatedAt', new Date().toISOString());
+  }
 
   function defaultSettings(){
     return {
@@ -260,11 +259,14 @@
   }
 
   /* ---------------- navigation state ---------------- */
-  let route = 'menu'; // menu | 531home | setup | train | history
+  let route = '531home'; // 531home | setup | train | history
   let toastTimer = null;
   let bbbDone = 0;
   let repsInput = {};
   let pendingCycleUp = null; // {tms:{...}} while modal shown
+  let historyTab = 'log'; // log | progress
+  let editingHistoryIdx = null;
+  let pendingStaleReminder = null; // {exportedAt, days} when the committed backup file is over a month old
 
   function go(r){ route = r; bbbDone = 0; repsInput = {}; render(); window.scrollTo(0,0); }
 
@@ -280,51 +282,36 @@
   function render(){
     const app = document.getElementById('app');
     let html = '';
-    if (route === 'menu') html = renderMenu();
-    else if (route === 'setup') html = renderSetup();
+    if (route === 'setup') html = renderSetup();
     else if (route === '531home') html = renderHome();
     else if (route === 'train') html = renderTrain();
     else if (route === 'history') html = renderHistory();
     app.innerHTML = html;
     if (pendingCycleUp) app.insertAdjacentHTML('beforeend', renderCycleModal());
+    if (editingHistoryIdx !== null) app.insertAdjacentHTML('beforeend', renderEditHistoryModal());
     bindEvents();
   }
 
-  function renderMenu(){
+  function syncBanner(){
+    if (!pendingStaleReminder) return '';
+    const d = new Date(pendingStaleReminder.exportedAt);
+    const when = isNaN(d) ? pendingStaleReminder.exportedAt : d.toLocaleDateString();
     return `
-      <div class="hero">
-        <div class="mark">APP<span class="dot">.</span>SHELF</div>
-        <div class="tag">Your own tools, one tap away.</div>
-      </div>
-      <div class="menu-grid">
-        <div class="tile" data-action="open531">
-          <div class="bar"></div>
-          <h3>5/3/1 BBB</h3>
-          <p>Workout planner &amp; log.</p>
-        </div>
-        <div class="tile dim" data-action="dummy" data-name="Slot 2">
-          <div class="bar"></div>
-          <h3>Empty slot</h3>
-          <p>Reserved for your next mini app.</p>
-        </div>
-        <div class="tile dim" data-action="dummy" data-name="Slot 3">
-          <div class="bar"></div>
-          <h3>Empty slot</h3>
-          <p>Reserved for your next mini app.</p>
-        </div>
-        <div class="tile dim" data-action="dummy" data-name="Slot 4">
-          <div class="bar"></div>
-          <h3>Empty slot</h3>
-          <p>Reserved for your next mini app.</p>
+      <div class="sync-banner">
+        <div class="sb-title">Backup is ${pendingStaleReminder.days} days old</div>
+        <div class="sb-desc">The history.json in your repo was last exported on ${when}. Export a fresh copy and upload it to keep it current.</div>
+        <div class="btn-row">
+          <button class="btn secondary" data-action="dismissStaleReminder">Remind me later</button>
+          <button class="btn" data-action="exportFromReminder">Export now</button>
         </div>
       </div>
     `;
   }
 
-  function topbar(title, sub, backTo){
+  function topbar(title, sub, backHref){
     return `
       <header class="topbar">
-        ${backTo ? `<div class="back" data-action="go" data-route="${backTo}">‹</div>` : ''}
+        ${backHref ? `<a class="back" href="${backHref}">‹</a>` : ''}
         <div>
           <h1>${title}</h1>
           ${sub ? `<div class="sub">${sub}</div>` : ''}
@@ -346,7 +333,7 @@
   function renderSetup(){
     const t = settings.tms;
     return `
-      ${topbar('Setup', 'Training maxes &amp; preferences', 'menu')}
+      ${topbar('Setup', 'Training maxes &amp; preferences', '../../')}
       <main>
         <div class="card">
           <h2>Units</h2>
@@ -391,6 +378,16 @@
         <button class="btn" data-action="saveSetup">Save</button>
 
         <div class="card" style="margin-top:22px;">
+          <h2>Backup &amp; sync</h2>
+          <p class="sub" style="color:var(--muted);font-size:12px;margin:-6px 0 14px;">iOS can clear local storage from unused home-screen apps. Export now and then. To back it up, upload the downloaded file to <b>apps/531-bbb/history.json</b> in your repo, overwriting the existing one. This app checks that file's age on launch and reminds you here if it's over a month old.</p>
+          <div class="btn-row">
+            <button class="btn secondary" data-action="exportData">Export history.json</button>
+            <label class="btn secondary" for="import-file">Import file</label>
+          </div>
+          <input type="file" id="import-file" accept="application/json">
+        </div>
+
+        <div class="card" style="margin-top:22px;">
           <h2>Reset</h2>
           <p class="sub" style="color:var(--muted);font-size:12px;margin:-6px 0 14px;">Clears all training maxes and workout history on this phone.</p>
           <button class="btn danger" data-action="resetAll">Erase all data</button>
@@ -405,7 +402,8 @@
     const w = computeWorkout();
     const lift = w.lift;
     return `
-      ${topbar('5/3/1 BBB', 'Cycle ' + state.cycle, 'menu')}
+      ${topbar('5/3/1 BBB', 'Cycle ' + state.cycle, '../../')}
+      ${syncBanner()}
       <main>
         <div class="card">
           <h2>Next workout</h2>
@@ -482,10 +480,29 @@
     `;
   }
 
+  function historySubtabs(){
+    return `
+      <div class="subtabs">
+        <div class="subtab ${historyTab==='log'?'active':''}" data-action="setHistoryTab" data-tab="log">Log</div>
+        <div class="subtab ${historyTab==='progress'?'active':''}" data-action="setHistoryTab" data-tab="progress">Progress</div>
+      </div>
+    `;
+  }
+
   function renderHistory(){
+    if (historyTab === 'progress'){
+      return `
+        ${topbar('History', history.length + ' workouts logged', '531home')}
+        ${historySubtabs()}
+        <main>${renderProgressBody()}</main>
+        ${tabs('history')}
+      `;
+    }
+
     if (!history.length){
       return `
         ${topbar('History', null, '531home')}
+        ${historySubtabs()}
         <main>
           <div class="empty">
             <div class="big">—</div>
@@ -513,14 +530,98 @@
             Cycle ${h.cycle} · Week ${h.week} (${h.weekLabel}) &middot; BBB ${fmtW(h.bbbWeight)} × ${h.bbbSets}/5
             ${prLine ? '<br>' + prLine : ''}
           </div>
-          <button class="btn ghost" style="padding:6px 0;" data-action="deleteHistory" data-idx="${realIdx}">Delete entry</button>
+          <div class="btn-row" style="margin-top:8px;">
+            <button class="btn ghost" style="padding:6px 0;" data-action="editHistory" data-idx="${realIdx}">Edit</button>
+            <button class="btn ghost" style="padding:6px 0;color:var(--iron);" data-action="deleteHistory" data-idx="${realIdx}">Delete</button>
+          </div>
         </div>
       `;
     }).join('');
     return `
       ${topbar('History', history.length + ' workouts logged', '531home')}
+      ${historySubtabs()}
       <main>${items}</main>
       ${tabs('history')}
+    `;
+  }
+
+  const LIFT_COLOR = { squat:'var(--steel)', bench:'var(--brass)', deadlift:'var(--iron)', press:'var(--moss)' };
+
+  function e1rmSeries(lift){
+    return history
+      .filter(h => h.lift === lift)
+      .map(h => {
+        const top = h.mainSets[h.mainSets.length-1];
+        if (!top.amrap || !top.actualReps) return null;
+        return { date: h.date, v: Math.round(epley(top.weight, top.actualReps)) };
+      })
+      .filter(Boolean)
+      .sort((a,b) => a.date.localeCompare(b.date));
+  }
+
+  function buildSparkline(points, color){
+    if (points.length < 2) return null;
+    const W = 300, H = 120, padX = 12, padY = 14;
+    const values = points.map(p=>p.v);
+    const min = Math.min(...values), max = Math.max(...values);
+    const range = (max - min) || 1;
+    const stepX = (W - padX*2) / (points.length - 1);
+    const coords = points.map((p,i)=>{
+      const x = padX + i*stepX;
+      const y = H - padY - ((p.v - min)/range) * (H - padY*2);
+      return [x,y];
+    });
+    const path = coords.map((c,i)=> (i===0?'M':'L') + c[0].toFixed(1) + ',' + c[1].toFixed(1)).join(' ');
+    const dots = coords.map(c=>`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3.5" fill="${color}"/>`).join('');
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="110" preserveAspectRatio="none">
+      <path d="${path}" fill="none" stroke="${color}" stroke-width="2.5"/>
+      ${dots}
+    </svg>`;
+  }
+
+  function renderProgressBody(){
+    const lifts = ['squat','bench','deadlift','press'];
+    return lifts.map(lift=>{
+      const pts = e1rmSeries(lift);
+      const svg = buildSparkline(pts, LIFT_COLOR[lift]);
+      const latest = pts.length ? pts[pts.length-1].v : null;
+      return `
+        <div class="card chart-card">
+          <div class="lift-head" style="margin-bottom:6px;">
+            <div class="plate ${LIFT_CLASS[lift]}"></div>
+            <div>
+              <div class="name" style="font-size:18px;">${LIFT_LABEL[lift]}</div>
+              <div class="meta">Estimated 1-rep max, from logged AMRAP sets</div>
+            </div>
+          </div>
+          ${svg ? svg : `<div class="chart-empty">Log at least two AMRAP sets for this lift to see a trend.</div>`}
+          ${latest !== null ? `<div class="chart-latest">${fmtW(latest)}<span class="u">latest estimate</span></div>` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderEditHistoryModal(){
+    const h = history[editingHistoryIdx];
+    if (!h) return '';
+    const setsHtml = h.mainSets.map((s,i)=>`
+      <label class="field"><span>${s.pct}% set${s.amrap ? ' · AMRAP' : ''} — weight</span><input type="number" inputmode="decimal" id="eh-w-${i}" value="${s.weight}"></label>
+      ${s.amrap ? `<label class="field"><span>Reps achieved</span><input type="number" inputmode="numeric" id="eh-r-${i}" value="${s.actualReps ?? ''}"></label>` : ''}
+    `).join('');
+    return `
+      <div class="modal-back">
+        <div class="modal">
+          <h2>Edit workout</h2>
+          <p class="desc">${LIFT_LABEL[h.lift]} · Cycle ${h.cycle}, Week ${h.week} (${h.weekLabel})</p>
+          <label class="field"><span>Date</span><input type="date" id="eh-date" value="${h.date}"></label>
+          ${setsHtml}
+          <label class="field"><span>BBB sets completed (0–5)</span><input type="number" inputmode="numeric" id="eh-bbb" min="0" max="5" value="${h.bbbSets}"></label>
+          <div class="btn-row">
+            <button class="btn secondary" data-action="cancelEditHistory">Cancel</button>
+            <button class="btn" data-action="saveEditHistory">Save</button>
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -550,14 +651,14 @@
     document.querySelectorAll('[data-action]').forEach(el=>{
       el.addEventListener('click', onAction);
     });
+    const fileInput = document.getElementById('import-file');
+    if (fileInput) fileInput.addEventListener('change', handleImportChange);
   }
 
   function onAction(e){
     const el = e.currentTarget;
     const action = el.getAttribute('data-action');
     if (action === 'go') go(el.getAttribute('data-route'));
-    else if (action === 'dummy') showToast(el.getAttribute('data-name') + ' is coming soon.');
-    else if (action === 'open531') go(hasTMs() ? '531home' : 'setup');
     else if (action === 'saveSetup') doSaveSetup();
     else if (action === 'resetAll') doResetAll();
     else if (action === 'startWorkout') go('train');
@@ -567,6 +668,13 @@
     else if (action === 'deleteHistory') doDeleteHistory(parseInt(el.getAttribute('data-idx')));
     else if (action === 'applyCycleUp') doApplyCycleUp();
     else if (action === 'skipCycleUp') doSkipCycleUp();
+    else if (action === 'setHistoryTab') { historyTab = el.getAttribute('data-tab'); render(); }
+    else if (action === 'editHistory') doEditHistory(parseInt(el.getAttribute('data-idx')));
+    else if (action === 'cancelEditHistory') doCancelEditHistory();
+    else if (action === 'saveEditHistory') doSaveEditHistory();
+    else if (action === 'exportData') doExportData();
+    else if (action === 'exportFromReminder') { doExportData(); doDismissStaleReminder(); }
+    else if (action === 'dismissStaleReminder') doDismissStaleReminder();
   }
 
   function readNum(id){
@@ -597,7 +705,7 @@
     history = [];
     save(SKEY, settings); save(TKEY, state); save(HKEY, history);
     showToast('All data erased.');
-    go('menu');
+    go('setup');
   }
 
   function doPickDay(){
@@ -686,8 +794,112 @@
     render();
   }
 
+  function doEditHistory(idx){ editingHistoryIdx = idx; render(); }
+  function doCancelEditHistory(){ editingHistoryIdx = null; render(); }
+
+  function doSaveEditHistory(){
+    const idx = editingHistoryIdx;
+    const h = history[idx];
+    if (!h) { editingHistoryIdx = null; render(); return; }
+
+    const dateVal = document.getElementById('eh-date').value;
+    if (dateVal) h.date = dateVal;
+
+    h.mainSets = h.mainSets.map((s,i)=>{
+      const wEl = document.getElementById('eh-w-'+i);
+      const w = wEl ? parseFloat(wEl.value) : NaN;
+      const out = Object.assign({}, s, { weight: isNaN(w) ? s.weight : w });
+      if (s.amrap){
+        const rEl = document.getElementById('eh-r-'+i);
+        const r = rEl ? parseInt(rEl.value) : NaN;
+        out.actualReps = (!isNaN(r) && r > 0) ? r : null;
+      }
+      return out;
+    });
+
+    const bbbEl = document.getElementById('eh-bbb');
+    const bbbVal = bbbEl ? parseInt(bbbEl.value) : NaN;
+    h.bbbSets = isNaN(bbbVal) ? h.bbbSets : Math.max(0, Math.min(5, bbbVal));
+
+    history[idx] = h;
+    save(HKEY, history);
+    editingHistoryIdx = null;
+    showToast('Workout updated.');
+    render();
+  }
+
+  function doExportData(){
+    const payload = { exportedAt: new Date().toISOString(), app:'531-bbb', settings, state, history };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'history.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('Downloaded history.json');
+  }
+
+  function handleImportChange(e){
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      try{
+        const data = JSON.parse(ev.target.result);
+        if (!data.settings || !data.state || !Array.isArray(data.history)) throw new Error('bad format');
+        if (!confirm('Replace your current maxes and history with this backup?')) return;
+        settings = data.settings;
+        state = data.state;
+        history = data.history;
+        save(SKEY, settings); save(TKEY, state); save(HKEY, history);
+        showToast('Backup restored.');
+        go('531home');
+      }catch(err){
+        showToast('That file could not be read as a backup.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }
+
+  /* ---------------- backup-age check ---------------- */
+  const STALE_DAYS = 30;
+  const DISMISS_SNOOZE_DAYS = 3;
+
+  function checkBackupAge(){
+    fetch('./history.json?t=' + Date.now(), { cache:'no-store' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!data || !data.exportedAt) return;
+
+        const dismissedAt = localStorage.getItem('531_staleDismissedAt');
+        if (dismissedAt){
+          const snoozeMs = DISMISS_SNOOZE_DAYS * 24 * 60 * 60 * 1000;
+          if (Date.now() - new Date(dismissedAt).getTime() < snoozeMs) return;
+        }
+
+        const ageMs = Date.now() - new Date(data.exportedAt).getTime();
+        const days = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+        if (days >= STALE_DAYS){
+          pendingStaleReminder = { exportedAt: data.exportedAt, days };
+          render();
+        }
+      })
+      .catch(()=>{ /* no committed backup yet, or offline — ignore silently */ });
+  }
+
+  function doDismissStaleReminder(){
+    localStorage.setItem('531_staleDismissedAt', new Date().toISOString());
+    pendingStaleReminder = null;
+    render();
+  }
+
   /* ---------------- boot ---------------- */
-  go(hasTMs() ? 'menu' : 'menu');
+  go(hasTMs() ? '531home' : 'setup');
+  checkBackupAge();
 })();
 </script>
 </body>
