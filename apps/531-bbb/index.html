@@ -94,6 +94,19 @@
   .plate.bench{background:var(--brass);}
   .plate.deadlift{background:var(--iron);}
   .plate.press{background:var(--moss);}
+  .plate-mini{width:8px;height:20px;margin:0 auto;}
+
+  .cp-grid{display:flex;flex-direction:column;gap:6px;margin-top:4px;}
+  .cp-row{display:grid;grid-template-columns:28px repeat(4,1fr);gap:6px;align-items:center;}
+  .cp-wk{font-size:11px;color:var(--muted);font-family:var(--font-display);font-weight:600;}
+  .cp-cell{
+    height:34px;border:1px solid var(--line);background:var(--panel-2);
+    display:flex;align-items:center;justify-content:center;
+    font-size:14px;color:var(--muted);
+  }
+  .cp-cell.cp-head{background:transparent;border:none;height:auto;}
+  .cp-cell.cp-done{background:var(--good);border-color:var(--good);color:#0d1a0c;font-weight:700;}
+  .cp-cell.cp-current{border-color:var(--iron);box-shadow:0 0 0 1px var(--iron) inset;}
 
   .lift-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
   .lift-head .name{font-family:var(--font-display);font-size:24px;font-weight:700;letter-spacing:0.01em;}
@@ -402,6 +415,30 @@
     `;
   }
 
+  function renderCycleProgress(){
+    const weeks = [1,2,3];
+    const cols = settings.order;
+    const header = cols.map(l => `<div class="cp-cell cp-head"><span class="plate plate-mini ${LIFT_CLASS[l]}"></span></div>`).join('');
+    const rows = weeks.map(wk => {
+      const cells = cols.map((l,ci) => {
+        const done = history.some(h => h.cycle === state.cycle && h.week === wk && h.lift === l);
+        const isCurrent = (state.week === wk && state.dayIndex === ci);
+        return `<div class="cp-cell ${done ? 'cp-done' : ''} ${isCurrent ? 'cp-current' : ''}">${done ? '✓' : ''}</div>`;
+      }).join('');
+      return `<div class="cp-row"><div class="cp-wk">W${wk}</div>${cells}</div>`;
+    }).join('');
+    return `
+      <div class="card" style="margin-top:22px;">
+        <h2>Cycle ${state.cycle} progress</h2>
+        <div class="cp-grid">
+          <div class="cp-row"><div class="cp-wk"></div>${header}</div>
+          ${rows}
+        </div>
+        <button class="btn secondary" style="margin-top:14px;" data-action="startNewCycle">Start new cycle</button>
+      </div>
+    `;
+  }
+
   function renderHome(){
     if (!hasTMs()) { go('setup'); return renderSetup(); }
     const w = computeWorkout();
@@ -424,6 +461,8 @@
         </div>
         <button class="btn" data-action="startWorkout">Start workout</button>
         <button class="btn ghost" data-action="pickDay">Choose a different day</button>
+
+        ${renderCycleProgress()}
 
         <div class="card" style="margin-top:22px;">
           <h2>Training maxes</h2>
@@ -568,21 +607,46 @@
 
   function buildSparkline(points, color){
     if (points.length < 2) return null;
-    const W = 300, H = 120, padX = 12, padY = 14;
+    const W = 320, H = 150;
+    const mLeft = 40, mRight = 12, mTop = 14, mBottom = 24;
+    const plotW = W - mLeft - mRight;
+    const plotH = H - mTop - mBottom;
+
     const values = points.map(p=>p.v);
     const min = Math.min(...values), max = Math.max(...values);
     const range = (max - min) || 1;
-    const stepX = (W - padX*2) / (points.length - 1);
+    const stepX = points.length > 1 ? plotW / (points.length - 1) : 0;
+
     const coords = points.map((p,i)=>{
-      const x = padX + i*stepX;
-      const y = H - padY - ((p.v - min)/range) * (H - padY*2);
+      const x = mLeft + i*stepX;
+      const y = mTop + plotH - ((p.v - min)/range) * plotH;
       return [x,y];
     });
     const path = coords.map((c,i)=> (i===0?'M':'L') + c[0].toFixed(1) + ',' + c[1].toFixed(1)).join(' ');
     const dots = coords.map(c=>`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3.5" fill="${color}"/>`).join('');
-    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="110" preserveAspectRatio="none">
+
+    const gridLines = `
+      <line x1="${mLeft}" y1="${mTop}" x2="${W-mRight}" y2="${mTop}" stroke="var(--line)" stroke-width="1"/>
+      <line x1="${mLeft}" y1="${mTop+plotH}" x2="${W-mRight}" y2="${mTop+plotH}" stroke="var(--line)" stroke-width="1"/>
+    `;
+    const yLabels = `
+      <text x="${mLeft-6}" y="${mTop+4}" text-anchor="end" font-size="10" fill="var(--muted)">${fmtW(max)}</text>
+      <text x="${mLeft-6}" y="${mTop+plotH+4}" text-anchor="end" font-size="10" fill="var(--muted)">${fmtW(min)}</text>
+    `;
+    const showAll = points.length <= 6;
+    const xLabels = coords.map((c,i)=>{
+      if (!showAll && i !== 0 && i !== coords.length-1) return '';
+      const d = new Date(points[i].date);
+      const label = isNaN(d) ? points[i].date : (d.getMonth()+1) + '/' + d.getDate();
+      return `<text x="${c[0].toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="10" fill="var(--muted)">${label}</text>`;
+    }).join('');
+
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="140" preserveAspectRatio="xMidYMid meet">
+      ${gridLines}
       <path d="${path}" fill="none" stroke="${color}" stroke-width="2.5"/>
       ${dots}
+      ${yLabels}
+      ${xLabels}
     </svg>`;
   }
 
@@ -682,6 +746,7 @@
     else if (action === 'exportData') doExportData();
     else if (action === 'exportFromReminder') { doExportData(); doDismissStaleReminder(); }
     else if (action === 'dismissStaleReminder') doDismissStaleReminder();
+    else if (action === 'startNewCycle') doStartNewCycle();
   }
 
   function readNum(id){
@@ -770,16 +835,30 @@
       if (state.week > 3){
         state.week = 1;
         state.cycle++;
-        const bumps = settings.unit === 'kg' ? CYCLE_BUMP : CYCLE_BUMP_LB;
-        pendingCycleUp = { tms: {
-          squat: settings.tms.squat + bumps.squat,
-          bench: settings.tms.bench + bumps.bench,
-          deadlift: settings.tms.deadlift + bumps.deadlift,
-          press: settings.tms.press + bumps.press
-        }};
+        queueCycleUp();
       }
     }
     save(TKEY, state);
+  }
+
+  function queueCycleUp(){
+    const bumps = settings.unit === 'kg' ? CYCLE_BUMP : CYCLE_BUMP_LB;
+    pendingCycleUp = { tms: {
+      squat: settings.tms.squat + bumps.squat,
+      bench: settings.tms.bench + bumps.bench,
+      deadlift: settings.tms.deadlift + bumps.deadlift,
+      press: settings.tms.press + bumps.press
+    }};
+  }
+
+  function doStartNewCycle(){
+    if (!confirm('Start a new cycle now? This jumps straight to Week 1, Day 1 — any weeks left in cycle ' + state.cycle + ' are skipped.')) return;
+    state.dayIndex = 0;
+    state.week = 1;
+    state.cycle++;
+    save(TKEY, state);
+    queueCycleUp();
+    render();
   }
 
   function doApplyCycleUp(){
