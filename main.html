@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Iron Log">
+<title>Iron Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#15161A;
+    --panel:#1E2024;
+    --panel-2:#25272C;
+    --line:#33363B;
+    --chalk:#ECE8E1;
+    --muted:#8B8D93;
+    --iron:#C1442B;      /* 25kg plate red - deadlift */
+    --steel:#2E6FA7;     /* 20kg plate blue - squat */
+    --brass:#C79A2E;     /* 15kg plate yellow - bench */
+    --moss:#4F8B4A;      /* 10kg plate green - press */
+    --good:#5FA85A;
+    --font-display:'Oswald', system-ui, -apple-system, sans-serif;
+    --font-body:'Inter', system-ui, -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--chalk);font-family:var(--font-body);}
+  body{
+    padding-top:env(safe-area-inset-top);
+    padding-bottom:env(safe-area-inset-bottom);
+    min-height:100vh;
+    overscroll-behavior-y:none;
+  }
+  #app{max-width:560px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;position:relative;}
+
+  header.topbar{
+    display:flex;align-items:center;gap:12px;
+    padding:18px 20px 14px;
+    border-bottom:1px solid var(--line);
+  }
+  header.topbar .back{
+    width:34px;height:34px;border-radius:0;border:1px solid var(--line);
+    background:var(--panel);color:var(--chalk);font-size:18px;line-height:1;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+  }
+  header.topbar h1{font-family:var(--font-display);font-weight:600;font-size:20px;letter-spacing:0.02em;margin:0;flex:1;}
+  header.topbar .sub{font-size:12px;color:var(--muted);margin-top:2px;}
+
+  main{flex:1;padding:18px 20px 110px;}
+
+  /* ---- Start menu ---- */
+  .hero{padding:34px 20px 10px;}
+  .hero .mark{
+    font-family:var(--font-display);font-weight:700;font-size:44px;letter-spacing:0.01em;line-height:1;
+    display:flex;align-items:baseline;gap:10px;
+  }
+  .hero .mark span.dot{color:var(--iron);}
+  .hero .tag{color:var(--muted);font-size:14px;margin-top:8px;}
+
+  .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:10px 20px 30px;}
+  .tile{
+    background:var(--panel);border:1px solid var(--line);
+    padding:20px 16px;min-height:128px;cursor:pointer;
+    display:flex;flex-direction:column;justify-content:space-between;
+    position:relative;overflow:hidden;
+    transition:transform .12s ease, border-color .12s ease;
+  }
+  .tile:active{transform:scale(0.97);}
+  .tile .bar{width:34px;height:6px;background:var(--iron);}
+  .tile.dim .bar{background:var(--line);}
+  .tile h3{font-family:var(--font-display);font-size:17px;font-weight:600;margin:14px 0 4px;letter-spacing:0.01em;}
+  .tile p{font-size:12px;color:var(--muted);margin:0;line-height:1.4;}
+  .tile.dim{opacity:0.55;}
+  .tile.dim h3, .tile.dim p{color:var(--muted);}
+
+  .toast{
+    position:fixed;left:50%;bottom:36px;transform:translateX(-50%);
+    background:var(--panel-2);border:1px solid var(--line);color:var(--chalk);
+    padding:12px 18px;font-size:13px;z-index:50;
+    box-shadow:0 6px 18px rgba(0,0,0,0.4);
+  }
+
+  /* ---- Cards / generic ---- */
+  .card{background:var(--panel);border:1px solid var(--line);padding:18px;margin-bottom:14px;}
+  .card h2{font-family:var(--font-display);font-size:16px;font-weight:600;margin:0 0 12px;letter-spacing:0.01em;}
+  .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);}
+  .row:last-child{border-bottom:none;}
+  .row .label{color:var(--muted);font-size:13px;}
+  .row .value{font-family:var(--font-display);font-size:16px;font-weight:600;}
+
+  label.field{display:block;margin-bottom:14px;}
+  label.field span{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
+  input[type=number], select{
+    width:100%;background:var(--panel-2);border:1px solid var(--line);color:var(--chalk);
+    padding:12px 12px;font-size:16px;font-family:var(--font-body);
+  }
+  input[type=number]:focus, select:focus{outline:1px solid var(--steel);}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--iron);color:#fff;border:none;
+    padding:14px 18px;font-family:var(--font-display);font-weight:600;font-size:15px;letter-spacing:0.02em;
+    width:100%;cursor:pointer;
+  }
+  .btn:active{opacity:0.85;}
+  .btn.secondary{background:transparent;border:1px solid var(--line);color:var(--chalk);}
+  .btn.ghost{background:transparent;border:none;color:var(--muted);font-family:var(--font-body);font-weight:500;font-size:13px;padding:10px;}
+  .btn.danger{background:transparent;border:1px solid var(--iron);color:var(--iron);}
+  .btn-row{display:flex;gap:10px;margin-top:6px;}
+  .btn-row .btn{flex:1;}
+
+  /* ---- Lift identity ---- */
+  .plate{width:10px;height:34px;border-radius:2px;flex-shrink:0;}
+  .plate.squat{background:var(--steel);}
+  .plate.bench{background:var(--brass);}
+  .plate.deadlift{background:var(--iron);}
+  .plate.press{background:var(--moss);}
+
+  .lift-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+  .lift-head .name{font-family:var(--font-display);font-size:24px;font-weight:700;letter-spacing:0.01em;}
+  .lift-head .meta{color:var(--muted);font-size:12px;}
+
+  .set-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 0;border-bottom:1px solid var(--line);
+  }
+  .set-row:last-child{border-bottom:none;}
+  .set-row .set-left{display:flex;flex-direction:column;}
+  .set-row .pct{font-size:12px;color:var(--muted);}
+  .set-row .weight{font-family:var(--font-display);font-size:22px;font-weight:600;}
+  .set-row .target{font-size:12px;color:var(--muted);margin-top:2px;}
+  .set-row input.reps{
+    width:64px;text-align:center;background:var(--panel-2);border:1px solid var(--line);
+    color:var(--chalk);padding:10px 6px;font-size:16px;font-family:var(--font-display);
+  }
+
+  .bbb-counter{display:flex;gap:8px;margin-top:10px;}
+  .bbb-dot{
+    flex:1;height:40px;border:1px solid var(--line);background:var(--panel-2);
+    display:flex;align-items:center;justify-content:center;font-family:var(--font-display);
+    font-size:14px;color:var(--muted);cursor:pointer;
+  }
+  .bbb-dot.done{background:var(--good);border-color:var(--good);color:#0d1a0c;}
+
+  /* ---- Bottom nav ---- */
+  nav.tabs{
+    position:fixed;left:0;right:0;bottom:0;
+    max-width:560px;margin:0 auto;
+    background:var(--panel);border-top:1px solid var(--line);
+    display:flex;padding-bottom:env(safe-area-inset-bottom);
+    z-index:20;
+  }
+  nav.tabs button{
+    flex:1;background:none;border:none;color:var(--muted);
+    font-family:var(--font-body);font-size:11px;font-weight:600;letter-spacing:0.02em;
+    padding:12px 4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;
+  }
+  nav.tabs button .ic{width:18px;height:18px;border:1.5px solid var(--muted);}
+  nav.tabs button.active{color:var(--chalk);}
+  nav.tabs button.active .ic{border-color:var(--iron);background:var(--iron);}
+
+  .history-item{border-bottom:1px solid var(--line);padding:14px 0;}
+  .history-item:last-child{border-bottom:none;}
+  .history-item .hi-top{display:flex;justify-content:space-between;align-items:baseline;}
+  .history-item .hi-lift{font-family:var(--font-display);font-weight:600;font-size:15px;}
+  .history-item .hi-date{font-size:11px;color:var(--muted);}
+  .history-item .hi-detail{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5;}
+  .history-item .hi-pr{color:var(--good);font-weight:600;}
+
+  .empty{text-align:center;padding:50px 20px;color:var(--muted);}
+  .empty .big{font-family:var(--font-display);font-size:40px;color:var(--line);margin-bottom:10px;}
+
+  .modal-back{
+    position:fixed;inset:0;background:rgba(10,10,10,0.7);z-index:60;
+    display:flex;align-items:flex-end;
+  }
+  .modal{background:var(--panel);border-top:1px solid var(--line);width:100%;padding:22px 20px calc(24px + env(safe-area-inset-bottom));}
+  .modal h2{font-family:var(--font-display);font-size:18px;margin:0 0 6px;}
+  .modal p.desc{color:var(--muted);font-size:13px;margin:0 0 16px;}
+
+  ::selection{background:var(--iron);color:#fff;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- storage helpers ---------------- */
+  const SKEY = '531_settings', HKEY = '531_history', TKEY = '531_state';
+
+  function load(key, fallback){
+    try{
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    }catch(e){ return fallback; }
+  }
+  function save(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+
+  function defaultSettings(){
+    return {
+      unit:'kg',
+      increment:2.5,
+      bbbPercent:50,
+      order:['press','deadlift','bench','squat'],
+      tms:{ squat:null, bench:null, deadlift:null, press:null }
+    };
+  }
+  function defaultState(){ return { cycle:1, week:1, dayIndex:0 }; }
+
+  let settings = load(SKEY, defaultSettings());
+  let history  = load(HKEY, []);
+  let state    = load(TKEY, defaultState());
+
+  const LIFT_LABEL = { squat:'Squat', bench:'Bench Press', deadlift:'Deadlift', press:'Overhead Press' };
+  const LIFT_CLASS = { squat:'squat', bench:'bench', deadlift:'deadlift', press:'press' };
+
+  const WEEK_SCHEME = {
+    1:{ label:'5s',    pct:[65,75,85],  reps:['5','5','5+'] },
+    2:{ label:'3s',    pct:[70,80,90],  reps:['3','3','3+'] },
+    3:{ label:'5/3/1', pct:[75,85,95],  reps:['5','3','1+'] },
+    4:{ label:'Deload',pct:[40,50,60],  reps:['5','5','5']  }
+  };
+  const CYCLE_BUMP = { squat:5, deadlift:5, bench:2.5, press:2.5 }; // kg defaults
+  const CYCLE_BUMP_LB = { squat:10, deadlift:10, bench:5, press:5 };
+
+  function round(w){
+    const inc = settings.increment || 2.5;
+    return Math.round(w / inc) * inc;
+  }
+  function fmtW(w){
+    if (w === null || w === undefined || isNaN(w)) return '—';
+    const n = Math.round(w * 100) / 100;
+    return (n % 1 === 0 ? n.toFixed(0) : n.toFixed(1)) + settings.unit;
+  }
+  function epley(weight, reps){
+    if (!reps || reps <= 0) return null;
+    return weight * (1 + reps/30);
+  }
+
+  function hasTMs(){
+    return settings.tms.squat && settings.tms.bench && settings.tms.deadlift && settings.tms.press;
+  }
+
+  function currentLift(){ return settings.order[state.dayIndex]; }
+
+  function computeWorkout(){
+    const lift = currentLift();
+    const tm = settings.tms[lift];
+    const scheme = WEEK_SCHEME[state.week];
+    const mainSets = scheme.pct.map((p,i)=>({
+      pct:p, repsLabel:scheme.reps[i], weight: round(tm * p / 100), amrap: scheme.reps[i].includes('+')
+    }));
+    const bbbWeight = round(tm * settings.bbbPercent / 100);
+    return { lift, tm, scheme, mainSets, bbbWeight };
+  }
+
+  /* ---------------- navigation state ---------------- */
+  let route = 'menu'; // menu | 531home | setup | train | history
+  let toastTimer = null;
+  let bbbDone = 0;
+  let repsInput = {};
+  let pendingCycleUp = null; // {tms:{...}} while modal shown
+
+  function go(r){ route = r; bbbDone = 0; repsInput = {}; render(); window.scrollTo(0,0); }
+
+  function showToast(msg){
+    clearTimeout(toastTimer);
+    let t = document.querySelector('.toast');
+    if (!t){ t = document.createElement('div'); t.className='toast'; document.getElementById('app').appendChild(t); }
+    t.textContent = msg;
+    toastTimer = setTimeout(()=>{ t.remove(); }, 1800);
+  }
+
+  /* ---------------- render ---------------- */
+  function render(){
+    const app = document.getElementById('app');
+    let html = '';
+    if (route === 'menu') html = renderMenu();
+    else if (route === 'setup') html = renderSetup();
+    else if (route === '531home') html = renderHome();
+    else if (route === 'train') html = renderTrain();
+    else if (route === 'history') html = renderHistory();
+    app.innerHTML = html;
+    if (pendingCycleUp) app.insertAdjacentHTML('beforeend', renderCycleModal());
+    bindEvents();
+  }
+
+  function renderMenu(){
+    return `
+      <div class="hero">
+        <div class="mark">IRON<span class="dot">.</span>LOG</div>
+        <div class="tag">Pick a program to get moving.</div>
+      </div>
+      <div class="menu-grid">
+        <div class="tile" data-action="open531">
+          <div class="bar"></div>
+          <h3>5/3/1 BBB</h3>
+          <p>Squat, bench, deadlift &amp; press — with Boring But Big volume.</p>
+        </div>
+        <div class="tile dim" data-action="dummy" data-name="Conditioning">
+          <div class="bar"></div>
+          <h3>Conditioning</h3>
+          <p>Coming soon.</p>
+        </div>
+        <div class="tile dim" data-action="dummy" data-name="Body Weight">
+          <div class="bar"></div>
+          <h3>Body Weight</h3>
+          <p>Coming soon.</p>
+        </div>
+        <div class="tile dim" data-action="dummy" data-name="Nutrition">
+          <div class="bar"></div>
+          <h3>Nutrition</h3>
+          <p>Coming soon.</p>
+        </div>
+      </div>
+    `;
+  }
+
+  function topbar(title, sub, backTo){
+    return `
+      <header class="topbar">
+        ${backTo ? `<div class="back" data-action="go" data-route="${backTo}">‹</div>` : ''}
+        <div>
+          <h1>${title}</h1>
+          ${sub ? `<div class="sub">${sub}</div>` : ''}
+        </div>
+      </header>
+    `;
+  }
+
+  function tabs(active){
+    return `
+      <nav class="tabs">
+        <button data-action="go" data-route="531home" class="${active==='531home'?'active':''}"><span class="ic"></span>Train</button>
+        <button data-action="go" data-route="history" class="${active==='history'?'active':''}"><span class="ic"></span>History</button>
+        <button data-action="go" data-route="setup" class="${active==='setup'?'active':''}"><span class="ic"></span>Setup</button>
+      </nav>
+    `;
+  }
+
+  function renderSetup(){
+    const t = settings.tms;
+    return `
+      ${topbar('Setup', 'Training maxes &amp; preferences', 'menu')}
+      <main>
+        <div class="card">
+          <h2>Units</h2>
+          <label class="field">
+            <span>Weight unit</span>
+            <select id="f-unit">
+              <option value="kg" ${settings.unit==='kg'?'selected':''}>Kilograms</option>
+              <option value="lb" ${settings.unit==='lb'?'selected':''}>Pounds</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Rounding increment</span>
+            <select id="f-inc">
+              <option value="1" ${settings.increment==1?'selected':''}>1</option>
+              <option value="2.5" ${settings.increment==2.5?'selected':''}>2.5</option>
+              <option value="5" ${settings.increment==5?'selected':''}>5</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="card">
+          <h2>Training maxes</h2>
+          <p class="sub" style="color:var(--muted);font-size:12px;margin:-6px 0 14px;">Use ~90% of your true 1-rep max.</p>
+          <label class="field"><span>Squat</span><input type="number" inputmode="decimal" id="f-squat" value="${t.squat ?? ''}" placeholder="e.g. 120"></label>
+          <label class="field"><span>Bench Press</span><input type="number" inputmode="decimal" id="f-bench" value="${t.bench ?? ''}" placeholder="e.g. 90"></label>
+          <label class="field"><span>Deadlift</span><input type="number" inputmode="decimal" id="f-deadlift" value="${t.deadlift ?? ''}" placeholder="e.g. 140"></label>
+          <label class="field"><span>Overhead Press</span><input type="number" inputmode="decimal" id="f-press" value="${t.press ?? ''}" placeholder="e.g. 55"></label>
+        </div>
+
+        <div class="card">
+          <h2>Boring But Big</h2>
+          <label class="field">
+            <span>Supplemental work: 5×10 at</span>
+            <select id="f-bbb">
+              <option value="50" ${settings.bbbPercent==50?'selected':''}>50% of training max</option>
+              <option value="60" ${settings.bbbPercent==60?'selected':''}>60% of training max</option>
+              <option value="70" ${settings.bbbPercent==70?'selected':''}>70% of training max</option>
+            </select>
+          </label>
+        </div>
+
+        <button class="btn" data-action="saveSetup">Save</button>
+
+        <div class="card" style="margin-top:22px;">
+          <h2>Reset</h2>
+          <p class="sub" style="color:var(--muted);font-size:12px;margin:-6px 0 14px;">Clears all training maxes and workout history on this phone.</p>
+          <button class="btn danger" data-action="resetAll">Erase all data</button>
+        </div>
+      </main>
+      ${hasTMs() ? tabs('setup') : ''}
+    `;
+  }
+
+  function renderHome(){
+    if (!hasTMs()) { go('setup'); return renderSetup(); }
+    const w = computeWorkout();
+    const lift = w.lift;
+    return `
+      ${topbar('5/3/1 BBB', 'Cycle ' + state.cycle, 'menu')}
+      <main>
+        <div class="card">
+          <h2>Next workout</h2>
+          <div class="lift-head">
+            <div class="plate ${LIFT_CLASS[lift]}"></div>
+            <div>
+              <div class="name">${LIFT_LABEL[lift]}</div>
+              <div class="meta">Week ${state.week} · ${w.scheme.label}</div>
+            </div>
+          </div>
+          <div class="row"><span class="label">Top set</span><span class="value">${fmtW(w.mainSets[2].weight)} × ${w.mainSets[2].repsLabel}</span></div>
+          <div class="row"><span class="label">BBB volume</span><span class="value">${fmtW(w.bbbWeight)} × 5×10</span></div>
+        </div>
+        <button class="btn" data-action="startWorkout">Start workout</button>
+        <button class="btn ghost" data-action="pickDay">Choose a different day</button>
+
+        <div class="card" style="margin-top:22px;">
+          <h2>Training maxes</h2>
+          <div class="row"><span class="label">Squat</span><span class="value">${fmtW(settings.tms.squat)}</span></div>
+          <div class="row"><span class="label">Bench Press</span><span class="value">${fmtW(settings.tms.bench)}</span></div>
+          <div class="row"><span class="label">Deadlift</span><span class="value">${fmtW(settings.tms.deadlift)}</span></div>
+          <div class="row"><span class="label">Overhead Press</span><span class="value">${fmtW(settings.tms.press)}</span></div>
+        </div>
+      </main>
+      ${tabs('531home')}
+    `;
+  }
+
+  function renderTrain(){
+    const w = computeWorkout();
+    const lift = w.lift;
+    let setsHtml = w.mainSets.map((s,i)=>`
+      <div class="set-row">
+        <div class="set-left">
+          <div class="pct">${s.pct}% of TM</div>
+          <div class="weight">${fmtW(s.weight)}</div>
+          <div class="target">Target: ${s.repsLabel} reps</div>
+        </div>
+        ${s.amrap ? `<input class="reps" type="number" inputmode="numeric" placeholder="reps" id="amrap-${i}" value="${repsInput[i] ?? ''}">` : ''}
+      </div>
+    `).join('');
+
+    let bbbDots = '';
+    for (let i=0;i<5;i++){
+      bbbDots += `<div class="bbb-dot ${i < bbbDone ? 'done':''}" data-action="toggleBbb" data-i="${i}">${i+1}</div>`;
+    }
+
+    return `
+      ${topbar('Today', 'Week ' + state.week + ' · ' + w.scheme.label, '531home')}
+      <main>
+        <div class="card">
+          <div class="lift-head">
+            <div class="plate ${LIFT_CLASS[lift]}"></div>
+            <div>
+              <div class="name">${LIFT_LABEL[lift]}</div>
+              <div class="meta">Training max ${fmtW(w.tm)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Main sets</h2>
+          ${setsHtml}
+        </div>
+
+        <div class="card">
+          <h2>Boring But Big</h2>
+          <div class="row"><span class="label">5 sets × 10 reps</span><span class="value">${fmtW(w.bbbWeight)}</span></div>
+          <div class="bbb-counter">${bbbDots}</div>
+        </div>
+
+        <button class="btn" data-action="finishWorkout">Finish &amp; log workout</button>
+      </main>
+    `;
+  }
+
+  function renderHistory(){
+    if (!history.length){
+      return `
+        ${topbar('History', null, '531home')}
+        <main>
+          <div class="empty">
+            <div class="big">—</div>
+            <div>No workouts logged yet.<br>Finish a session to see it here.</div>
+          </div>
+        </main>
+        ${tabs('history')}
+      `;
+    }
+    const items = history.slice().reverse().map((h,idx)=>{
+      const realIdx = history.length - 1 - idx;
+      const top = h.mainSets[h.mainSets.length-1];
+      let prLine = '';
+      if (top.amrap && top.actualReps){
+        const e1rm = Math.round(epley(top.weight, top.actualReps));
+        prLine = `<span class="hi-pr">${top.actualReps} reps @ ${fmtW(top.weight)} · est. 1RM ${fmtW(e1rm)}</span>`;
+      }
+      return `
+        <div class="history-item">
+          <div class="hi-top">
+            <span class="hi-lift">${LIFT_LABEL[h.lift]}</span>
+            <span class="hi-date">${h.date}</span>
+          </div>
+          <div class="hi-detail">
+            Cycle ${h.cycle} · Week ${h.week} (${h.weekLabel}) &middot; BBB ${fmtW(h.bbbWeight)} × ${h.bbbSets}/5
+            ${prLine ? '<br>' + prLine : ''}
+          </div>
+          <button class="btn ghost" style="padding:6px 0;" data-action="deleteHistory" data-idx="${realIdx}">Delete entry</button>
+        </div>
+      `;
+    }).join('');
+    return `
+      ${topbar('History', history.length + ' workouts logged', '531home')}
+      <main>${items}</main>
+      ${tabs('history')}
+    `;
+  }
+
+  function renderCycleModal(){
+    const bumps = settings.unit === 'kg' ? CYCLE_BUMP : CYCLE_BUMP_LB;
+    const t = pendingCycleUp.tms;
+    return `
+      <div class="modal-back">
+        <div class="modal">
+          <h2>New cycle</h2>
+          <p class="desc">Cycle ${state.cycle - 1} is complete. Raise your training maxes for cycle ${state.cycle}?</p>
+          <label class="field"><span>Squat</span><input type="number" id="cu-squat" value="${t.squat}"></label>
+          <label class="field"><span>Bench Press</span><input type="number" id="cu-bench" value="${t.bench}"></label>
+          <label class="field"><span>Deadlift</span><input type="number" id="cu-deadlift" value="${t.deadlift}"></label>
+          <label class="field"><span>Overhead Press</span><input type="number" id="cu-press" value="${t.press}"></label>
+          <div class="btn-row">
+            <button class="btn secondary" data-action="skipCycleUp">Keep same</button>
+            <button class="btn" data-action="applyCycleUp">Apply</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ---------------- actions ---------------- */
+  function bindEvents(){
+    document.querySelectorAll('[data-action]').forEach(el=>{
+      el.addEventListener('click', onAction);
+    });
+  }
+
+  function onAction(e){
+    const el = e.currentTarget;
+    const action = el.getAttribute('data-action');
+    if (action === 'go') go(el.getAttribute('data-route'));
+    else if (action === 'dummy') showToast(el.getAttribute('data-name') + ' is coming soon.');
+    else if (action === 'open531') go(hasTMs() ? '531home' : 'setup');
+    else if (action === 'saveSetup') doSaveSetup();
+    else if (action === 'resetAll') doResetAll();
+    else if (action === 'startWorkout') go('train');
+    else if (action === 'pickDay') doPickDay();
+    else if (action === 'toggleBbb') doToggleBbb(parseInt(el.getAttribute('data-i')));
+    else if (action === 'finishWorkout') doFinishWorkout();
+    else if (action === 'deleteHistory') doDeleteHistory(parseInt(el.getAttribute('data-idx')));
+    else if (action === 'applyCycleUp') doApplyCycleUp();
+    else if (action === 'skipCycleUp') doSkipCycleUp();
+  }
+
+  function readNum(id){
+    const v = parseFloat(document.getElementById(id).value);
+    return isNaN(v) ? null : v;
+  }
+
+  function doSaveSetup(){
+    const squat = readNum('f-squat'), bench = readNum('f-bench'),
+          deadlift = readNum('f-deadlift'), press = readNum('f-press');
+    if (!squat || !bench || !deadlift || !press){
+      showToast('Enter all four training maxes.');
+      return;
+    }
+    settings.unit = document.getElementById('f-unit').value;
+    settings.increment = parseFloat(document.getElementById('f-inc').value);
+    settings.bbbPercent = parseInt(document.getElementById('f-bbb').value);
+    settings.tms = { squat, bench, deadlift, press };
+    save(SKEY, settings);
+    showToast('Setup saved.');
+    go('531home');
+  }
+
+  function doResetAll(){
+    if (!confirm('This erases every training max and logged workout. Continue?')) return;
+    settings = defaultSettings();
+    state = defaultState();
+    history = [];
+    save(SKEY, settings); save(TKEY, state); save(HKEY, history);
+    showToast('All data erased.');
+    go('menu');
+  }
+
+  function doPickDay(){
+    const liftNames = settings.order.map(l=>LIFT_LABEL[l]);
+    const pick = prompt('Pick a day (1-4):\n' + liftNames.map((n,i)=>`${i+1}. ${n}`).join('\n'), String(state.dayIndex+1));
+    const idx = parseInt(pick);
+    if (idx >=1 && idx <= 4){ state.dayIndex = idx - 1; save(TKEY,state); render(); }
+    const week = prompt('Pick a week (1-4):\n1. 5s\n2. 3s\n3. 5/3/1\n4. Deload', String(state.week));
+    const wk = parseInt(week);
+    if (wk>=1 && wk<=4){ state.week = wk; save(TKEY,state); }
+    render();
+  }
+
+  function doToggleBbb(i){
+    // tapping a dot sets completed count to i+1, tapping the currently-last done dot un-marks it
+    bbbDone = (bbbDone === i+1) ? i : i+1;
+    render();
+  }
+
+  function doFinishWorkout(){
+    const w = computeWorkout();
+    const mainSets = w.mainSets.map((s,i)=>{
+      const out = { pct:s.pct, repsLabel:s.repsLabel, weight:s.weight, amrap:s.amrap };
+      if (s.amrap){
+        const inp = document.getElementById('amrap-'+i);
+        const val = inp ? parseInt(inp.value) : null;
+        out.actualReps = (val && val>0) ? val : null;
+      }
+      return out;
+    });
+    const entry = {
+      date: new Date().toISOString().slice(0,10),
+      lift: w.lift,
+      cycle: state.cycle,
+      week: state.week,
+      weekLabel: w.scheme.label,
+      mainSets,
+      bbbWeight: w.bbbWeight,
+      bbbSets: bbbDone
+    };
+    history.push(entry);
+    save(HKEY, history);
+
+    advanceDay();
+    showToast('Workout logged.');
+    go('531home');
+  }
+
+  function advanceDay(){
+    state.dayIndex++;
+    if (state.dayIndex >= settings.order.length){
+      state.dayIndex = 0;
+      state.week++;
+      if (state.week > 4){
+        state.week = 1;
+        state.cycle++;
+        const bumps = settings.unit === 'kg' ? CYCLE_BUMP : CYCLE_BUMP_LB;
+        pendingCycleUp = { tms: {
+          squat: settings.tms.squat + bumps.squat,
+          bench: settings.tms.bench + bumps.bench,
+          deadlift: settings.tms.deadlift + bumps.deadlift,
+          press: settings.tms.press + bumps.press
+        }};
+      }
+    }
+    save(TKEY, state);
+  }
+
+  function doApplyCycleUp(){
+    settings.tms = {
+      squat: parseFloat(document.getElementById('cu-squat').value) || settings.tms.squat,
+      bench: parseFloat(document.getElementById('cu-bench').value) || settings.tms.bench,
+      deadlift: parseFloat(document.getElementById('cu-deadlift').value) || settings.tms.deadlift,
+      press: parseFloat(document.getElementById('cu-press').value) || settings.tms.press
+    };
+    save(SKEY, settings);
+    pendingCycleUp = null;
+    render();
+  }
+  function doSkipCycleUp(){ pendingCycleUp = null; render(); }
+
+  function doDeleteHistory(idx){
+    if (!confirm('Delete this workout entry?')) return;
+    history.splice(idx,1);
+    save(HKEY, history);
+    render();
+  }
+
+  /* ---------------- boot ---------------- */
+  go(hasTMs() ? 'menu' : 'menu');
+})();
+</script>
+</body>
+</html>
