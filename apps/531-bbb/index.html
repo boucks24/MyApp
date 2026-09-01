@@ -384,10 +384,10 @@
 
         <div class="card" style="margin-top:22px;">
           <h2>Backup &amp; sync</h2>
-          <p class="sub" style="color:var(--muted);font-size:12px;margin:-6px 0 14px;">iOS can clear local storage from unused home-screen apps. Export now and then. To back it up, upload the downloaded file to <b>apps/531-bbb/history.json</b> in your repo, overwriting the existing one. This app checks that file's age on launch and reminds you here if it's over a month old.</p>
+          <p class="sub" style="color:var(--muted);font-size:12px;margin:-6px 0 14px;">iOS can clear local storage from unused home-screen apps. Export now and then. To back it up, upload the downloaded file to <b>apps/531-bbb/history.json</b> in your repo, overwriting the existing one. This app merges that file's history into what's on your phone automatically on launch (nothing is ever overwritten or removed), and reminds you here if the committed file is over a month old.</p>
           <div class="btn-row">
             <button class="btn secondary" data-action="exportData">Export history.json</button>
-            <label class="btn secondary" for="import-file">Import file</label>
+            <label class="btn secondary" for="import-file">Merge from file</label>
           </div>
           <input type="file" id="import-file" accept="application/json">
         </div>
@@ -850,6 +850,18 @@
     showToast('Downloaded history.json');
   }
 
+  function historyKey(h){
+    const top = h.mainSets[h.mainSets.length-1];
+    return [h.date, h.lift, h.cycle, h.week, h.mainSets.map(s=>s.weight).join(','), top.actualReps ?? ''].join('|');
+  }
+
+  function mergeHistoryArrays(a, b){
+    const map = new Map();
+    a.forEach(h => map.set(historyKey(h), h));
+    b.forEach(h => map.set(historyKey(h), h));
+    return Array.from(map.values()).sort((x,y) => x.date.localeCompare(y.date));
+  }
+
   function handleImportChange(e){
     const file = e.target.files[0];
     if (!file) return;
@@ -857,13 +869,16 @@
     reader.onload = function(ev){
       try{
         const data = JSON.parse(ev.target.result);
-        if (!data.settings || !data.state || !Array.isArray(data.history)) throw new Error('bad format');
-        if (!confirm('Replace your current maxes and history with this backup?')) return;
-        settings = data.settings;
-        state = data.state;
-        history = data.history;
-        save(SKEY, settings); save(TKEY, state); save(HKEY, history);
-        showToast('Backup restored.');
+        if (!Array.isArray(data.history)) throw new Error('bad format');
+        const before = history.length;
+        history = mergeHistoryArrays(history, data.history);
+        const added = history.length - before;
+        save(HKEY, history);
+        if (!hasTMs() && data.settings){
+          settings = data.settings;
+          save(SKEY, settings);
+        }
+        showToast(added > 0 ? `Merged in ${added} new ${added === 1 ? 'entry' : 'entries'}.` : 'Nothing new to merge in.');
         go('531home');
       }catch(err){
         showToast('That file could not be read as a backup.');
@@ -873,28 +888,45 @@
     e.target.value = '';
   }
 
-  /* ---------------- backup-age check ---------------- */
+  /* ---------------- remote history merge + backup-age check ---------------- */
   const STALE_DAYS = 30;
   const DISMISS_SNOOZE_DAYS = 3;
 
-  function checkBackupAge(){
+  function checkRemoteHistory(){
     fetch('./history.json?t=' + Date.now(), { cache:'no-store' })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
-        if (!data || !data.exportedAt) return;
+        if (!data) return;
+        let changed = false;
 
-        const dismissedAt = localStorage.getItem('531_staleDismissedAt');
-        if (dismissedAt){
-          const snoozeMs = DISMISS_SNOOZE_DAYS * 24 * 60 * 60 * 1000;
-          if (Date.now() - new Date(dismissedAt).getTime() < snoozeMs) return;
+        if (Array.isArray(data.history)){
+          const merged = mergeHistoryArrays(history, data.history);
+          if (merged.length !== history.length){
+            history = merged;
+            save(HKEY, history);
+            changed = true;
+          }
         }
 
-        const ageMs = Date.now() - new Date(data.exportedAt).getTime();
-        const days = Math.floor(ageMs / (24 * 60 * 60 * 1000));
-        if (days >= STALE_DAYS){
-          pendingStaleReminder = { exportedAt: data.exportedAt, days };
-          render();
+        if (!hasTMs() && data.settings){
+          settings = data.settings;
+          save(SKEY, settings);
+          changed = true;
         }
+
+        if (data.exportedAt){
+          const dismissedAt = localStorage.getItem('531_staleDismissedAt');
+          const snoozed = dismissedAt && (Date.now() - new Date(dismissedAt).getTime() < DISMISS_SNOOZE_DAYS * 24 * 60 * 60 * 1000);
+          if (!snoozed){
+            const days = Math.floor((Date.now() - new Date(data.exportedAt).getTime()) / (24 * 60 * 60 * 1000));
+            if (days >= STALE_DAYS){
+              pendingStaleReminder = { exportedAt: data.exportedAt, days };
+              changed = true;
+            }
+          }
+        }
+
+        if (changed) render();
       })
       .catch(()=>{ /* no committed backup yet, or offline — ignore silently */ });
   }
@@ -907,7 +939,7 @@
 
   /* ---------------- boot ---------------- */
   go(hasTMs() ? '531home' : 'setup');
-  checkBackupAge();
+  checkRemoteHistory();
 })();
 </script>
 </body>
