@@ -1,0 +1,400 @@
+{
+  "exportedAt": "2026-09-02T00:00:00.000Z",
+  "app": "531-bbb",
+  "settings": {
+    "unit": "kg",
+    "increment": 2.5,
+    "bbbPercent": 50,
+    "order": [
+      "press",
+      "deadlift",
+      "bench",
+      "squat"
+    ],
+    "tms": {
+      "squat": 95,
+      "bench": 97.5,
+      "deadlift": 135,
+      "press": 57.5
+    }
+  },
+  "state": {
+    "cycle": 1,
+    "week": 1,
+    "dayIndex": 0
+  },
+  "history": [
+    {
+      "date": "2026-08-08",
+      "lift": "press",
+      "cycle": 0,
+      "week": 1,
+      "weekLabel": "5s",
+      "mainSets": [
+        {
+          "pct": 65,
+          "repsLabel": "5",
+          "weight": 35.0,
+          "amrap": false
+        },
+        {
+          "pct": 75,
+          "repsLabel": "5",
+          "weight": 42.5,
+          "amrap": false
+        },
+        {
+          "pct": 85,
+          "repsLabel": "5+",
+          "weight": 47.5,
+          "amrap": true,
+          "actualReps": 10
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-08",
+      "lift": "deadlift",
+      "cycle": 0,
+      "week": 1,
+      "weekLabel": "5s",
+      "mainSets": [
+        {
+          "pct": 65,
+          "repsLabel": "5",
+          "weight": 85.0,
+          "amrap": false
+        },
+        {
+          "pct": 75,
+          "repsLabel": "5",
+          "weight": 97.5,
+          "amrap": false
+        },
+        {
+          "pct": 85,
+          "repsLabel": "5+",
+          "weight": 110.0,
+          "amrap": true,
+          "actualReps": 5
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-08",
+      "lift": "bench",
+      "cycle": 0,
+      "week": 1,
+      "weekLabel": "5s",
+      "mainSets": [
+        {
+          "pct": 65,
+          "repsLabel": "5",
+          "weight": 62.5,
+          "amrap": false
+        },
+        {
+          "pct": 75,
+          "repsLabel": "5",
+          "weight": 72.5,
+          "amrap": false
+        },
+        {
+          "pct": 85,
+          "repsLabel": "5+",
+          "weight": 80.0,
+          "amrap": true,
+          "actualReps": 10
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-08",
+      "lift": "squat",
+      "cycle": 0,
+      "week": 1,
+      "weekLabel": "5s",
+      "mainSets": [
+        {
+          "pct": 65,
+          "repsLabel": "5",
+          "weight": 57.5,
+          "amrap": false
+        },
+        {
+          "pct": 75,
+          "repsLabel": "5",
+          "weight": 67.5,
+          "amrap": false
+        },
+        {
+          "pct": 85,
+          "repsLabel": "5+",
+          "weight": 77.5,
+          "amrap": true,
+          "actualReps": 10
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-08",
+      "lift": "deadlift",
+      "cycle": 0,
+      "week": 2,
+      "weekLabel": "3s",
+      "mainSets": [
+        {
+          "pct": 70,
+          "repsLabel": "3",
+          "weight": 90.0,
+          "amrap": false
+        },
+        {
+          "pct": 80,
+          "repsLabel": "3",
+          "weight": 105.0,
+          "amrap": false
+        },
+        {
+          "pct": 90,
+          "repsLabel": "3+",
+          "weight": 117.5,
+          "amrap": true,
+          "actualReps": 3
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-08",
+      "lift": "bench",
+      "cycle": 0,
+      "week": 2,
+      "weekLabel": "3s",
+      "mainSets": [
+        {
+          "pct": 70,
+          "repsLabel": "3",
+          "weight": 67.5,
+          "amrap": false
+        },
+        {
+          "pct": 80,
+          "repsLabel": "3",
+          "weight": 75.0,
+          "amrap": false
+        },
+        {
+          "pct": 90,
+          "repsLabel": "3+",
+          "weight": 85.0,
+          "amrap": true,
+          "actualReps": 4
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-08",
+      "lift": "squat",
+      "cycle": 0,
+      "week": 2,
+      "weekLabel": "3s",
+      "mainSets": [
+        {
+          "pct": 70,
+          "repsLabel": "3",
+          "weight": 62.5,
+          "amrap": false
+        },
+        {
+          "pct": 80,
+          "repsLabel": "3",
+          "weight": 72.5,
+          "amrap": false
+        },
+        {
+          "pct": 90,
+          "repsLabel": "3+",
+          "weight": 80.0,
+          "amrap": true,
+          "actualReps": 4
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-08",
+      "lift": "press",
+      "cycle": 0,
+      "week": 3,
+      "weekLabel": "5/3/1",
+      "mainSets": [
+        {
+          "pct": 75,
+          "repsLabel": "5",
+          "weight": 42.5,
+          "amrap": false
+        },
+        {
+          "pct": 85,
+          "repsLabel": "3",
+          "weight": 47.5,
+          "amrap": false
+        },
+        {
+          "pct": 95,
+          "repsLabel": "1+",
+          "weight": 52.5,
+          "amrap": true,
+          "actualReps": 5
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-08",
+      "lift": "deadlift",
+      "cycle": 0,
+      "week": 3,
+      "weekLabel": "5/3/1",
+      "mainSets": [
+        {
+          "pct": 75,
+          "repsLabel": "5",
+          "weight": 97.5,
+          "amrap": false
+        },
+        {
+          "pct": 85,
+          "repsLabel": "3",
+          "weight": 110.0,
+          "amrap": false
+        },
+        {
+          "pct": 95,
+          "repsLabel": "1+",
+          "weight": 122.5,
+          "amrap": true,
+          "actualReps": 1
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-08",
+      "lift": "bench",
+      "cycle": 0,
+      "week": 3,
+      "weekLabel": "5/3/1",
+      "mainSets": [
+        {
+          "pct": 75,
+          "repsLabel": "5",
+          "weight": 72.5,
+          "amrap": false
+        },
+        {
+          "pct": 85,
+          "repsLabel": "3",
+          "weight": 80.0,
+          "amrap": false
+        },
+        {
+          "pct": 95,
+          "repsLabel": "1+",
+          "weight": 90.0,
+          "amrap": true,
+          "actualReps": 2
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-08",
+      "lift": "squat",
+      "cycle": 0,
+      "week": 3,
+      "weekLabel": "5/3/1",
+      "mainSets": [
+        {
+          "pct": 75,
+          "repsLabel": "5",
+          "weight": 67.5,
+          "amrap": false
+        },
+        {
+          "pct": 85,
+          "repsLabel": "3",
+          "weight": 77.5,
+          "amrap": false
+        },
+        {
+          "pct": 95,
+          "repsLabel": "1+",
+          "weight": 85.0,
+          "amrap": true,
+          "actualReps": 1
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    },
+    {
+      "date": "2026-08-31",
+      "lift": "press",
+      "cycle": 0,
+      "week": 2,
+      "weekLabel": "3s",
+      "mainSets": [
+        {
+          "pct": 70,
+          "repsLabel": "3",
+          "weight": 37.5,
+          "amrap": false
+        },
+        {
+          "pct": 80,
+          "repsLabel": "3",
+          "weight": 45.0,
+          "amrap": false
+        },
+        {
+          "pct": 90,
+          "repsLabel": "3+",
+          "weight": 50.0,
+          "amrap": true,
+          "actualReps": 8
+        }
+      ],
+      "bbbLift": null,
+      "bbbWeight": null,
+      "bbbSets": 0
+    }
+  ]
+}
