@@ -2,466 +2,82 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Court Allocator">
-<title>Court Allocator</title>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="App Shelf">
+<title>App Shelf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700&display=swap');
-
   :root{
-    --court: #244A3D;
-    --court-dark: #1A362D;
-    --line: #F4F1E8;
-    --clay: #C1622E;
-    --ball: #D7E05B;
-    --ink: #16211D;
+    --bg:#15161A;
+    --panel:#1E2024;
+    --line:#33363B;
+    --chalk:#ECE8E1;
+    --muted:#8B8D93;
+    --iron:#C1442B;
+    --font-display:'Oswald', system-ui, -apple-system, sans-serif;
+    --font-body:'Inter', system-ui, -apple-system, sans-serif;
   }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--chalk);font-family:var(--font-body);}
+  body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);min-height:100vh;}
+  .wrap{max-width:560px;margin:0 auto;}
 
-  * { box-sizing: border-box; }
+  .hero{padding:44px 20px 10px;}
+  .hero .mark{
+    font-family:var(--font-display);font-weight:700;font-size:44px;letter-spacing:0.01em;line-height:1;
+    display:flex;align-items:baseline;gap:10px;
+  }
+  .hero .mark span.dot{color:var(--iron);}
+  .hero .tag{color:var(--muted);font-size:14px;margin-top:8px;}
 
-  body{
-    margin:0;
-    background: var(--court-dark);
-    background-image:
-      radial-gradient(circle at 50% -10%, rgba(215,224,91,0.08), transparent 60%);
-    font-family: 'Archivo', sans-serif;
-    color: var(--line);
-    min-height: 100vh;
-    padding: 28px 16px 60px;
+  .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:10px 20px 30px;}
+  .tile{
+    background:var(--panel);border:1px solid var(--line);
+    padding:20px 16px;min-height:128px;
+    display:flex;flex-direction:column;justify-content:space-between;
+    position:relative;overflow:hidden;text-decoration:none;color:inherit;
+    transition:transform .12s ease;
   }
-
-  .wrap{ max-width: 460px; margin: 0 auto; }
-
-  .back-link{
-    display:inline-block;
-    color: rgba(244,241,232,0.55);
-    font-size: 12.5px;
-    font-weight: 600;
-    text-decoration: none;
-    margin-bottom: 16px;
-  }
-  .back-link:hover{ color: var(--line); }
-
-  header{ text-align:center; margin-bottom: 26px; }
-
-  .eyebrow{
-    font-size: 12px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--ball);
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
-
-  h1{
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 30px;
-    line-height: 1;
-    margin: 0 0 4px;
-    letter-spacing: -0.01em;
-  }
-
-  .sub{
-    color: rgba(244,241,232,0.6);
-    font-size: 13.5px;
-  }
-
-  .result-card{
-    background: var(--court);
-    border: 1px solid rgba(244,241,232,0.12);
-    border-radius: 18px;
-    padding: 40px 20px;
-    text-align: center;
-    margin-bottom: 14px;
-    position: relative;
-    overflow: hidden;
-    cursor: pointer;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    transition: transform 0.1s ease, background 0.15s ease;
-  }
-  .result-card:active{ transform: scale(0.97); }
-  .result-card:hover{ background: #2A5546; }
-  .result-card:focus-visible{ outline: 2px solid var(--ball); outline-offset: 3px; }
-  .result-card.disabled{
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-  .result-card::after{
-    content:"";
-    position:absolute;
-    right: -30px; top: -30px;
-    width: 120px; height: 120px;
-    border: 2px solid rgba(244,241,232,0.06);
-    border-radius: 50%;
-  }
-
-  .result-label{
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: rgba(244,241,232,0.5);
-    margin-bottom: 10px;
-  }
-
-  .result-value{
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 64px;
-    line-height: 1;
-    color: var(--ball);
-    letter-spacing: -0.01em;
-    transition: transform 0.15s ease;
-  }
-  .result-value.pop{ animation: pop 0.32s ease; }
-  @keyframes pop{
-    0%{ transform: scale(0.85); opacity: 0.4; }
-    60%{ transform: scale(1.05); }
-    100%{ transform: scale(1); opacity: 1; }
-  }
-
-  .result-sub{
-    margin-top: 10px;
-    font-size: 13px;
-    color: rgba(244,241,232,0.55);
-  }
-
-  button{
-    width: 100%;
-    background: var(--ball);
-    color: var(--ink);
-    border: none;
-    border-radius: 10px;
-    padding: 16px;
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 16px;
-    letter-spacing: 0.02em;
-    cursor: pointer;
-    transition: transform 0.12s ease, background 0.12s ease, opacity 0.12s ease;
-  }
-  button:active{ transform: scale(0.98); }
-  button:hover{ background: #e2ea82; }
-  button:focus-visible{ outline: 2px solid var(--line); outline-offset: 2px; }
-  button:disabled{
-    background: rgba(215,224,91,0.25);
-    color: rgba(22,33,29,0.5);
-    cursor: not-allowed;
-  }
-
-  .tap-hint{
-    margin-top: 14px;
-    font-size: 11.5px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    font-weight: 700;
-    color: rgba(244,241,232,0.4);
-  }
-
-  .reset-link{
-    display:block;
-    width: 100%;
-    background: none;
-    border: none;
-    color: rgba(244,241,232,0.5);
-    font-family: 'Archivo', sans-serif;
-    font-weight: 600;
-    font-size: 12.5px;
-    text-align:center;
-    padding: 10px;
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-  .reset-link:hover{ color: var(--line); }
-
-  .grid{
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    margin-top: 20px;
-  }
-
-  .slot{
-    background: var(--court);
-    border-radius: 10px;
-    padding: 10px 6px;
-    text-align: center;
-    border: 1px solid rgba(244,241,232,0.1);
-  }
-  .slot-name{
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 14px;
-    margin-bottom: 6px;
-  }
-  .slot-pips{
-    display:flex;
-    justify-content:center;
-    gap: 4px;
-  }
-  .pip{
-    width: 8px; height:8px; border-radius:50%;
-    background: rgba(244,241,232,0.15);
-  }
-  .pip.filled{ background: var(--ball); }
-  .slot.full .slot-name{ color: var(--clay); }
-
-  .full-note{
-    text-align:center;
-    color: var(--ball);
-    font-size: 13px;
-    margin-top: 16px;
-    font-weight: 700;
-    display:none;
-  }
-
-  .setup-card{
-    background: var(--court);
-    border: 1px solid rgba(244,241,232,0.12);
-    border-radius: 18px;
-    padding: 24px 20px;
-  }
-
-  .setup-label{
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: rgba(244,241,232,0.6);
-    margin-bottom: 8px;
-    display: block;
-  }
-
-  input[type="number"]{
-    width: 100%;
-    background: var(--court-dark);
-    border: 1px solid rgba(244,241,232,0.15);
-    border-radius: 10px;
-    color: var(--line);
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 28px;
-    text-align: center;
-    padding: 14px;
-    margin-bottom: 14px;
-  }
-  input[type="number"]::placeholder{ color: rgba(244,241,232,0.3); }
-  input[type="number"]:focus{ outline: 2px solid var(--ball); outline-offset: 1px; }
-
-  .setup-note{
-    font-size: 12.5px;
-    color: rgba(244,241,232,0.5);
-    text-align: center;
-    margin-top: 10px;
-    line-height: 1.5;
-  }
-
-  .change-link{
-    display:block;
-    width: 100%;
-    background: none;
-    border: none;
-    color: rgba(244,241,232,0.5);
-    font-family: 'Archivo', sans-serif;
-    font-weight: 600;
-    font-size: 12.5px;
-    text-align:center;
-    padding: 4px 10px 10px;
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-  .change-link:hover{ color: var(--line); }
-
-  .hidden{ display: none !important; }
-
+  .tile:active{transform:scale(0.97);}
+  .tile .bar{width:34px;height:6px;background:var(--iron);}
+  .tile.dim .bar{background:var(--line);}
+  .tile h3{font-family:var(--font-display);font-size:17px;font-weight:600;margin:14px 0 4px;letter-spacing:0.01em;}
+  .tile p{font-size:12px;color:var(--muted);margin:0;line-height:1.4;}
+  .tile.dim{opacity:0.55;pointer-events:none;}
+  .tile.dim h3, .tile.dim p{color:var(--muted);}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <a class="back-link" href="../../">‹ Shelf</a>
-  <header>
-    <div class="eyebrow">Social Tennis</div>
-    <h1>Court Allocator</h1>
-    <div class="sub" id="headerSub">Tap for a random spot</div>
-  </header>
-
-  <div class="setup-card" id="setupCard">
-    <label for="playerCount">How many players today?</label>
-    <input type="number" id="playerCount" min="4" max="16" step="1" placeholder="e.g. 10">
-    <button id="startBtn">Set courts</button>
-    <div class="setup-note" id="setupNote">Courts 16 · 15 · 14 · 13 — up to 4 players per court</div>
+  <div class="hero">
+    <div class="mark">APP<span class="dot">.</span>SHELF</div>
+    <div class="tag">Your own tools, one tap away.</div>
   </div>
-
-  <div id="playArea" class="hidden">
-    <div class="result-card" id="resultCard" role="button" tabindex="0" aria-label="Tap to get your court">
-      <div class="result-label">Your spot</div>
-      <div class="result-value" id="resultValue">TAP</div>
-      <div class="result-sub" id="resultSub">Tap this card to get your court</div>
+  <div class="menu-grid">
+    <a class="tile" href="apps/531-bbb/">
+      <div class="bar"></div>
+      <h3>5/3/1 BBB</h3>
+      <p>Workout planner &amp; log.</p>
+    </a>
+    <a class="tile" href="apps/court-allocator/">
+      <div class="bar"></div>
+      <h3>Court Allocator</h3>
+      <p>Randomly assign social tennis players to courts.</p>
+    </a>
+    <div class="tile dim">
+      <div class="bar"></div>
+      <h3>Empty slot</h3>
+      <p>Reserved for your next mini app.</p>
     </div>
-
-    <button class="reset-link" id="resetBtn">Reset all courts</button>
-    <button class="change-link" id="changeBtn">Change player count</button>
-
-    <div class="full-note" id="fullNote">All courts are full for this round.</div>
-
-    <div class="grid" id="grid"></div>
+    <div class="tile dim">
+      <div class="bar"></div>
+      <h3>Empty slot</h3>
+      <p>Reserved for your next mini app.</p>
+    </div>
   </div>
 </div>
-
-<script>
-  try {
-    const ALL_COURTS = [16, 15, 14, 13]; // priority order when fewer than 4 courts are needed
-    const SIDES = ['A', 'B'];
-    const CAPACITY = 2; // players per side, per court
-
-    let COURTS = [];
-    let slots = {};
-
-    const headerSub = document.getElementById('headerSub');
-    const setupCard = document.getElementById('setupCard');
-    const setupNote = document.getElementById('setupNote');
-    const playerCountInput = document.getElementById('playerCount');
-    const startBtn = document.getElementById('startBtn');
-    const playArea = document.getElementById('playArea');
-    const changeBtn = document.getElementById('changeBtn');
-
-    const resultCard = document.getElementById('resultCard');
-    const resultValue = document.getElementById('resultValue');
-    const resultSub = document.getElementById('resultSub');
-    const resetBtn = document.getElementById('resetBtn');
-    const grid = document.getElementById('grid');
-    const fullNote = document.getElementById('fullNote');
-
-    function courtsNeeded(count){
-      const needed = Math.ceil(count / (CAPACITY * SIDES.length)); // 4 players per full court
-      return Math.min(ALL_COURTS.length, Math.max(1, needed));
-    }
-
-    function setupCourts(count){
-      clearTimeout(revertTimer);
-      const n = courtsNeeded(count);
-      COURTS = ALL_COURTS.slice(0, n);
-      slots = {};
-      COURTS.forEach(c => SIDES.forEach(s => slots[c + s] = 0));
-
-      const label = COURTS.slice().sort((a, b) => b - a).join(' · ');
-      headerSub.textContent = `Tap for a random spot — court${COURTS.length > 1 ? 's' : ''} ${label}`;
-
-      resultValue.textContent = 'TAP';
-      resultSub.textContent = 'Tap this card to get your court';
-
-      setupCard.classList.add('hidden');
-      playArea.classList.remove('hidden');
-
-      renderGrid();
-    }
-
-    function renderGrid(){
-      grid.innerHTML = '';
-      COURTS.forEach(c => {
-        SIDES.forEach(s => {
-          const key = c + s;
-          const count = slots[key];
-          const full = count >= CAPACITY;
-          const div = document.createElement('div');
-          div.className = 'slot' + (full ? ' full' : '');
-          div.innerHTML = `
-            <div class="slot-name">${key}</div>
-            <div class="slot-pips">
-              ${Array.from({length: CAPACITY}).map((_, i) =>
-                `<span class="pip${i < count ? ' filled' : ''}"></span>`
-              ).join('')}
-            </div>
-          `;
-          grid.appendChild(div);
-        });
-      });
-
-      const allFull = Object.values(slots).every(v => v >= CAPACITY);
-      if(allFull){
-        resultCard.classList.add('disabled');
-        resultCard.setAttribute('aria-disabled', 'true');
-      } else {
-        resultCard.classList.remove('disabled');
-        resultCard.removeAttribute('aria-disabled');
-      }
-      fullNote.style.display = allFull ? 'block' : 'none';
-    }
-
-    let revertTimer = null;
-    const REVERT_DELAY = 2200; // ms before the card resets to "TAP" for the next person
-
-    function assign(){
-      const available = Object.keys(slots).filter(k => slots[k] < CAPACITY);
-      if(available.length === 0) return;
-
-      clearTimeout(revertTimer);
-
-      const pick = available[Math.floor(Math.random() * available.length)];
-      slots[pick]++;
-
-      resultValue.textContent = pick;
-      resultValue.classList.remove('pop');
-      void resultValue.offsetWidth;
-      resultValue.classList.add('pop');
-
-      const court = pick.slice(0, -1);
-      const side = pick.slice(-1);
-      resultSub.textContent = `Court ${court}, side ${side} — go grab a spot!`;
-
-      renderGrid();
-
-      revertTimer = setTimeout(() => {
-        const stillAvailable = Object.keys(slots).some(k => slots[k] < CAPACITY);
-        resultValue.textContent = 'TAP';
-        resultSub.textContent = stillAvailable
-          ? 'Next player — tap this card'
-          : 'All courts are full';
-      }, REVERT_DELAY);
-    }
-
-    function reset(){
-      clearTimeout(revertTimer);
-      COURTS.forEach(c => SIDES.forEach(s => slots[c + s] = 0));
-      resultValue.textContent = 'TAP';
-      resultSub.textContent = 'Tap this card to get your court';
-      renderGrid();
-    }
-
-    function backToSetup(){
-      clearTimeout(revertTimer);
-      playArea.classList.add('hidden');
-      setupCard.classList.remove('hidden');
-      headerSub.textContent = 'Tap for a random spot';
-    }
-
-    startBtn.addEventListener('click', () => {
-      const raw = parseInt(playerCountInput.value, 10);
-      if(!raw || raw < 1){
-        setupNote.textContent = 'Enter how many players are here today.';
-        setupNote.style.color = '#F0B4A0';
-        return;
-      }
-      setupNote.style.color = '';
-      setupCourts(raw);
-    });
-
-    playerCountInput.addEventListener('keydown', (e) => {
-      if(e.key === 'Enter') startBtn.click();
-    });
-
-    resultCard.addEventListener('click', assign);
-    resultCard.addEventListener('keydown', (e) => {
-      if(e.key === 'Enter' || e.key === ' '){
-        e.preventDefault();
-        assign();
-      }
-    });
-    resetBtn.addEventListener('click', reset);
-    changeBtn.addEventListener('click', backToSetup);
-  } catch(e) {
-    console.error('Court allocator error:', e);
-  }
-</script>
 </body>
 </html>
