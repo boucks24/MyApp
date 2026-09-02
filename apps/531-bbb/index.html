@@ -126,6 +126,44 @@
   .cp-icon.deadlift{background:var(--iron);}
   .cp-icon.press{background:var(--moss);}
 
+  .cp-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:2px;}
+  .cp-toolbar h2{margin:0;}
+  .cp-navbtn, .cp-gear{
+    width:30px;height:30px;flex-shrink:0;border:1px solid var(--line);background:var(--panel-2);
+    color:var(--chalk);font-size:16px;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;font-family:var(--font-body);
+  }
+  .cp-navbtn:disabled{opacity:0.3;cursor:default;}
+  .cp-gear{margin-left:auto;font-size:15px;}
+
+  .lift-filter-row{display:flex;gap:6px;padding:12px 20px 0;flex-wrap:wrap;}
+  .lift-chip{
+    border:1px solid var(--line);background:var(--panel);color:var(--muted);
+    font-family:var(--font-body);font-size:12px;font-weight:600;padding:7px 12px;cursor:pointer;
+  }
+  .lift-chip.active{background:var(--iron);border-color:var(--iron);color:#fff;}
+
+  .history-group{margin-bottom:6px;}
+  .history-group .hg-title{
+    font-family:var(--font-display);font-size:13px;font-weight:600;letter-spacing:0.02em;
+    color:var(--muted);text-transform:uppercase;padding:16px 0 4px;
+  }
+  .history-group:first-child .hg-title{padding-top:0;}
+
+  .pd-list{display:flex;flex-direction:column;gap:8px;margin-bottom:18px;}
+  .pd-lift-row{
+    display:flex;align-items:center;gap:12px;
+    border:1px solid var(--line);background:var(--panel-2);color:var(--chalk);
+    padding:10px 14px;font-family:var(--font-body);font-size:15px;font-weight:600;cursor:pointer;
+  }
+  .pd-lift-row.selected{border-color:var(--iron);box-shadow:0 0 0 1px var(--iron) inset;}
+  .pd-weeks{display:flex;flex-direction:column;gap:8px;margin-bottom:20px;}
+  .pd-week-row{
+    border:1px solid var(--line);background:var(--panel-2);color:var(--chalk);
+    padding:12px 14px;font-family:var(--font-display);font-size:14px;font-weight:600;text-align:left;cursor:pointer;
+  }
+  .pd-week-row.selected{background:var(--iron);border-color:var(--iron);color:#fff;}
+
   .lift-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
   .lift-head .name{font-family:var(--font-display);font-size:24px;font-weight:700;letter-spacing:0.01em;}
   .lift-head .meta{color:var(--muted);font-size:12px;}
@@ -488,16 +526,21 @@
   let repsInput = {};
   let pendingCycleUp = null; // {tms:{...}} while modal shown
   let historyTab = 'log'; // log | progress
+  let historyLiftFilter = 'all'; // 'all' | lift key
   let editingHistoryIdx = null;
   let pendingStaleReminder = null; // {exportedAt, days} when the committed backup file is over a month old
   let sessionWeights = null; // {main:[w,w,w], bbb:w} — editable overrides for the in-progress workout
   let warmupDone = [false, false, false];
   let mainDone = [false, false, false];
   let restEndsAt = null; // ms epoch when the current rest countdown ends, or null if not resting
+  let viewingCycle = state.cycle; // which cycle the Home progress grid is paged to
+  let pendingPickDay = null; // {dayIndex, week} while the "choose a different day" modal is open
+  let pendingCycleTMEdit = null; // {squat,bench,deadlift,press} while the TM-edit modal is open
 
   function go(r){
     route = r; bbbDone = 0; repsInput = {}; sessionWeights = null;
     warmupDone = [false, false, false]; mainDone = [false, false, false];
+    if (r === '531home') viewingCycle = state.cycle;
     stopRest();
     render(); window.scrollTo(0,0);
   }
@@ -571,6 +614,8 @@
     app.innerHTML = html;
     if (pendingCycleUp) app.insertAdjacentHTML('beforeend', renderCycleModal());
     if (editingHistoryIdx !== null) app.insertAdjacentHTML('beforeend', renderEditHistoryModal());
+    if (pendingPickDay) app.insertAdjacentHTML('beforeend', renderPickDayModal());
+    if (pendingCycleTMEdit) app.insertAdjacentHTML('beforeend', renderCycleTMEditModal());
     bindEvents();
   }
 
@@ -700,24 +745,30 @@
   function renderCycleProgress(){
     const weeks = [1,2,3];
     const cols = settings.order;
+    const isCurrentCycle = viewingCycle === state.cycle;
     const header = cols.map(l => `<div class="cp-cell cp-head"><div class="cp-icon ${LIFT_CLASS[l]}">${LIFT_ABBR[l]}</div></div>`).join('');
     const rows = weeks.map(wk => {
       const cells = cols.map((l,ci) => {
-        const entry = history.find(h => h.cycle === state.cycle && h.week === wk && h.lift === l);
-        const isCurrent = (state.week === wk && state.dayIndex === ci);
+        const entry = history.find(h => h.cycle === viewingCycle && h.week === wk && h.lift === l);
+        const isCurrent = isCurrentCycle && state.week === wk && state.dayIndex === ci;
         return `<button type="button" class="cp-cell ${entry ? 'cp-done' : ''} ${isCurrent ? 'cp-current' : ''}" data-action="cycleCell" data-week="${wk}" data-lift="${l}">${cycleCellContent(entry, isCurrent)}</button>`;
       }).join('');
       return `<div class="cp-row"><div class="cp-wk">W${wk}</div>${cells}</div>`;
     }).join('');
     return `
       <div class="card">
-        <h2>Cycle ${state.cycle} progress</h2>
-        <p class="sub" style="color:var(--muted);font-size:12px;margin:-6px 0 14px;">Tap a lift to edit that workout, or jump ahead to start it early.</p>
+        <div class="cp-toolbar">
+          <button type="button" class="cp-navbtn" data-action="cycleNav" data-dir="-1" ${viewingCycle<=1?'disabled':''} aria-label="Previous cycle">‹</button>
+          <h2>Cycle ${viewingCycle}</h2>
+          <button type="button" class="cp-navbtn" data-action="cycleNav" data-dir="1" ${isCurrentCycle?'disabled':''} aria-label="Next cycle">›</button>
+          ${isCurrentCycle ? `<button type="button" class="cp-gear" data-action="openCycleTMEdit" aria-label="Edit training maxes">&#9881;</button>` : ''}
+        </div>
+        <p class="sub" style="color:var(--muted);font-size:12px;margin:6px 0 14px;">${isCurrentCycle ? 'Tap a completed workout to edit it, or an empty one to select it as your next session.' : 'Viewing a past cycle.'}</p>
         <div class="cp-grid">
           <div class="cp-row"><div class="cp-wk"></div>${header}</div>
           ${rows}
         </div>
-        <button class="btn secondary" style="margin-top:14px;" data-action="startNewCycle">Start new cycle</button>
+        ${isCurrentCycle ? `<button class="btn secondary" style="margin-top:14px;" data-action="startNewCycle">Start new cycle</button>` : ''}
       </div>
     `;
   }
@@ -746,14 +797,6 @@
         </div>
         <button class="btn" data-action="startWorkout">Start workout</button>
         <button class="btn ghost" data-action="pickDay">Choose a different day</button>
-
-        <div class="card" style="margin-top:22px;">
-          <h2>Training maxes</h2>
-          <div class="row"><span class="label">Squat</span><span class="value">${fmtW(settings.tms.squat)}</span></div>
-          <div class="row"><span class="label">Bench Press</span><span class="value">${fmtW(settings.tms.bench)}</span></div>
-          <div class="row"><span class="label">Deadlift</span><span class="value">${fmtW(settings.tms.deadlift)}</span></div>
-          <div class="row"><span class="label">Overhead Press</span><span class="value">${fmtW(settings.tms.press)}</span></div>
-        </div>
       </main>
       ${tabs('531home')}
     `;
@@ -884,6 +927,42 @@
     `;
   }
 
+  function liftFilterChips(){
+    const chips = ['all'].concat(settings.order).map(l => {
+      const label = l === 'all' ? 'All' : LIFT_LABEL[l];
+      return `<button type="button" class="lift-chip ${historyLiftFilter===l?'active':''}" data-action="setHistoryLift" data-lift="${l}">${label}</button>`;
+    }).join('');
+    return `<div class="lift-filter-row">${chips}</div>`;
+  }
+
+  function renderHistoryItem(h){
+    const realIdx = history.indexOf(h);
+    const top = h.mainSets[h.mainSets.length-1];
+    let prLine = '';
+    if (top.amrap && top.actualReps){
+      const e1rm = Math.round(epley(top.weight, top.actualReps));
+      prLine = `<span class="hi-pr">${top.actualReps} reps @ ${fmtW(top.weight)} · est. 1RM ${fmtW(e1rm)}</span>`;
+    }
+    return `
+      <div class="history-item">
+        <div class="hi-top">
+          <span class="hi-lift">${LIFT_LABEL[h.lift]}</span>
+          <span class="hi-date">${h.date}</span>
+        </div>
+        <div class="hi-detail">
+          ${h.cycle > 0
+            ? `Cycle ${h.cycle} · Week ${h.week} (${h.weekLabel}) &middot; BBB${h.bbbLift ? ' ('+LIFT_LABEL[h.bbbLift]+')' : ''} ${fmtW(h.bbbWeight)} × ${h.bbbSets}/5`
+            : h.weekLabel}
+          ${prLine ? '<br>' + prLine : ''}
+        </div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="btn ghost" style="padding:6px 0;" data-action="editHistory" data-idx="${realIdx}">Edit</button>
+          <button class="btn ghost" style="padding:6px 0;color:var(--iron);" data-action="deleteHistory" data-idx="${realIdx}">Delete</button>
+        </div>
+      </div>
+    `;
+  }
+
   function renderHistory(){
     if (historyTab === 'progress'){
       return `
@@ -907,37 +986,28 @@
         ${tabs('history')}
       `;
     }
-    const items = history.slice().reverse().map((h,idx)=>{
-      const realIdx = history.length - 1 - idx;
-      const top = h.mainSets[h.mainSets.length-1];
-      let prLine = '';
-      if (top.amrap && top.actualReps){
-        const e1rm = Math.round(epley(top.weight, top.actualReps));
-        prLine = `<span class="hi-pr">${top.actualReps} reps @ ${fmtW(top.weight)} · est. 1RM ${fmtW(e1rm)}</span>`;
-      }
-      return `
-        <div class="history-item">
-          <div class="hi-top">
-            <span class="hi-lift">${LIFT_LABEL[h.lift]}</span>
-            <span class="hi-date">${h.date}</span>
-          </div>
-          <div class="hi-detail">
-            ${h.cycle > 0
-              ? `Cycle ${h.cycle} · Week ${h.week} (${h.weekLabel}) &middot; BBB${h.bbbLift ? ' ('+LIFT_LABEL[h.bbbLift]+')' : ''} ${fmtW(h.bbbWeight)} × ${h.bbbSets}/5`
-              : h.weekLabel}
-            ${prLine ? '<br>' + prLine : ''}
-          </div>
-          <div class="btn-row" style="margin-top:8px;">
-            <button class="btn ghost" style="padding:6px 0;" data-action="editHistory" data-idx="${realIdx}">Edit</button>
-            <button class="btn ghost" style="padding:6px 0;color:var(--iron);" data-action="deleteHistory" data-idx="${realIdx}">Delete</button>
-          </div>
-        </div>
-      `;
-    }).join('');
+
+    const filtered = historyLiftFilter === 'all' ? history : history.filter(h => h.lift === historyLiftFilter);
+
+    let body;
+    if (!filtered.length){
+      body = `<div class="empty"><div class="big">—</div><div>No ${LIFT_LABEL[historyLiftFilter]} workouts logged yet.</div></div>`;
+    } else if (historyLiftFilter === 'all'){
+      body = settings.order.map(l => {
+        const items = history.filter(h => h.lift === l);
+        if (!items.length) return '';
+        const rows = items.slice().reverse().map(renderHistoryItem).join('');
+        return `<div class="history-group"><div class="hg-title">${LIFT_LABEL[l]}</div>${rows}</div>`;
+      }).join('');
+    } else {
+      body = filtered.slice().reverse().map(renderHistoryItem).join('');
+    }
+
     return `
       ${topbar('History', history.length + ' workouts logged', null, '531home')}
       ${historySubtabs()}
-      <main>${items}</main>
+      ${liftFilterChips()}
+      <main>${body}</main>
       ${tabs('history')}
     `;
   }
@@ -1068,6 +1138,53 @@
     `;
   }
 
+  function renderPickDayModal(){
+    const p = pendingPickDay;
+    const liftRows = settings.order.map((l,i) => `
+      <button type="button" class="pd-lift-row ${p.dayIndex===i?'selected':''}" data-action="pdSelectLift" data-idx="${i}">
+        <div class="cp-icon ${LIFT_CLASS[l]}">${LIFT_ABBR[l]}</div>
+        <span>${LIFT_LABEL[l]}</span>
+      </button>
+    `).join('');
+    const weekRows = [1,2,3].map(wk => `
+      <button type="button" class="pd-week-row ${p.week===wk?'selected':''}" data-action="pdSelectWeek" data-week="${wk}">Week ${wk} · ${WEEK_SCHEME[wk].label}</button>
+    `).join('');
+    return `
+      <div class="modal-back">
+        <div class="modal">
+          <h2>Choose a different day</h2>
+          <p class="desc">Pick the lift and week to switch to.</p>
+          <div class="pd-list">${liftRows}</div>
+          <div class="pd-weeks">${weekRows}</div>
+          <div class="btn-row">
+            <button class="btn secondary" data-action="cancelPickDay">Cancel</button>
+            <button class="btn" data-action="confirmPickDay">Select</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderCycleTMEditModal(){
+    const t = pendingCycleTMEdit;
+    return `
+      <div class="modal-back">
+        <div class="modal">
+          <h2>Edit training maxes</h2>
+          <p class="desc">Adjust the training maxes used for cycle ${state.cycle}.</p>
+          <label class="field"><span>Squat</span><input type="number" inputmode="decimal" id="ct-squat" value="${t.squat}"></label>
+          <label class="field"><span>Bench Press</span><input type="number" inputmode="decimal" id="ct-bench" value="${t.bench}"></label>
+          <label class="field"><span>Deadlift</span><input type="number" inputmode="decimal" id="ct-deadlift" value="${t.deadlift}"></label>
+          <label class="field"><span>Overhead Press</span><input type="number" inputmode="decimal" id="ct-press" value="${t.press}"></label>
+          <div class="btn-row">
+            <button class="btn secondary" data-action="cancelCycleTMEdit">Cancel</button>
+            <button class="btn" data-action="saveCycleTMEdit">Save</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   /* ---------------- actions ---------------- */
   function bindEvents(){
     document.querySelectorAll('[data-action]').forEach(el=>{
@@ -1135,23 +1252,37 @@
     else if (action === 'startNewCycle') doStartNewCycle();
     else if (action === 'cycleCell') doCycleCellClick(parseInt(el.getAttribute('data-week')), el.getAttribute('data-lift'));
     else if (action === 'skipRest') stopRest();
+    else if (action === 'cycleNav') {
+      viewingCycle = Math.max(1, Math.min(state.cycle, viewingCycle + parseInt(el.getAttribute('data-dir'))));
+      render();
+    }
+    else if (action === 'pdSelectLift') { pendingPickDay.dayIndex = parseInt(el.getAttribute('data-idx')); render(); }
+    else if (action === 'pdSelectWeek') { pendingPickDay.week = parseInt(el.getAttribute('data-week')); render(); }
+    else if (action === 'confirmPickDay') doConfirmPickDay();
+    else if (action === 'cancelPickDay') { pendingPickDay = null; render(); }
+    else if (action === 'openCycleTMEdit') { pendingCycleTMEdit = Object.assign({}, settings.tms); render(); }
+    else if (action === 'cancelCycleTMEdit') { pendingCycleTMEdit = null; render(); }
+    else if (action === 'saveCycleTMEdit') doSaveCycleTMEdit();
+    else if (action === 'setHistoryLift') { historyLiftFilter = el.getAttribute('data-lift'); render(); }
   }
 
-  // A done cell opens that workout for editing; an empty cell jumps straight
-  // into Train for that week/lift instead of the old pick-a-number prompt.
+  // A done cell opens that workout for editing. An empty cell (current cycle
+  // only) selects it as the next session — it no longer jumps straight into
+  // Train; the user presses "Start workout" separately.
   function doCycleCellClick(wk, lift){
-    const entry = history.find(h => h.cycle === state.cycle && h.week === wk && h.lift === lift);
+    const entry = history.find(h => h.cycle === viewingCycle && h.week === wk && h.lift === lift);
     if (entry){
       editingHistoryIdx = history.indexOf(entry);
       render();
       return;
     }
+    if (viewingCycle !== state.cycle) return;
     const dayIdx = settings.order.indexOf(lift);
     if (dayIdx === -1) return;
     state.week = wk;
     state.dayIndex = dayIdx;
     save(TKEY, state);
-    go('train');
+    render();
   }
 
   function readNum(id){
@@ -1187,13 +1318,32 @@
   }
 
   function doPickDay(){
-    const liftNames = settings.order.map(l=>LIFT_LABEL[l]);
-    const pick = prompt('Pick a day (1-4):\n' + liftNames.map((n,i)=>`${i+1}. ${n}`).join('\n'), String(state.dayIndex+1));
-    const idx = parseInt(pick);
-    if (idx >=1 && idx <= 4){ state.dayIndex = idx - 1; save(TKEY,state); render(); }
-    const week = prompt('Pick a week (1-3):\n1. 5s\n2. 3s\n3. 5/3/1', String(state.week));
-    const wk = parseInt(week);
-    if (wk>=1 && wk<=3){ state.week = wk; save(TKEY,state); }
+    pendingPickDay = { dayIndex: state.dayIndex, week: state.week };
+    render();
+  }
+
+  function doConfirmPickDay(){
+    state.dayIndex = pendingPickDay.dayIndex;
+    state.week = pendingPickDay.week;
+    save(TKEY, state);
+    pendingPickDay = null;
+    render();
+  }
+
+  function doSaveCycleTMEdit(){
+    const squat = parseFloat(document.getElementById('ct-squat').value);
+    const bench = parseFloat(document.getElementById('ct-bench').value);
+    const deadlift = parseFloat(document.getElementById('ct-deadlift').value);
+    const press = parseFloat(document.getElementById('ct-press').value);
+    settings.tms = {
+      squat: isNaN(squat) ? settings.tms.squat : squat,
+      bench: isNaN(bench) ? settings.tms.bench : bench,
+      deadlift: isNaN(deadlift) ? settings.tms.deadlift : deadlift,
+      press: isNaN(press) ? settings.tms.press : press
+    };
+    save(SKEY, settings);
+    pendingCycleTMEdit = null;
+    showToast('Training maxes updated.');
     render();
   }
 
@@ -1237,16 +1387,14 @@
     go('531home');
   }
 
+  // Cycles are never advanced automatically — finishing week 3's last lift
+  // just stays there. The user starts the next cycle explicitly from the
+  // "Start new cycle" button in the cycle progress card.
   function advanceDay(){
     state.dayIndex++;
     if (state.dayIndex >= settings.order.length){
       state.dayIndex = 0;
-      state.week++;
-      if (state.week > 3){
-        state.week = 1;
-        state.cycle++;
-        queueCycleUp();
-      }
+      if (state.week < 3) state.week++;
     }
     save(TKEY, state);
   }
@@ -1267,6 +1415,7 @@
     state.week = 1;
     state.cycle++;
     save(TKEY, state);
+    viewingCycle = state.cycle;
     queueCycleUp();
     render();
   }
