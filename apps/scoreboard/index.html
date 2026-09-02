@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0B1220">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Scoreboard — live &amp; upcoming</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0B1220;
+    --panel:#121B2E;
+    --panel-2:#182640;
+    --line:#233252;
+    --ink:#EAF0FB;
+    --ink-soft:#8FA0C2;
+    --accent:#3DDC97;
+    --accent-ink:#06281C;
+    --live:#FF5A5F;
+    --win:#3DDC97;
+    --font-display:'Bebas Neue', system-ui, sans-serif;
+    --font-body:'Inter', system-ui, -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    touch-action:manipulation;
+  }
+  ::selection{ background:var(--accent); color:var(--accent-ink); }
+
+  .wrap{
+    max-width:880px;
+    margin:0 auto;
+    padding:28px max(16px, env(safe-area-inset-right)) max(60px, env(safe-area-inset-bottom))
+            max(16px, env(safe-area-inset-left));
+  }
+
+  .back-link{
+    display:inline-block;
+    color:var(--ink-soft);
+    font-size:12.5px;
+    font-weight:600;
+    text-decoration:none;
+    margin-bottom:14px;
+  }
+  .back-link:hover{ color:var(--ink); }
+
+  header.top{
+    display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap;
+    padding-bottom:16px; border-bottom:1px solid var(--line); margin-bottom:18px;
+  }
+  header.top h1{
+    font-family:var(--font-display); font-weight:400; letter-spacing:0.02em;
+    font-size:40px; line-height:1; margin:0;
+  }
+  header.top .sub{ color:var(--ink-soft); font-size:13px; margin-top:4px; }
+  .refresh-row{ display:flex; align-items:center; gap:10px; }
+  .refresh-status{ font-size:11.5px; color:var(--ink-soft); white-space:nowrap; }
+  .refresh-btn{
+    font-family:var(--font-body); font-weight:600; font-size:13px;
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+    padding:9px 14px; border-radius:8px; cursor:pointer;
+  }
+  .refresh-btn:active{ transform:scale(0.97); }
+  .refresh-btn.spinning{ opacity:0.6; pointer-events:none; }
+
+  .chip-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; }
+  .chip{
+    font-size:12.5px; font-weight:600; padding:7px 12px; border-radius:999px;
+    background:var(--panel); border:1px solid var(--line); color:var(--ink-soft);
+    cursor:pointer; user-select:none;
+  }
+  .chip.on{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+
+  section.feed{ margin-bottom:26px; }
+  section.feed.hidden{ display:none; }
+  .feed-head{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .feed-head h2{
+    font-family:var(--font-display); font-weight:400; letter-spacing:0.02em;
+    font-size:22px; margin:0; color:var(--ink);
+  }
+  .feed-head .count{ color:var(--ink-soft); font-size:12.5px; }
+  .feed-error{
+    font-size:12.5px; color:var(--live); background:rgba(255,90,95,0.08);
+    border:1px solid rgba(255,90,95,0.3); border-radius:8px; padding:9px 12px;
+  }
+  .feed-empty{ color:var(--ink-soft); font-size:13px; padding:6px 0; }
+
+  .match-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:10px; }
+  .match-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+  }
+  .match-card.state-in{ border-color:var(--live); }
+  .match-meta{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+  .badge{ font-size:10.5px; font-weight:700; letter-spacing:0.04em; padding:2px 7px; border-radius:5px; }
+  .badge.pre{ background:var(--panel-2); color:var(--ink-soft); }
+  .badge.in{ background:var(--live); color:#2A0002; }
+  .badge.post{ background:var(--panel-2); color:var(--ink-soft); }
+  .match-time{ font-size:11.5px; color:var(--ink-soft); text-align:right; }
+  .match-tourney{ font-size:11.5px; color:var(--ink-soft); margin-bottom:6px; }
+  .participants{ display:flex; flex-direction:column; gap:4px; }
+  .participant{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+  .participant.winner .p-name{ color:var(--ink); font-weight:700; }
+  .participant.winner .p-score{ color:var(--win); }
+  .p-name{ font-size:14px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .p-score{ font-family:var(--font-display); font-size:18px; letter-spacing:0.02em; min-width:22px; text-align:right; }
+  .p-sets{ font-size:11px; color:var(--ink-soft); margin-left:6px; }
+  .match-venue{ font-size:11px; color:var(--ink-soft); margin-top:8px; border-top:1px solid var(--line); padding-top:6px; }
+
+  .note{ font-size:11.5px; color:var(--ink-soft); line-height:1.5; margin-top:28px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back-link" href="../../">‹ Shelf</a>
+
+  <header class="top">
+    <div>
+      <h1>Scoreboard</h1>
+      <div class="sub">Tennis 500+, AFL, NRL &amp; A-League — live and upcoming</div>
+    </div>
+    <div class="refresh-row">
+      <span class="refresh-status" id="refreshStatus">Loading…</span>
+      <button class="refresh-btn" id="refreshBtn">Refresh</button>
+    </div>
+  </header>
+
+  <div class="chip-row" id="chipRow"></div>
+  <div id="feeds"></div>
+
+  <p class="note">
+    Scores come from ESPN's public scoreboard feeds, fetched directly from your browser (this page has no server of
+    its own). Those feeds are unofficial, undocumented, and can change or go down without notice — if a section stops
+    loading, that's ESPN's endpoint, not something saved on this device. Tennis is filtered client-side to ATP/WTA 500,
+    Masters/1000, and Grand Slam events by tournament name; that keyword list lives in <code>TENNIS_500PLUS_KEYWORDS</code>
+    near the top of the script and may need a touch-up each season as the tour calendar shifts. Cricket, rugby union and
+    other Australian representative fixtures aren't wired up yet — their ESPN endpoint codes weren't verifiable when this
+    was built; add a new entry to the <code>SOURCES</code> array once you've confirmed one.
+  </p>
+</div>
+
+<script>
+const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports';
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+function fmtDate(d){ return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`; }
+function dateRangeParam(daysAhead){
+  const start = new Date();
+  const end = new Date(Date.now() + daysAhead*86400000);
+  return `dates=${fmtDate(start)}-${fmtDate(end)}`;
+}
+function withDates(url, daysAhead){
+  return `${url}?${dateRangeParam(daysAhead)}`;
+}
+
+// ATP/WTA 500-and-above tournament keywords (Masters/1000s, tour 500s, Grand Slams, season finals).
+// Matched case-insensitively against the raw event JSON, since the exact field
+// carrying the tournament name isn't documented. Tour calendars shift tier/city
+// year to year — review this list each season.
+const TENNIS_500PLUS_KEYWORDS = [
+  'australian open','french open','roland garros','wimbledon','us open',
+  'indian wells','miami open','monte-carlo','monte carlo','madrid open','italian open','internazionali','rome',
+  'canadian open','national bank open','montreal','toronto','cincinnati','shanghai','paris masters','rolex paris',
+  'qatar open','dubai','beijing','wuhan',
+  'rotterdam','rio open','acapulco','mexican open','barcelona open','queen’s','cinch championships',
+  'halle','terra wortmann','hamburg','washington open','citi open','china open','japan open','tokyo',
+  'erste bank','vienna','swiss indoors','basel',
+  'adelaide international','abu dhabi','berlin open','charleston open','strasbourg','eastbourne',
+  'monterrey','guadalajara','ningbo','zhengzhou',
+  'atp finals','wta finals','nitto atp finals'
+];
+
+function matchesTennis500Plus(rawEvent){
+  const haystack = JSON.stringify(rawEvent).toLowerCase();
+  return TENNIS_500PLUS_KEYWORDS.some(kw => haystack.includes(kw));
+}
+
+const SOURCES = [
+  { id:'atp', label:'ATP (500+)', url: withDates(`${ESPN_BASE}/tennis/atp/scoreboard`, 10), accept: matchesTennis500Plus },
+  { id:'wta', label:'WTA (500+)', url: withDates(`${ESPN_BASE}/tennis/wta/scoreboard`, 10), accept: matchesTennis500Plus },
+  { id:'afl', label:'AFL', url: withDates(`${ESPN_BASE}/australian-football/afl/scoreboard`, 10) },
+  { id:'nrl', label:'NRL', url: withDates(`${ESPN_BASE}/rugby-league/nrl/scoreboard`, 10) },
+  { id:'aleague-m', label:'A-League Men', url: withDates(`${ESPN_BASE}/soccer/aus.1/scoreboard`, 10) },
+  { id:'aleague-w', label:'A-League Women', url: withDates(`${ESPN_BASE}/soccer/aus.w.1/scoreboard`, 10) },
+];
+
+const STORAGE_KEY = 'scoreboard.hiddenSources';
+function loadHidden(){
+  try { return new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')); }
+  catch(e){ return new Set(); }
+}
+function saveHidden(hidden){
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...hidden])); } catch(e){}
+}
+let hiddenSources = loadHidden();
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function normalizeEvent(raw){
+  const comp = raw.competitions && raw.competitions[0];
+  if (!comp) return null;
+  const statusType = (comp.status && comp.status.type) || (raw.status && raw.status.type) || {};
+  const state = statusType.state || 'pre';
+  const competitors = (comp.competitors || []).map(c => {
+    const name = (c.team && (c.team.displayName || c.team.shortDisplayName || c.team.name))
+      || (c.athlete && (c.athlete.displayName || c.athlete.shortName))
+      || c.displayName || 'TBD';
+    const sets = Array.isArray(c.linescores)
+      ? c.linescores.map(l => (l.value != null ? l.value : l.displayValue)).filter(v => v != null && v !== '')
+      : [];
+    return { name, score: (c.score != null ? String(c.score) : ''), sets, winner: !!c.winner };
+  });
+  const venue = comp.venue && (comp.venue.fullName || (comp.venue.address && comp.venue.address.city));
+  return {
+    id: raw.id,
+    date: raw.date,
+    state,
+    statusText: statusType.shortDetail || statusType.detail || statusType.description || '',
+    name: raw.shortName || raw.name || '',
+    venue,
+    competitors,
+    raw,
+  };
+}
+
+function formatStart(dateStr){
+  const d = new Date(dateStr);
+  if (isNaN(d)) return '';
+  return d.toLocaleString(undefined, { weekday:'short', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function renderMatchCard(ev){
+  const badgeLabel = ev.state === 'in' ? 'LIVE' : ev.state === 'post' ? 'FINAL' : 'UPCOMING';
+  const timeText = ev.state === 'pre' ? formatStart(ev.date) : escapeHtml(ev.statusText);
+  const participants = ev.competitors.map(c => `
+    <div class="participant ${c.winner ? 'winner' : ''}">
+      <span class="p-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+      <span>
+        <span class="p-score">${escapeHtml(c.score)}</span>
+        ${c.sets.length ? `<span class="p-sets">${c.sets.map(escapeHtml).join(' ')}</span>` : ''}
+      </span>
+    </div>`).join('');
+  return `
+    <div class="match-card state-${ev.state}">
+      <div class="match-meta">
+        <span class="badge ${ev.state}">${badgeLabel}</span>
+        <span class="match-time">${timeText}</span>
+      </div>
+      ${ev.name ? `<div class="match-tourney">${escapeHtml(ev.name)}</div>` : ''}
+      <div class="participants">${participants}</div>
+      ${ev.venue ? `<div class="match-venue">${escapeHtml(ev.venue)}</div>` : ''}
+    </div>`;
+}
+
+function sortEvents(events){
+  const rank = { in:0, pre:1, post:2 };
+  return events.slice().sort((a,b) => {
+    const r = rank[a.state] - rank[b.state];
+    if (r !== 0) return r;
+    const da = new Date(a.date).getTime(), db = new Date(b.date).getTime();
+    return a.state === 'post' ? db - da : da - db;
+  });
+}
+
+async function fetchSource(source){
+  const res = await fetch(source.url, { cache:'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const rawEvents = Array.isArray(data.events) ? data.events : [];
+  const accepted = source.accept ? rawEvents.filter(source.accept) : rawEvents;
+  return accepted.map(normalizeEvent).filter(Boolean);
+}
+
+function ensureSectionEl(source){
+  let el = document.getElementById(`feed-${source.id}`);
+  if (el) return el;
+  el = document.createElement('section');
+  el.className = 'feed';
+  el.id = `feed-${source.id}`;
+  el.innerHTML = `
+    <div class="feed-head">
+      <h2>${escapeHtml(source.label)}</h2>
+      <span class="count" id="feed-${source.id}-count"></span>
+    </div>
+    <div id="feed-${source.id}-body"></div>`;
+  document.getElementById('feeds').appendChild(el);
+  return el;
+}
+
+function renderChips(){
+  const row = document.getElementById('chipRow');
+  row.innerHTML = SOURCES.map(s => `
+    <button class="chip ${hiddenSources.has(s.id) ? '' : 'on'}" data-id="${s.id}">${escapeHtml(s.label)}</button>
+  `).join('');
+  row.querySelectorAll('.chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      if (hiddenSources.has(id)) hiddenSources.delete(id); else hiddenSources.add(id);
+      saveHidden(hiddenSources);
+      applyVisibility();
+      renderChips();
+    });
+  });
+}
+
+function applyVisibility(){
+  SOURCES.forEach(s => {
+    const el = document.getElementById(`feed-${s.id}`);
+    if (el) el.classList.toggle('hidden', hiddenSources.has(s.id));
+  });
+}
+
+async function loadAll(){
+  const btn = document.getElementById('refreshBtn');
+  const status = document.getElementById('refreshStatus');
+  btn.classList.add('spinning');
+  status.textContent = 'Refreshing…';
+
+  await Promise.all(SOURCES.map(async source => {
+    const section = ensureSectionEl(source);
+    const body = section.querySelector(`#feed-${source.id}-body`);
+    const countEl = section.querySelector(`#feed-${source.id}-count`);
+    try {
+      const events = sortEvents(await fetchSource(source));
+      countEl.textContent = events.length ? `${events.length} match${events.length===1?'':'es'}` : '';
+      body.innerHTML = events.length
+        ? `<div class="match-grid">${events.map(renderMatchCard).join('')}</div>`
+        : `<div class="feed-empty">Nothing live or upcoming right now.</div>`;
+    } catch (err) {
+      countEl.textContent = '';
+      body.innerHTML = `<div class="feed-error">Couldn't load ${escapeHtml(source.label)} (${escapeHtml(err.message)}).</div>`;
+    }
+  }));
+
+  applyVisibility();
+  btn.classList.remove('spinning');
+  status.textContent = `Updated ${new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}`;
+}
+
+document.getElementById('refreshBtn').addEventListener('click', loadAll);
+renderChips();
+SOURCES.forEach(ensureSectionEl);
+applyVisibility();
+loadAll();
+
+const AUTO_REFRESH_MS = 60000;
+let autoTimer = setInterval(() => { if (document.visibilityState === 'visible') loadAll(); }, AUTO_REFRESH_MS);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') loadAll();
+});
+</script>
+</body>
+</html>
