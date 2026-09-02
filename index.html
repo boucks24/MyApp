@@ -25,13 +25,23 @@
   body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);min-height:100vh;}
   .wrap{max-width:560px;margin:0 auto;}
 
-  .hero{padding:44px 20px 10px;}
+  .hero{padding:44px 20px 10px;display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
   .hero .mark{
     font-family:var(--font-display);font-weight:700;font-size:44px;letter-spacing:0.01em;line-height:1;
     display:flex;align-items:baseline;gap:10px;
   }
   .hero .mark span.dot{color:var(--iron);}
   .hero .tag{color:var(--muted);font-size:14px;margin-top:8px;}
+
+  .refresh-btn{
+    flex:0 0 auto;margin-top:4px;
+    display:flex;align-items:center;gap:6px;
+    background:var(--panel);border:1px solid var(--line);color:var(--chalk);
+    font-family:var(--font-body);font-weight:600;font-size:12.5px;
+    padding:9px 13px;cursor:pointer;touch-action:manipulation;
+  }
+  .refresh-btn:active{background:var(--line);}
+  .refresh-btn .ic{font-size:14px;line-height:1;color:var(--iron);}
 
   .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:10px 20px 30px;}
   .tile{
@@ -53,8 +63,13 @@
 <body>
 <div class="wrap">
   <div class="hero">
-    <div class="mark">APP<span class="dot">.</span>SHELF</div>
-    <div class="tag">Your own tools, one tap away.</div>
+    <div>
+      <div class="mark">APP<span class="dot">.</span>SHELF</div>
+      <div class="tag">Your own tools, one tap away.</div>
+    </div>
+    <button class="refresh-btn" id="refreshBtn" aria-label="Refresh page">
+      <span class="ic">&#x27F3;</span>Refresh
+    </button>
   </div>
   <div class="menu-grid">
     <a class="tile" href="apps/531-bbb/">
@@ -89,5 +104,13 @@
     </a>
   </div>
 </div>
+<script>
+  // A plain location.reload() can still be served from the cached copy iOS
+  // keeps for a home-screen web app — navigating to a new URL (a fresh query
+  // string) forces an actual network fetch instead.
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    location.href = location.pathname + '?t=' + Date.now();
+  });
+</script>
 </body>
 </html>
