@@ -191,8 +191,47 @@ const TENNIS_500PLUS_KEYWORDS = [
 ];
 
 function matchesTennis500Plus(rawEvent, extraContext){
+  // ESPN marks Grand Slams with an explicit `major: true` flag — trust that
+  // directly rather than relying on the tournament name showing up in
+  // TENNIS_500PLUS_KEYWORDS (confirmed present on real tournament payloads;
+  // see the shape note on extractMatchesFromTournamentEvent below).
+  if (rawEvent && rawEvent.major === true) return true;
   const haystack = JSON.stringify(rawEvent).toLowerCase() + ' ' + (extraContext || '');
   return TENNIS_500PLUS_KEYWORDS.some(kw => haystack.includes(kw));
+}
+
+/* ESPN's tennis scoreboard "events" are actually whole TOURNAMENTS (e.g. id
+   "964-2026" / "Kia Open", spanning a week), not individual matches — there
+   is no top-level `competitions` array the way team-sport events have one.
+   The individual matches are nested somewhere under `groupings[]` (rounds/
+   draws), in an undocumented, possibly-varying shape, so — same approach as
+   fetchCricketAustralia's collectEmbeddedEvents — walk the whole tournament
+   object looking for any `competitions[]` array whose entries look like a
+   real match (`.competitors[]` present), and synthesize a normalizeEvent-
+   compatible wrapper around each one, carrying the tournament's own name
+   through since individual matches don't repeat it. */
+function extractMatchesFromTournamentEvent(tournamentRaw){
+  const matches = [];
+  (function walk(node, depth){
+    if (!node || depth > 8) return;
+    if (Array.isArray(node)){ node.forEach(n => walk(n, depth + 1)); return; }
+    if (typeof node !== 'object') return;
+    if (Array.isArray(node.competitions)){
+      node.competitions.forEach(comp => {
+        if (comp && Array.isArray(comp.competitors)) matches.push(comp);
+      });
+    }
+    Object.values(node).forEach(v => walk(v, depth + 1));
+  })(tournamentRaw, 0);
+
+  const tourneyName = tournamentRaw.shortName || tournamentRaw.name || '';
+  return matches.map(comp => ({
+    id: comp.id || tournamentRaw.id,
+    date: comp.date || tournamentRaw.date,
+    name: tourneyName,
+    shortName: tourneyName,
+    competitions: [comp],
+  }));
 }
 
 /* ============================================================
@@ -314,10 +353,11 @@ async function fetchTennis(source){
     tierRaw = rawEvents;
     tierNote = 'Grand Slam/500+ filter matched nothing this refresh — showing all current matches, unfiltered by tournament tier.';
   }
-  const tierEvents = tierRaw.map(normalizeEvent).filter(Boolean);
+  const flattenedMatches = tierRaw.flatMap(extractMatchesFromTournamentEvent);
+  const tierEvents = flattenedMatches.map(normalizeEvent).filter(Boolean);
   console.debug(`[scoreboard:${source.id}] after tier filter:`, tierEvents.length, tierNote ? '(failed open)' : '');
   if (tierRaw.length && !tierEvents.length){
-    // Every raw event failed to normalize (no competitions[0]) — that's a
+    // Every raw event failed to normalize (no nested competitions found) — that's a
     // shape mismatch worth seeing, not a real empty schedule. Use warn (not
     // debug) so it shows up without changing devtools' log level.
     console.warn(`[scoreboard:${source.id}] ${tierRaw.length} raw event(s) but none normalized — sample event:`, tierRaw[0]);
