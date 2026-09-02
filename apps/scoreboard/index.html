@@ -118,10 +118,13 @@
   .match-time{ font-size:11.5px; color:var(--ink-soft); text-align:right; }
   .match-tourney{ font-size:11.5px; color:var(--ink-soft); margin-bottom:6px; }
   .participants{ display:flex; flex-direction:column; gap:4px; }
-  .participant{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+  .participant{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
   .participant.winner .p-name{ color:var(--ink); font-weight:700; }
   .participant.winner .p-score{ color:var(--win); }
-  .p-name{ font-size:14px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .p-identity{ display:flex; align-items:center; gap:6px; min-width:0; flex:1 1 auto; }
+  .p-photo{ width:22px; height:22px; border-radius:50%; object-fit:cover; flex:0 0 auto; background:var(--panel-2); }
+  .p-flag{ width:18px; height:12px; object-fit:cover; border-radius:2px; flex:0 0 auto; box-shadow:0 0 0 1px rgba(255,255,255,0.12); }
+  .p-name{ font-size:14px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
   .p-score{ font-family:var(--font-display); font-size:18px; letter-spacing:0.02em; min-width:22px; text-align:right; }
   .p-sets{ font-size:11px; color:var(--ink-soft); margin-left:6px; }
   .p-rank{ font-size:11px; color:var(--accent); font-weight:700; }
@@ -482,10 +485,17 @@ function normalizeEvent(raw){
       ? c.linescores.map(l => (l.value != null ? l.value : l.displayValue)).filter(v => v != null && v !== '')
       : [];
     const athleteId = (c.athlete && c.athlete.id != null) ? String(c.athlete.id) : (c.id != null ? String(c.id) : '');
+    const flag = (c.athlete && c.athlete.flag) || (c.team && c.team.flag) || null;
+    const photoUrl = (c.athlete && c.athlete.headshot && c.athlete.headshot.href)
+      || (c.team && (c.team.logo || (c.team.logos && c.team.logos[0] && c.team.logos[0].href)))
+      || null;
     return {
       name, score: (c.score != null ? String(c.score) : ''), sets, winner: !!c.winner, athleteId,
       curatedRank: competitorCuratedRank(c), // tennis-only, null elsewhere
       isAustralian: competitorIsAustralian(c),
+      flagUrl: flag ? flag.href : null,
+      flagAlt: flag ? (flag.alt || '') : '',
+      photoUrl,
     };
   });
   const venue = comp.venue && (comp.venue.fullName || (comp.venue.address && comp.venue.address.city));
@@ -513,7 +523,11 @@ function renderMatchCard(ev){
   const timeText = ev.state === 'pre' ? formatStart(ev.date) : escapeHtml(ev.statusText);
   const participants = ev.competitors.map(c => `
     <div class="participant ${c.winner ? 'winner' : ''}">
-      <span class="p-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}${c.curatedRank != null ? ` <span class="p-rank">#${c.curatedRank}</span>` : ''}</span>
+      <span class="p-identity">
+        ${c.photoUrl ? `<img class="p-photo" src="${escapeHtml(c.photoUrl)}" alt="" loading="lazy">` : ''}
+        ${c.flagUrl ? `<img class="p-flag" src="${escapeHtml(c.flagUrl)}" alt="${escapeHtml(c.flagAlt)}" title="${escapeHtml(c.flagAlt)}" loading="lazy">` : ''}
+        <span class="p-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}${c.curatedRank != null ? ` <span class="p-rank">#${c.curatedRank}</span>` : ''}</span>
+      </span>
       <span>
         <span class="p-score">${escapeHtml(c.score)}</span>
         ${c.sets.length ? `<span class="p-sets">${c.sets.map(escapeHtml).join(' ')}</span>` : ''}
@@ -551,7 +565,9 @@ function bestRank(ev){
 }
 
 function sortEvents(events, mode){
-  const stateRank = { in:0, pre:1, post:2 };
+  // Date mode surfaces finished results first (most-recent finish, then
+  // live, then upcoming); rank mode keeps live/upcoming ahead of results.
+  const stateRank = (mode === 'date') ? { post:0, in:1, pre:2 } : { in:0, pre:1, post:2 };
   return events.slice().sort((a,b) => {
     const r = stateRank[a.state] - stateRank[b.state];
     if (r !== 0) return r;
