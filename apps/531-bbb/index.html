@@ -147,6 +147,32 @@
     width:64px;text-align:center;background:var(--panel-2);border:1px solid var(--line);
     color:var(--chalk);padding:10px 6px;font-size:16px;font-family:var(--font-display);
   }
+  .set-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;}
+  .done-toggle{
+    display:flex;align-items:center;gap:6px;
+    font-size:11px;color:var(--muted);font-weight:600;letter-spacing:0.02em;
+    cursor:pointer;touch-action:manipulation;
+  }
+  .done-toggle input[type=checkbox]{
+    width:22px;height:22px;margin:0;accent-color:var(--good);cursor:pointer;
+  }
+  .done-toggle:has(input:checked){color:var(--good);}
+
+  .rest-timer{
+    position:fixed;left:0;right:0;bottom:0;
+    max-width:560px;margin:0 auto;
+    background:var(--steel);color:#fff;
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    padding:14px 20px calc(14px + env(safe-area-inset-bottom));
+    z-index:30;
+  }
+  .rest-timer.hidden{display:none;}
+  .rest-timer .rt-label{font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;opacity:0.85;}
+  .rest-timer .rt-time{font-family:var(--font-display);font-size:24px;font-weight:600;flex:1;}
+  .rest-timer .rt-skip{
+    background:rgba(255,255,255,0.18);border:none;color:#fff;
+    padding:9px 16px;font-family:var(--font-body);font-weight:600;font-size:13px;cursor:pointer;
+  }
 
   .weight-edit{display:flex;align-items:baseline;gap:5px;}
   .weight-edit input, .bbb-weight-edit input{
@@ -276,6 +302,8 @@
   const ALT_LIFT = { squat:'deadlift', deadlift:'squat', bench:'press', press:'bench' };
   const CYCLE_BUMP = { squat:5, deadlift:5, bench:2.5, press:2.5 }; // kg defaults
   const CYCLE_BUMP_LB = { squat:10, deadlift:10, bench:5, press:5 };
+  const WARMUP_SCHEME = [ { pct:40, reps:5 }, { pct:50, reps:5 }, { pct:60, reps:3 } ];
+  const REST_WARMUP = 45, REST_MAIN = 120, REST_BBB = 75; // seconds
 
   function round(w){
     const inc = settings.increment || 2.5;
@@ -301,12 +329,13 @@
     const lift = currentLift();
     const tm = settings.tms[lift];
     const scheme = WEEK_SCHEME[state.week];
+    const warmupSets = WARMUP_SCHEME.map(ws => ({ pct: ws.pct, reps: ws.reps, weight: round(tm * ws.pct / 100) }));
     const mainSets = scheme.pct.map((p,i)=>({
       pct:p, repsLabel:scheme.reps[i], weight: round(tm * p / 100), amrap: scheme.reps[i].includes('+')
     }));
     const bbbLift = ALT_LIFT[lift];
     const bbbWeight = round(settings.tms[bbbLift] * settings.bbbPercent / 100);
-    return { lift, tm, scheme, mainSets, bbbLift, bbbWeight };
+    return { lift, tm, scheme, warmupSets, mainSets, bbbLift, bbbWeight };
   }
 
   /* ---------------- plate math ---------------- */
@@ -462,8 +491,56 @@
   let editingHistoryIdx = null;
   let pendingStaleReminder = null; // {exportedAt, days} when the committed backup file is over a month old
   let sessionWeights = null; // {main:[w,w,w], bbb:w} — editable overrides for the in-progress workout
+  let warmupDone = [false, false, false];
+  let mainDone = [false, false, false];
+  let restEndsAt = null; // ms epoch when the current rest countdown ends, or null if not resting
 
-  function go(r){ route = r; bbbDone = 0; repsInput = {}; sessionWeights = null; render(); window.scrollTo(0,0); }
+  function go(r){
+    route = r; bbbDone = 0; repsInput = {}; sessionWeights = null;
+    warmupDone = [false, false, false]; mainDone = [false, false, false];
+    stopRest();
+    render(); window.scrollTo(0,0);
+  }
+
+  /* ---------------- rest timer ----------------
+     A single global ticker (started once, never re-created) repaints the
+     countdown by id every tick — a full render() every 250ms would thrash
+     the whole page and steal focus, so the ticking display bypasses it and
+     only patches the two text nodes directly. render() itself still owns
+     showing/hiding the timer (based on restEndsAt) whenever something else
+     causes a re-render anyway. */
+  function startRest(seconds){
+    restEndsAt = Date.now() + seconds * 1000;
+    updateRestTimerUI();
+  }
+  function stopRest(){
+    restEndsAt = null;
+    updateRestTimerUI();
+  }
+  // Also used directly by renderTrain() so a freshly-rendered timer shows the
+  // real remaining time immediately, rather than a placeholder until the
+  // next tick of the global ticker below.
+  function restLabelText(){
+    if (!restEndsAt) return '0:00';
+    const s = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+  function updateRestTimerUI(){
+    const el = document.getElementById('restTimer');
+    if (!el) return; // not on Train right now
+    if (!restEndsAt){ el.classList.add('hidden'); return; }
+    const remainingMs = restEndsAt - Date.now();
+    if (remainingMs <= 0){
+      restEndsAt = null;
+      el.classList.add('hidden');
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      return;
+    }
+    el.classList.remove('hidden');
+    const label = document.getElementById('restTimerLabel');
+    if (label) label.textContent = restLabelText();
+  }
+  setInterval(updateRestTimerUI, 250);
 
   // Lazily seeds the editable weights for the current Train session from the
   // computed prescription, so edits survive re-renders (e.g. after changing
@@ -687,11 +764,35 @@
     const lift = w.lift;
     const sw = ensureSessionWeights(w);
 
-    const stageWeights = sw.main.concat([sw.bbb]);
+    // One continuous plate sequence across the whole session — warm-up
+    // through BBB — so each stage's "add/remove" reflects what's actually
+    // still loaded from the stage before it.
+    const stageWeights = w.warmupSets.map(s => s.weight).concat(sw.main, [sw.bbb]);
     const plateStages = buildSessionPlateStages(stageWeights);
+    const warmupCount = w.warmupSets.length;
+
+    let warmupHtml = w.warmupSets.map((ws,i)=>{
+      const plateLine = formatPlateStage(plateStages[i]);
+      return `
+        <div class="set-row">
+          <div class="set-left">
+            <div class="pct">${ws.pct}% of TM</div>
+            <div class="weight">${fmtW(ws.weight)}</div>
+            <div class="target">Target: ${ws.reps} reps</div>
+            <div class="plate-line">${plateLine} per side</div>
+          </div>
+          <div class="set-right">
+            <label class="done-toggle">
+              <input type="checkbox" class="set-done" data-kind="warmup" data-idx="${i}" ${warmupDone[i] ? 'checked' : ''}>
+              <span>Done</span>
+            </label>
+          </div>
+        </div>
+      `;
+    }).join('');
 
     let setsHtml = w.mainSets.map((s,i)=>{
-      const plateLine = formatPlateStage(plateStages[i]);
+      const plateLine = formatPlateStage(plateStages[warmupCount + i]);
 
       const lt = lastTimeForSet(lift, state.week, i);
       const ltLine = lt
@@ -710,12 +811,18 @@
             <div class="plate-line">${plateLine} per side</div>
             ${ltLine ? `<div class="last-time">${ltLine}</div>` : ''}
           </div>
-          ${s.amrap ? `<input class="reps" type="number" inputmode="numeric" placeholder="reps" id="amrap-${i}" value="${repsInput[i] ?? ''}">` : ''}
+          <div class="set-right">
+            ${s.amrap ? `<input class="reps" type="number" inputmode="numeric" placeholder="reps" id="amrap-${i}" value="${repsInput[i] ?? ''}">` : ''}
+            <label class="done-toggle">
+              <input type="checkbox" class="set-done" data-kind="main" data-idx="${i}" ${mainDone[i] ? 'checked' : ''}>
+              <span>Done</span>
+            </label>
+          </div>
         </div>
       `;
     }).join('');
 
-    const bbbPlateLine = formatPlateStage(plateStages[3]);
+    const bbbPlateLine = formatPlateStage(plateStages[warmupCount + 3]);
     const bbbLast = lastTimeForBBB(w.bbbLift);
     const bbbLastLine = bbbLast ? `Last time: ${fmtW(bbbLast.weight)} × ${bbbLast.sets}/5 sets` : '';
 
@@ -738,6 +845,11 @@
         </div>
 
         <div class="card">
+          <h2>Warm-up</h2>
+          ${warmupHtml}
+        </div>
+
+        <div class="card">
           <h2>Main sets</h2>
           ${setsHtml}
         </div>
@@ -755,6 +867,11 @@
 
         <button class="btn" data-action="finishWorkout">Finish &amp; log workout</button>
       </main>
+      <div class="rest-timer ${restEndsAt ? '' : 'hidden'}" id="restTimer">
+        <span class="rt-label">Resting</span>
+        <span class="rt-time" id="restTimerLabel">${restLabelText()}</span>
+        <button type="button" class="rt-skip" data-action="skipRest">Skip</button>
+      </div>
     `;
   }
 
@@ -967,6 +1084,24 @@
         render();
       });
     });
+
+    // Checking a set's Done box is what marks it complete — it also starts
+    // that set-type's rest countdown. Unchecking just clears the flag.
+    document.querySelectorAll('.set-done').forEach(el=>{
+      el.addEventListener('change', () => {
+        const kind = el.getAttribute('data-kind');
+        const idx = +el.getAttribute('data-idx');
+        const checked = el.checked;
+        if (kind === 'warmup'){
+          warmupDone[idx] = checked;
+          if (checked) startRest(REST_WARMUP);
+        } else if (kind === 'main'){
+          mainDone[idx] = checked;
+          if (checked) startRest(REST_MAIN);
+        }
+        render();
+      });
+    });
     const bbbWeightInput = document.getElementById('bbbWeightInput');
     if (bbbWeightInput){
       bbbWeightInput.addEventListener('change', () => {
@@ -999,6 +1134,7 @@
     else if (action === 'dismissStaleReminder') doDismissStaleReminder();
     else if (action === 'startNewCycle') doStartNewCycle();
     else if (action === 'cycleCell') doCycleCellClick(parseInt(el.getAttribute('data-week')), el.getAttribute('data-lift'));
+    else if (action === 'skipRest') stopRest();
   }
 
   // A done cell opens that workout for editing; an empty cell jumps straight
@@ -1063,7 +1199,9 @@
 
   function doToggleBbb(i){
     // tapping a dot sets completed count to i+1, tapping the currently-last done dot un-marks it
+    const was = bbbDone;
     bbbDone = (bbbDone === i+1) ? i : i+1;
+    if (bbbDone > was) startRest(REST_BBB);
     render();
   }
 
