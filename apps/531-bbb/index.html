@@ -108,6 +108,17 @@
   .cp-cell.cp-done{background:var(--good);border-color:var(--good);color:#0d1a0c;font-weight:700;}
   .cp-cell.cp-current{border-color:var(--iron);box-shadow:0 0 0 1px var(--iron) inset;}
 
+  .cp-icon{
+    width:30px;height:30px;margin:0 auto;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-display);font-size:11px;font-weight:700;letter-spacing:0.02em;
+    color:#fff;
+  }
+  .cp-icon.squat{background:var(--steel);}
+  .cp-icon.bench{background:var(--brass);color:#241c06;}
+  .cp-icon.deadlift{background:var(--iron);}
+  .cp-icon.press{background:var(--moss);}
+
   .lift-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
   .lift-head .name{font-family:var(--font-display);font-size:24px;font-weight:700;letter-spacing:0.01em;}
   .lift-head .meta{color:var(--muted);font-size:12px;}
@@ -230,6 +241,7 @@
 
   const LIFT_LABEL = { squat:'Squat', bench:'Bench Press', deadlift:'Deadlift', press:'Overhead Press' };
   const LIFT_CLASS = { squat:'squat', bench:'bench', deadlift:'deadlift', press:'press' };
+  const LIFT_ABBR = { squat:'SQ', bench:'BP', deadlift:'DL', press:'OH' };
 
   const WEEK_SCHEME = {
     1:{ label:'5s',    pct:[65,75,85],  reps:['5','5','5+'] },
@@ -418,7 +430,7 @@
   function renderCycleProgress(){
     const weeks = [1,2,3];
     const cols = settings.order;
-    const header = cols.map(l => `<div class="cp-cell cp-head"><span class="plate plate-mini ${LIFT_CLASS[l]}"></span></div>`).join('');
+    const header = cols.map(l => `<div class="cp-cell cp-head"><div class="cp-icon ${LIFT_CLASS[l]}">${LIFT_ABBR[l]}</div></div>`).join('');
     const rows = weeks.map(wk => {
       const cells = cols.map((l,ci) => {
         const done = history.some(h => h.cycle === state.cycle && h.week === wk && h.lift === l);
