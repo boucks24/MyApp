@@ -17,6 +17,10 @@ apps/underpaint/index.html        paint colour mixing, palette extraction, image
 
 Every app is a **single self-contained `index.html`** with inline `<style>` and inline `<script>` — no external JS files, no npm dependencies. The only external resources are Google Fonts `<link>` tags and, in `rally-clipper`, dynamically loaded scripts for ffmpeg.wasm and an optional ML model.
 
+## Git workflow
+
+This is a personal, single-maintainer site served straight from `main` (e.g. via GitHub Pages) — there's no PR/review process. Commit and push changes directly to `main`, not a feature branch.
+
 ## Commands
 
 There is no build/lint/test tooling. To preview changes locally, serve the repo root with any static file server and open the relevant path, e.g.:
