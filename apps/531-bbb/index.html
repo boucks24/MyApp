@@ -97,16 +97,23 @@
   .plate-mini{width:8px;height:20px;margin:0 auto;}
 
   .cp-grid{display:flex;flex-direction:column;gap:6px;margin-top:4px;}
-  .cp-row{display:grid;grid-template-columns:28px repeat(4,1fr);gap:6px;align-items:center;}
-  .cp-wk{font-size:11px;color:var(--muted);font-family:var(--font-display);font-weight:600;}
+  .cp-row{display:grid;grid-template-columns:28px repeat(4,1fr);gap:6px;align-items:stretch;}
+  .cp-wk{font-size:11px;color:var(--muted);font-family:var(--font-display);font-weight:600;align-self:center;}
   .cp-cell{
-    height:34px;border:1px solid var(--line);background:var(--panel-2);
-    display:flex;align-items:center;justify-content:center;
+    min-height:48px;border:1px solid var(--line);background:var(--panel-2);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
     font-size:14px;color:var(--muted);
+    font-family:var(--font-body);padding:4px 2px;margin:0;cursor:pointer;
+    touch-action:manipulation;
   }
-  .cp-cell.cp-head{background:transparent;border:none;height:auto;}
-  .cp-cell.cp-done{background:var(--good);border-color:var(--good);color:#0d1a0c;font-weight:700;}
+  .cp-cell.cp-head{background:transparent;border:none;min-height:auto;cursor:default;}
+  .cp-cell.cp-done{background:var(--good);border-color:var(--good);color:#0d1a0c;}
   .cp-cell.cp-current{border-color:var(--iron);box-shadow:0 0 0 1px var(--iron) inset;}
+  .cp-weight{font-family:var(--font-display);font-size:13px;font-weight:700;line-height:1.1;}
+  .cp-reps{font-size:9.5px;line-height:1.1;opacity:0.85;}
+  .cp-next{font-size:10px;font-weight:700;letter-spacing:0.02em;color:var(--iron);}
+  .cp-cell.cp-done .cp-next{color:#0d1a0c;}
+  .cp-empty{font-size:14px;color:var(--muted);}
 
   .cp-icon{
     width:30px;height:30px;margin:0 auto;
@@ -140,6 +147,17 @@
     width:64px;text-align:center;background:var(--panel-2);border:1px solid var(--line);
     color:var(--chalk);padding:10px 6px;font-size:16px;font-family:var(--font-display);
   }
+
+  .weight-edit{display:flex;align-items:baseline;gap:5px;}
+  .weight-edit input, .bbb-weight-edit input{
+    font-family:var(--font-display);font-weight:600;color:var(--chalk);
+    background:transparent;border:none;border-bottom:1px dashed var(--muted);
+    padding:2px 0;-webkit-appearance:none;appearance:none;
+  }
+  .weight-edit input{font-size:22px;width:88px;}
+  .bbb-weight-edit input{font-size:16px;width:70px;text-align:right;}
+  .weight-edit input:focus, .bbb-weight-edit input:focus{outline:none;border-bottom-color:var(--steel);}
+  .weight-edit .unit{font-size:12px;color:var(--muted);}
 
   .bbb-counter{display:flex;gap:8px;margin-top:10px;}
   .bbb-dot{
@@ -443,8 +461,19 @@
   let historyTab = 'log'; // log | progress
   let editingHistoryIdx = null;
   let pendingStaleReminder = null; // {exportedAt, days} when the committed backup file is over a month old
+  let sessionWeights = null; // {main:[w,w,w], bbb:w} — editable overrides for the in-progress workout
 
-  function go(r){ route = r; bbbDone = 0; repsInput = {}; render(); window.scrollTo(0,0); }
+  function go(r){ route = r; bbbDone = 0; repsInput = {}; sessionWeights = null; render(); window.scrollTo(0,0); }
+
+  // Lazily seeds the editable weights for the current Train session from the
+  // computed prescription, so edits survive re-renders (e.g. after changing
+  // another field) without recomputing from training max each time.
+  function ensureSessionWeights(w){
+    if (!sessionWeights){
+      sessionWeights = { main: w.mainSets.map(s => s.weight), bbb: w.bbbWeight };
+    }
+    return sessionWeights;
+  }
 
   function showToast(msg){
     clearTimeout(toastTimer);
@@ -581,21 +610,32 @@
     `;
   }
 
+  function cycleCellContent(entry, isCurrent){
+    if (entry){
+      const top = entry.mainSets[entry.mainSets.length - 1];
+      const repsLine = top.actualReps ? `${top.actualReps} reps` : (top.repsLabel ? top.repsLabel + ' reps' : '');
+      return `<div class="cp-weight">${fmtW(top.weight)}</div>${repsLine ? `<div class="cp-reps">${repsLine}</div>` : ''}`;
+    }
+    if (isCurrent) return `<div class="cp-next">Next</div>`;
+    return `<div class="cp-empty">—</div>`;
+  }
+
   function renderCycleProgress(){
     const weeks = [1,2,3];
     const cols = settings.order;
     const header = cols.map(l => `<div class="cp-cell cp-head"><div class="cp-icon ${LIFT_CLASS[l]}">${LIFT_ABBR[l]}</div></div>`).join('');
     const rows = weeks.map(wk => {
       const cells = cols.map((l,ci) => {
-        const done = history.some(h => h.cycle === state.cycle && h.week === wk && h.lift === l);
+        const entry = history.find(h => h.cycle === state.cycle && h.week === wk && h.lift === l);
         const isCurrent = (state.week === wk && state.dayIndex === ci);
-        return `<div class="cp-cell ${done ? 'cp-done' : ''} ${isCurrent ? 'cp-current' : ''}">${done ? '✓' : ''}</div>`;
+        return `<button type="button" class="cp-cell ${entry ? 'cp-done' : ''} ${isCurrent ? 'cp-current' : ''}" data-action="cycleCell" data-week="${wk}" data-lift="${l}">${cycleCellContent(entry, isCurrent)}</button>`;
       }).join('');
       return `<div class="cp-row"><div class="cp-wk">W${wk}</div>${cells}</div>`;
     }).join('');
     return `
-      <div class="card" style="margin-top:22px;">
+      <div class="card">
         <h2>Cycle ${state.cycle} progress</h2>
+        <p class="sub" style="color:var(--muted);font-size:12px;margin:-6px 0 14px;">Tap a lift to edit that workout, or jump ahead to start it early.</p>
         <div class="cp-grid">
           <div class="cp-row"><div class="cp-wk"></div>${header}</div>
           ${rows}
@@ -613,7 +653,9 @@
       ${topbar('5/3/1 BBB', 'Cycle ' + state.cycle, '../../')}
       ${syncBanner()}
       <main>
-        <div class="card">
+        ${renderCycleProgress()}
+
+        <div class="card" style="margin-top:22px;">
           <h2>Next workout</h2>
           <div class="lift-head">
             <div class="plate ${LIFT_CLASS[lift]}"></div>
@@ -627,8 +669,6 @@
         </div>
         <button class="btn" data-action="startWorkout">Start workout</button>
         <button class="btn ghost" data-action="pickDay">Choose a different day</button>
-
-        ${renderCycleProgress()}
 
         <div class="card" style="margin-top:22px;">
           <h2>Training maxes</h2>
@@ -645,8 +685,9 @@
   function renderTrain(){
     const w = computeWorkout();
     const lift = w.lift;
+    const sw = ensureSessionWeights(w);
 
-    const stageWeights = w.mainSets.map(s => s.weight).concat([w.bbbWeight]);
+    const stageWeights = sw.main.concat([sw.bbb]);
     const plateStages = buildSessionPlateStages(stageWeights);
 
     let setsHtml = w.mainSets.map((s,i)=>{
@@ -661,7 +702,10 @@
         <div class="set-row">
           <div class="set-left">
             <div class="pct">${s.pct}% of TM</div>
-            <div class="weight">${fmtW(s.weight)}</div>
+            <div class="weight-edit">
+              <input type="number" inputmode="decimal" step="${settings.increment || 2.5}" class="weight-input" data-set="${i}" value="${sw.main[i]}">
+              <span class="unit">${settings.unit}</span>
+            </div>
             <div class="target">Target: ${s.repsLabel} reps</div>
             <div class="plate-line">${plateLine} per side</div>
             ${ltLine ? `<div class="last-time">${ltLine}</div>` : ''}
@@ -700,7 +744,10 @@
 
         <div class="card">
           <h2>Boring But Big — ${LIFT_LABEL[w.bbbLift]}</h2>
-          <div class="row"><span class="label">5 sets × 10 reps</span><span class="value">${fmtW(w.bbbWeight)}</span></div>
+          <div class="row">
+            <span class="label">5 sets × 10 reps</span>
+            <span class="value bbb-weight-edit"><input type="number" inputmode="decimal" step="${settings.increment || 2.5}" id="bbbWeightInput" value="${sw.bbb}"> ${settings.unit}</span>
+          </div>
           <div class="plate-line">${bbbPlateLine} per side</div>
           ${bbbLastLine ? `<div class="last-time">${bbbLastLine}</div>` : ''}
           <div class="bbb-counter">${bbbDots}</div>
@@ -911,6 +958,23 @@
     });
     const fileInput = document.getElementById('import-file');
     if (fileInput) fileInput.addEventListener('change', handleImportChange);
+
+    document.querySelectorAll('.weight-input').forEach(el=>{
+      el.addEventListener('change', () => {
+        const i = +el.getAttribute('data-set');
+        const v = parseFloat(el.value);
+        if (!isNaN(v) && v >= 0 && sessionWeights) sessionWeights.main[i] = v;
+        render();
+      });
+    });
+    const bbbWeightInput = document.getElementById('bbbWeightInput');
+    if (bbbWeightInput){
+      bbbWeightInput.addEventListener('change', () => {
+        const v = parseFloat(bbbWeightInput.value);
+        if (!isNaN(v) && v >= 0 && sessionWeights) sessionWeights.bbb = v;
+        render();
+      });
+    }
   }
 
   function onAction(e){
@@ -934,6 +998,24 @@
     else if (action === 'exportFromReminder') { doExportData(); doDismissStaleReminder(); }
     else if (action === 'dismissStaleReminder') doDismissStaleReminder();
     else if (action === 'startNewCycle') doStartNewCycle();
+    else if (action === 'cycleCell') doCycleCellClick(parseInt(el.getAttribute('data-week')), el.getAttribute('data-lift'));
+  }
+
+  // A done cell opens that workout for editing; an empty cell jumps straight
+  // into Train for that week/lift instead of the old pick-a-number prompt.
+  function doCycleCellClick(wk, lift){
+    const entry = history.find(h => h.cycle === state.cycle && h.week === wk && h.lift === lift);
+    if (entry){
+      editingHistoryIdx = history.indexOf(entry);
+      render();
+      return;
+    }
+    const dayIdx = settings.order.indexOf(lift);
+    if (dayIdx === -1) return;
+    state.week = wk;
+    state.dayIndex = dayIdx;
+    save(TKEY, state);
+    go('train');
   }
 
   function readNum(id){
@@ -987,8 +1069,9 @@
 
   function doFinishWorkout(){
     const w = computeWorkout();
+    const sw = ensureSessionWeights(w);
     const mainSets = w.mainSets.map((s,i)=>{
-      const out = { pct:s.pct, repsLabel:s.repsLabel, weight:s.weight, amrap:s.amrap };
+      const out = { pct:s.pct, repsLabel:s.repsLabel, weight:sw.main[i], amrap:s.amrap };
       if (s.amrap){
         const inp = document.getElementById('amrap-'+i);
         const val = inp ? parseInt(inp.value) : null;
@@ -1004,12 +1087,13 @@
       weekLabel: w.scheme.label,
       mainSets,
       bbbLift: w.bbbLift,
-      bbbWeight: w.bbbWeight,
+      bbbWeight: sw.bbb,
       bbbSets: bbbDone
     };
     history.push(entry);
     save(HKEY, history);
 
+    sessionWeights = null;
     advanceDay();
     showToast('Workout logged.');
     go('531home');
