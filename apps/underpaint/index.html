@@ -194,6 +194,28 @@
     -webkit-appearance:none; appearance:none;
   }
   .parts-label{ font-size:12px; color:var(--ink-soft); }
+  .parts-stepper{ display:flex; align-items:center; gap:8px; }
+  .stepper-btn{
+    width:34px; height:34px; flex:0 0 auto;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    color:var(--ink);
+    border-radius:50%;
+    font-size:18px; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    touch-action:manipulation;
+  }
+  .stepper-btn:hover{ border-color:var(--accent); color:var(--accent-deep); }
+  .stepper-btn:active{ background:var(--line-soft); }
+  .parts-value{
+    min-width:34px;
+    text-align:center;
+    font-family:'Work Sans', monospace;
+    font-size:15px;
+    font-weight:600;
+    color:var(--ink);
+  }
   .row-remove{
     margin-left:auto;
     border:none; background:none; color:var(--ink-soft);
@@ -442,43 +464,38 @@
         <button class="add-btn" id="addPaintBtn">+ Add a paint</button>
       </div>
       <div class="card mix-result">
-        <div class="mix-swatch" id="mixSwatch"></div>
-        <div class="mix-hex" id="mixHex">#000000</div>
-        <div class="mix-rgb" id="mixRgb">rgb(0, 0, 0)</div>
-        <button class="copy-btn" id="mixCopyBtn">Copy hex</button>
-        <p class="note">This uses an RYB-style approximation of subtractive paint mixing rather than a scientific pigment model (which would need each paint's real reflectance data). Treat the result as a starting point on the palette, not a guarantee — always test small.</p>
-      </div>
-    </div>
-
-    <div class="card" style="margin-top:22px;">
-      <h2 class="tool-title" style="font-size:19px;">Target colour</h2>
-      <p class="tool-sub" style="margin-bottom:16px;">Pick a colour to aim for, then either practise mixing it yourself or let Underpaint work out a recipe from your current paints.</p>
-
-      <nav class="tabs" id="targetModeTabs" style="margin-top:0; margin-bottom:18px;">
-        <button class="mode-btn active" data-mode="practice">Practice mixing</button>
-        <button class="mode-btn" data-mode="solve">Give me the mix</button>
-      </nav>
-
-      <div class="grid2">
-        <div class="paint-row" style="border-bottom:none; padding-top:0;">
-          <label class="swap-label">
-            <span class="blob" id="targetBlob" style="background:#7A6B4E;"></span>
-            <input type="color" id="targetColorPicker" value="#7a6b4e" aria-label="Pick target colour">
-          </label>
-          <input type="text" class="hex-field" id="targetHexField" value="#7A6B4E" maxlength="7"
-            autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text">
-          <button class="btn-secondary" id="targetRandomBtn" style="flex:0 0 auto;">🎲 Random</button>
-        </div>
-        <div>
-          <div id="practiceArea">
-            <button class="btn-primary" id="checkMixBtn">Check my mix against target</button>
+        <div style="display:flex; gap:24px; justify-content:center; flex-wrap:wrap;">
+          <div style="text-align:center;">
+            <div class="mix-swatch" id="mixSwatch"></div>
+            <div class="mix-hex" id="mixName">—</div>
+            <div class="mix-rgb" id="mixRgb">Add a paint to see the mix</div>
+            <button class="copy-btn" id="mixCopyBtn">Copy hex</button>
           </div>
-          <div id="solveArea" style="display:none;">
-            <button class="btn-primary" id="solveMixBtn">Work out the recipe</button>
+          <div style="text-align:center;">
+            <label class="swap-label" title="Pick a target colour to aim for">
+              <div class="mix-swatch" id="targetSwatch" style="background:#7A6B4E; cursor:pointer;"></div>
+              <input type="color" id="targetColorPicker" value="#7a6b4e" aria-label="Pick target colour">
+            </label>
+            <div class="mix-hex" id="targetName">Umber</div>
+            <div class="mix-rgb">Target colour</div>
+            <button class="btn-secondary" id="targetRandomBtn">🎲 Random target</button>
           </div>
         </div>
+
+        <nav class="tabs" id="targetModeTabs" style="justify-content:center; margin-top:20px; margin-bottom:10px;">
+          <button class="mode-btn active" data-mode="practice">Practice mixing</button>
+          <button class="mode-btn" data-mode="solve">Give me the mix</button>
+        </nav>
+        <div id="practiceArea">
+          <button class="btn-primary" id="checkMixBtn">Check my mix against target</button>
+        </div>
+        <div id="solveArea" style="display:none;">
+          <button class="btn-primary" id="solveMixBtn">Work out the recipe</button>
+        </div>
+        <div class="status-line" id="targetStatus" style="text-align:center;"></div>
+
+        <p class="note">This uses an RYB-style approximation of subtractive paint mixing rather than a scientific pigment model (which would need each paint's real reflectance data). Treat the result as a starting point on the palette, not a guarantee — always test small. Colour names are estimated from the nearest common colour, not an exact match.</p>
       </div>
-      <div class="status-line" id="targetStatus"></div>
     </div>
   </section>
 
@@ -647,6 +664,81 @@ function labDist(a, b){
   return Math.sqrt(dl*dl + da*da + db*db);
 }
 
+/* ============================================================
+   ESTIMATED COLOUR NAMES
+   ============================================================ */
+const COLOR_NAMES = [
+  { name:'Black', hex:'#000000' }, { name:'White', hex:'#FFFFFF' },
+  { name:'Grey', hex:'#808080' }, { name:'Silver', hex:'#C0C0C0' },
+  { name:'Dark Grey', hex:'#A9A9A9' }, { name:'Dim Grey', hex:'#696969' },
+  { name:'Light Grey', hex:'#D3D3D3' }, { name:'Gainsboro', hex:'#DCDCDC' },
+  { name:'Charcoal', hex:'#36454F' }, { name:'Slate Grey', hex:'#708090' },
+  { name:'Red', hex:'#FF0000' }, { name:'Dark Red', hex:'#8B0000' },
+  { name:'Firebrick', hex:'#B22222' }, { name:'Crimson', hex:'#DC143C' },
+  { name:'Maroon', hex:'#800000' }, { name:'Indian Red', hex:'#CD5C5C' },
+  { name:'Salmon', hex:'#FA8072' }, { name:'Light Salmon', hex:'#FFA07A' },
+  { name:'Coral', hex:'#FF7F50' }, { name:'Tomato', hex:'#FF6347' },
+  { name:'Orange Red', hex:'#FF4500' }, { name:'Orange', hex:'#FFA500' },
+  { name:'Dark Orange', hex:'#FF8C00' }, { name:'Gold', hex:'#FFD700' },
+  { name:'Yellow', hex:'#FFFF00' }, { name:'Khaki', hex:'#F0E68C' },
+  { name:'Dark Khaki', hex:'#BDB76B' }, { name:'Olive', hex:'#808000' },
+  { name:'Olive Drab', hex:'#6B8E23' }, { name:'Yellow Green', hex:'#9ACD32' },
+  { name:'Chartreuse', hex:'#7FFF00' }, { name:'Green', hex:'#008000' },
+  { name:'Dark Green', hex:'#006400' }, { name:'Forest Green', hex:'#228B22' },
+  { name:'Lime', hex:'#00FF00' }, { name:'Lime Green', hex:'#32CD32' },
+  { name:'Sea Green', hex:'#2E8B57' }, { name:'Medium Sea Green', hex:'#3CB371' },
+  { name:'Spring Green', hex:'#00FF7F' }, { name:'Teal', hex:'#008080' },
+  { name:'Dark Cyan', hex:'#008B8B' }, { name:'Cyan', hex:'#00FFFF' },
+  { name:'Turquoise', hex:'#40E0D0' }, { name:'Light Sea Green', hex:'#20B2AA' },
+  { name:'Aquamarine', hex:'#7FFFD4' }, { name:'Steel Blue', hex:'#4682B4' },
+  { name:'Sky Blue', hex:'#87CEEB' }, { name:'Deep Sky Blue', hex:'#00BFFF' },
+  { name:'Dodger Blue', hex:'#1E90FF' }, { name:'Cornflower Blue', hex:'#6495ED' },
+  { name:'Royal Blue', hex:'#4169E1' }, { name:'Blue', hex:'#0000FF' },
+  { name:'Medium Blue', hex:'#0000CD' }, { name:'Dark Blue', hex:'#00008B' },
+  { name:'Navy', hex:'#000080' }, { name:'Indigo', hex:'#4B0082' },
+  { name:'Slate Blue', hex:'#6A5ACD' }, { name:'Dark Slate Blue', hex:'#483D8B' },
+  { name:'Purple', hex:'#800080' }, { name:'Dark Violet', hex:'#9400D3' },
+  { name:'Dark Orchid', hex:'#9932CC' }, { name:'Medium Orchid', hex:'#BA55D3' },
+  { name:'Orchid', hex:'#DA70D6' }, { name:'Violet', hex:'#EE82EE' },
+  { name:'Plum', hex:'#DDA0DD' }, { name:'Magenta', hex:'#FF00FF' },
+  { name:'Deep Pink', hex:'#FF1493' }, { name:'Hot Pink', hex:'#FF69B4' },
+  { name:'Pink', hex:'#FFC0CB' }, { name:'Light Pink', hex:'#FFB6C1' },
+  { name:'Pale Violet Red', hex:'#DB7093' }, { name:'Lavender', hex:'#E6E6FA' },
+  { name:'Thistle', hex:'#D8BFD8' }, { name:'Brown', hex:'#A52A2A' },
+  { name:'Saddle Brown', hex:'#8B4513' }, { name:'Sienna', hex:'#A0522D' },
+  { name:'Burnt Sienna', hex:'#8A4B32' }, { name:'Chocolate', hex:'#D2691E' },
+  { name:'Peru', hex:'#CD853F' }, { name:'Tan', hex:'#D2B48C' },
+  { name:'Rosy Brown', hex:'#BC8F8F' }, { name:'Wheat', hex:'#F5DEB3' },
+  { name:'Beige', hex:'#F5F5DC' }, { name:'Bisque', hex:'#FFE4C4' },
+  { name:'Ivory', hex:'#FFFFF0' }, { name:'Cream', hex:'#FFFDD0' },
+  { name:'Navajo White', hex:'#FFDEAD' }, { name:'Burlywood', hex:'#DEB887' },
+  { name:'Cornsilk', hex:'#FFF8DC' }, { name:'Lemon Chiffon', hex:'#FFFACD' },
+  { name:'Light Yellow', hex:'#FFFFE0' }, { name:'Dark Slate Grey', hex:'#2F4F4F' },
+  { name:'Cadet Blue', hex:'#5F9EA0' }, { name:'Powder Blue', hex:'#B0E0E6' },
+  { name:'Light Blue', hex:'#ADD8E6' }, { name:'Alice Blue', hex:'#F0F8FF' },
+  { name:'Azure', hex:'#F0FFFF' }, { name:'Mint Cream', hex:'#F5FFFA' },
+  { name:'Honeydew', hex:'#F0FFF0' }, { name:'Snow', hex:'#FFFAFA' },
+  { name:'Linen', hex:'#FAF0E6' }, { name:'Old Lace', hex:'#FDF5E6' },
+  { name:'Seashell', hex:'#FFF5EE' }, { name:'Antique White', hex:'#FAEBD7' },
+  { name:'Peach Puff', hex:'#FFDAB9' }, { name:'Moccasin', hex:'#FFE4B5' },
+  { name:'Dark Goldenrod', hex:'#B8860B' }, { name:'Goldenrod', hex:'#DAA520' },
+  { name:'Yellow Ochre', hex:'#C68A2E' }, { name:'Raw Umber', hex:'#5C4A34' },
+  { name:'Venetian Red', hex:'#9B3A2A' }, { name:'Ultramarine', hex:'#2E4C9E' },
+  { name:'Rebecca Purple', hex:'#663399' }
+];
+const COLOR_NAMES_LAB = COLOR_NAMES.map(c => ({ name:c.name, lab: rgbToLab(hexToRgb(c.hex)) }));
+
+function nearestColorName(hex){
+  const targetLab = rgbToLab(hexToRgb(hex));
+  let best = COLOR_NAMES_LAB[0], bestD = Infinity;
+  for (const c of COLOR_NAMES_LAB){
+    const dl=c.lab[0]-targetLab[0], da=c.lab[1]-targetLab[1], db=c.lab[2]-targetLab[2];
+    const d = dl*dl+da*da+db*db;
+    if (d<bestD){ bestD=d; best=c; }
+  }
+  return best.name;
+}
+
 /* Reverse-solve: given a set of paint hexes and a target hex, search for the
    parts ratio that gets the RYB mix closest to the target (Lab distance). */
 function solveMixForTarget(hexes, targetHex, iterations){
@@ -799,10 +891,7 @@ const PALETTES = {
   }
 };
 
-let paints = [
-  { hex:'#2E4C9E', parts:1 }, // ultramarine-ish
-  { hex:'#F2C312', parts:1 }  // yellow
-];
+let paints = [];
 
 function renderPaintRows(){
   paintRowsEl.innerHTML = '';
@@ -817,7 +906,11 @@ function renderPaintRows(){
       </label>
       ${p.name ? `<span style="font-size:12px; color:var(--ink-soft); min-width:64px;">${p.name}</span>` : ''}
       <div class="parts-wrap">
-        <input type="number" class="parts-field" value="${p.parts}" min="0.5" step="0.5" data-idx="${i}" inputmode="decimal">
+        <div class="parts-stepper">
+          <button type="button" class="stepper-btn" data-idx="${i}" data-dir="-1" aria-label="Remove a part">−</button>
+          <span class="parts-value">${p.parts}</span>
+          <button type="button" class="stepper-btn" data-idx="${i}" data-dir="1" aria-label="Add a part">+</button>
+        </div>
         <div class="parts-label">parts</div>
       </div>
       <button class="row-remove" data-idx="${i}" title="Remove" aria-label="Remove paint">&times;</button>
@@ -841,11 +934,16 @@ function renderPaintRows(){
       renderPaintRows(); computeMix(); updatePaletteButtons();
     });
   });
-  paintRowsEl.querySelectorAll('.parts-field').forEach(inp=>{
-    inp.addEventListener('input', e=>{
-      const i = +e.target.dataset.idx;
-      paints[i].parts = clamp(parseFloat(e.target.value)||0.5, 0.5, 99);
-      computeMix();
+  paintRowsEl.querySelectorAll('.stepper-btn').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const i = +e.currentTarget.dataset.idx;
+      const dir = +e.currentTarget.dataset.dir;
+      if (dir < 0 && paints[i].parts <= 0.5){
+        paints.splice(i,1);
+      } else {
+        paints[i].parts = clamp(paints[i].parts + dir*0.5, 0.5, 99);
+      }
+      renderPaintRows(); computeMix(); updatePaletteButtons();
     });
   });
   paintRowsEl.querySelectorAll('.row-remove').forEach(btn=>{
@@ -906,27 +1004,32 @@ function currentMix(){
   return mixPaintsRgb(paints.map(p=>p.hex), paints.map(p=>p.parts));
 }
 
+let lastMixHex = null;
+
 function computeMix(){
   const swatch = document.getElementById('mixSwatch');
-  const hexEl = document.getElementById('mixHex');
+  const nameEl = document.getElementById('mixName');
   const rgbEl = document.getElementById('mixRgb');
   const mixed = currentMix();
   if (!mixed){
+    lastMixHex = null;
     swatch.style.background = 'var(--line)';
-    hexEl.textContent = '—';
+    swatch.title = '';
+    nameEl.textContent = '—';
     rgbEl.textContent = 'Add at least one paint';
     return;
   }
   const hex = rgbToHex(mixed);
+  lastMixHex = hex;
   swatch.style.background = hex;
-  hexEl.textContent = hex.toUpperCase();
+  swatch.title = hex.toUpperCase();
+  nameEl.textContent = nearestColorName(hex);
   rgbEl.textContent = `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
 }
 
 document.getElementById('mixCopyBtn').addEventListener('click', async ()=>{
-  const hex = document.getElementById('mixHex').textContent;
-  if (hex === '—') return;
-  try { await navigator.clipboard.writeText(hex); } catch(e) {}
+  if (!lastMixHex) return;
+  try { await navigator.clipboard.writeText(lastMixHex); } catch(e) {}
   const btn = document.getElementById('mixCopyBtn');
   const old = btn.textContent;
   btn.textContent = 'Copied!';
@@ -939,10 +1042,10 @@ updatePaletteButtons();
 
 /* ---------- target colour: practice vs solve ---------- */
 const targetColorPicker = document.getElementById('targetColorPicker');
-const targetHexField = document.getElementById('targetHexField');
-const targetBlob = document.getElementById('targetBlob');
+const targetSwatch = document.getElementById('targetSwatch');
+const targetNameEl = document.getElementById('targetName');
 const targetStatus = document.getElementById('targetStatus');
-let targetHex = targetHexField.value;
+let targetHex = targetColorPicker.value.toUpperCase();
 
 function matchPct(distance){
   return clamp(Math.round(100 - distance*1.1), 0, 100);
@@ -951,17 +1054,13 @@ function matchPct(distance){
 function setTargetHex(hex){
   targetHex = hex.toUpperCase();
   targetColorPicker.value = targetHex;
-  targetHexField.value = targetHex;
-  targetBlob.style.background = targetHex;
+  targetSwatch.style.background = targetHex;
+  targetSwatch.parentElement.title = 'Pick a target colour to aim for (' + targetHex + ')';
+  targetNameEl.textContent = nearestColorName(targetHex);
   targetStatus.textContent = '';
 }
+setTargetHex(targetHex);
 targetColorPicker.addEventListener('input', e=> setTargetHex(e.target.value));
-targetHexField.addEventListener('focus', e=>e.target.select());
-targetHexField.addEventListener('change', e=>{
-  let v = e.target.value.trim();
-  if (!v.startsWith('#')) v = '#'+v;
-  if (/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(v)) setTargetHex(v);
-});
 document.getElementById('targetRandomBtn').addEventListener('click', ()=>{
   const rnd = ()=>Math.floor(Math.random()*256);
   setTargetHex(rgbToHex([rnd(),rnd(),rnd()]));
