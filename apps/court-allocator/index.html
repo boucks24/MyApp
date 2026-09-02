@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Court Allocator">
 <title>Court Allocator</title>
 <style>
@@ -28,20 +29,29 @@
     font-family: 'Archivo', sans-serif;
     color: var(--line);
     min-height: 100vh;
-    padding: 28px 16px 60px;
+    padding: calc(28px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 60px max(16px, env(safe-area-inset-left));
   }
 
   .wrap{ max-width: 460px; margin: 0 auto; }
 
   .back-link{
-    display:inline-block;
-    color: rgba(244,241,232,0.55);
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+    color: rgba(244,241,232,0.75);
     font-size: 12.5px;
-    font-weight: 600;
+    font-weight: 700;
     text-decoration: none;
     margin-bottom: 16px;
+    padding:8px 14px 8px 11px;
+    border-radius:999px;
+    border:1px solid rgba(244,241,232,0.18);
+    background: var(--court);
+    min-height:36px;
+    touch-action:manipulation;
   }
-  .back-link:hover{ color: var(--line); }
+  .back-link .back-arrow{ font-size:16px; line-height:1; }
+  .back-link:hover, .back-link:active{ color: var(--line); background:#2A5546; }
 
   header{ text-align:center; margin-bottom: 26px; }
 
@@ -278,7 +288,7 @@
 </head>
 <body>
 <div class="wrap">
-  <a class="back-link" href="../../">‹ Shelf</a>
+  <a class="back-link" href="../../"><span class="back-arrow">‹</span>Shelf</a>
   <header>
     <div class="eyebrow">Social Tennis</div>
     <h1>Court Allocator</h1>

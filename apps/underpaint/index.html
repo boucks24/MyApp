@@ -41,22 +41,31 @@
   .wrap{
     max-width:960px;
     margin:0 auto;
-    padding:32px max(18px, env(safe-area-inset-right)) max(60px, env(safe-area-inset-bottom))
+    padding:calc(32px + env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(60px, env(safe-area-inset-bottom))
             max(18px, env(safe-area-inset-left));
   }
   @media (max-width:480px){
-    .wrap{ padding-top:24px; }
+    .wrap{ padding-top:calc(24px + env(safe-area-inset-top)); }
   }
 
   .back-link{
-    display:inline-block;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
     color:var(--ink-soft);
     font-size:12.5px;
-    font-weight:600;
+    font-weight:700;
     text-decoration:none;
     margin-bottom:14px;
+    padding:8px 14px 8px 11px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    min-height:36px;
+    touch-action:manipulation;
   }
-  .back-link:hover{ color:var(--ink); }
+  .back-link .back-arrow{ font-size:16px; line-height:1; }
+  .back-link:hover, .back-link:active{ color:var(--ink); background:var(--surface); }
 
   header.top{
     padding-bottom:22px;
@@ -433,7 +442,7 @@
 <body>
 
 <div class="wrap">
-  <a class="back-link" href="../../">‹ Shelf</a>
+  <a class="back-link" href="../../"><span class="back-arrow">‹</span>Shelf</a>
   <header class="top">
     <h1 class="wordmark">Underpaint</h1>
     <p>A small bench of tools for painters: mix paint colours the way pigments actually behave, pull a working palette from a reference photo, and simplify a photo into flat colour shapes for a study.</p>

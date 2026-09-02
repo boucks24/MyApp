@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Rally Clipper">
 <title>Rally Clipper</title>
 <style>
@@ -21,11 +22,18 @@
   body{
     margin:0; background:var(--court-dark); color:var(--line);
     font-family:'Archivo', sans-serif;
-    min-height:100vh; padding:28px 16px 60px;
+    min-height:100vh;
+    padding:calc(28px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 60px max(16px, env(safe-area-inset-left));
   }
   .wrap{max-width:520px; margin:0 auto;}
-  .back-link{display:inline-block; color:var(--muted); font-size:12.5px; font-weight:600; text-decoration:none; margin-bottom:14px;}
-  .back-link:hover{color:var(--line);}
+  .back-link{
+    display:inline-flex; align-items:center; gap:4px;
+    color:rgba(244,241,232,0.75); font-size:12.5px; font-weight:700; text-decoration:none; margin-bottom:14px;
+    padding:8px 14px 8px 11px; border-radius:999px; border:1px solid rgba(244,241,232,0.18);
+    background:var(--court); min-height:36px; touch-action:manipulation;
+  }
+  .back-link .back-arrow{font-size:16px; line-height:1;}
+  .back-link:hover, .back-link:active{color:var(--line); background:#2A5546;}
   header{text-align:center; margin-bottom:24px;}
   .eyebrow{font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:var(--ball); font-weight:700; margin-bottom:6px;}
   h1{font-family:'Archivo Black', sans-serif; font-size:28px; line-height:1; margin:0 0 4px; letter-spacing:-0.01em;}
@@ -94,7 +102,7 @@
 </head>
 <body>
 <div class="wrap">
-  <a class="back-link" href="../../">‹ Shelf</a>
+  <a class="back-link" href="../../"><span class="back-arrow">‹</span>Shelf</a>
   <header>
     <div class="eyebrow">Tennis</div>
     <h1>Rally Clipper</h1>
