@@ -145,13 +145,20 @@
   <p class="note">
     Scores come from ESPN's public feeds, fetched directly from your browser (this page has no server of its own).
     Those feeds are unofficial, undocumented, and can change or go down without notice — if a section stops loading,
-    that's ESPN's endpoint, not something saved on this device. Tennis is filtered client-side to Grand Slam, Masters/1000
-    and tour-500 events by tournament name (list: <code>TENNIS_500PLUS_KEYWORDS</code>) and then to matches with at least
-    one player ranked top 50 (top 100 if Australian) using ESPN's separate, even-less-documented rankings API
-    (<code>fetchTennisRankings()</code>). Both of those tennis filters fail open: if the tier or ranking filter would
-    have matched nothing despite matches actually being on, it shows everything unfiltered at that stage instead and
-    says so inline — a filter matching zero real matches is treated as the filter being broken, not the schedule being
-    empty. Rugby union covers Super Rugby Pacific (Australian Super Rugby teams)
+    that's ESPN's endpoint, not something saved on this device. ATP and WTA are fetched separately (a tour's own
+    single-gender events only appear under its own endpoint) but merged into one Tennis list and deduped, since a
+    Grand Slam's payload already carries both genders together. ESPN's tennis "events" are whole tournaments spanning
+    weeks, not single matches — <code>extractMatchesFromTournamentEvent()</code> pulls each singles-draw match out of
+    a tournament's <code>groupings[]</code> (doubles/mixed/wheelchair/juniors are skipped, since they have no ATP/WTA
+    singles ranking to filter by) and drops anything outside the live/upcoming window so finished early rounds don't
+    flood the list. What's left is filtered to Grand Slam, Masters/1000 and tour-500 events — an explicit
+    <code>major: true</code> flag covers Slams, a name-keyword list (<code>TENNIS_500PLUS_KEYWORDS</code>) covers the
+    rest — then to matches with at least one player ranked top 50 (top 100 if Australian) using ESPN's separate,
+    even-less-documented rankings API (<code>fetchTennisRankings()</code>), checked against the right tour's list per
+    match. Both of those tennis filters fail open: if the tier or ranking filter would have matched nothing despite
+    matches actually being on, it shows everything unfiltered at that stage instead and says so inline — a filter
+    matching zero real matches is treated as the filter being broken, not the schedule being empty. Rugby union covers
+    Super Rugby Pacific (Australian Super Rugby teams)
     and the Rugby Championship (Wallabies internationals) by numeric ESPN league ID. Cricket uses a different,
     cross-domain "personalised header" endpoint filtered to matches involving Australia — Big Bash/WBBL aren't
     wired up, their league ID wasn't verifiable when this was built. Review each season and adjust
@@ -201,37 +208,77 @@ function matchesTennis500Plus(rawEvent, extraContext){
 }
 
 /* ESPN's tennis scoreboard "events" are actually whole TOURNAMENTS (e.g. id
-   "964-2026" / "Kia Open", spanning a week), not individual matches — there
-   is no top-level `competitions` array the way team-sport events have one.
-   The individual matches are nested somewhere under `groupings[]` (rounds/
-   draws), in an undocumented, possibly-varying shape, so — same approach as
-   fetchCricketAustralia's collectEmbeddedEvents — walk the whole tournament
-   object looking for any `competitions[]` array whose entries look like a
-   real match (`.competitors[]` present), and synthesize a normalizeEvent-
-   compatible wrapper around each one, carrying the tournament's own name
-   through since individual matches don't repeat it. */
-function extractMatchesFromTournamentEvent(tournamentRaw){
-  const matches = [];
-  (function walk(node, depth){
-    if (!node || depth > 8) return;
-    if (Array.isArray(node)){ node.forEach(n => walk(n, depth + 1)); return; }
-    if (typeof node !== 'object') return;
-    if (Array.isArray(node.competitions)){
-      node.competitions.forEach(comp => {
-        if (comp && Array.isArray(comp.competitors)) matches.push(comp);
-      });
-    }
-    Object.values(node).forEach(v => walk(v, depth + 1));
-  })(tournamentRaw, 0);
-
+   "189-2026" / "US Open", spanning ~3 weeks), not individual matches. Real
+   shape confirmed from a live response: each tournament has `groupings[]`,
+   one per draw (grouping.slug like "mens-singles"/"womens-singles", but also
+   doubles/mixed/wheelchair/juniors), and each grouping has its own
+   `competitions[]` of actual matches. A Grand Slam's groupings cover BOTH
+   tours in one payload — hitting either the ATP or WTA endpoint alone already
+   returns both genders for majors (smaller single-gender tour stops only
+   show up under their own tour's endpoint, which is why both are still
+   fetched — see fetchTennis).
+   Only singles draws are kept: doubles/mixed/wheelchair/junior players don't
+   have ATP/WTA singles rankings, so the rank filter below could never judge
+   them anyway. Each extracted match is tagged with its tour (derived from
+   the grouping slug, falling back to whichever endpoint it was fetched
+   from) so the rank filter can check it against the right rankings list. */
+function extractMatchesFromTournamentEvent(tournamentRaw, defaultTour){
   const tourneyName = tournamentRaw.shortName || tournamentRaw.name || '';
-  return matches.map(comp => ({
+  const found = []; // {comp, tour}
+
+  function tourFromSlug(slug){
+    if (/women/i.test(slug)) return 'wta';
+    if (/men/i.test(slug)) return 'atp';
+    return null;
+  }
+
+  if (Array.isArray(tournamentRaw.groupings)){
+    tournamentRaw.groupings.forEach(g => {
+      const slug = (g && g.grouping && g.grouping.slug) || '';
+      if (!/singles/i.test(slug)) return;
+      const tour = tourFromSlug(slug) || defaultTour;
+      if (Array.isArray(g.competitions)){
+        g.competitions.forEach(comp => {
+          if (comp && Array.isArray(comp.competitors)) found.push({ comp, tour });
+        });
+      }
+    });
+  } else {
+    // Unconfirmed/varying shape fallback — same generic walk used by
+    // fetchCricketAustralia's collectEmbeddedEvents, for any competitions[]
+    // array with real competitors, wherever it's nested.
+    (function walk(node, depth){
+      if (!node || depth > 8) return;
+      if (Array.isArray(node)){ node.forEach(n => walk(n, depth + 1)); return; }
+      if (typeof node !== 'object') return;
+      if (Array.isArray(node.competitions)){
+        node.competitions.forEach(comp => {
+          if (comp && Array.isArray(comp.competitors)) found.push({ comp, tour: defaultTour });
+        });
+      }
+      Object.values(node).forEach(v => walk(v, depth + 1));
+    })(tournamentRaw, 0);
+  }
+
+  return found.map(({ comp, tour }) => ({
     id: comp.id || tournamentRaw.id,
     date: comp.date || tournamentRaw.date,
     name: tourneyName,
     shortName: tourneyName,
+    tour,
     competitions: [comp],
   }));
+}
+
+// A full tournament payload includes every round played over 1-3 weeks, not
+// just today's — keep only matches from the last day through `daysAhead`
+// days out, same window `withDates()` requests, so old finished rounds from
+// early in the tournament don't flood the list.
+function isRelevantMatchDate(dateStr, daysAhead){
+  const t = new Date(dateStr).getTime();
+  if (isNaN(t)) return true; // can't parse — keep it rather than silently dropping
+  const now = Date.now();
+  return t >= (now - 86400000) && t <= (now + daysAhead * 86400000);
 }
 
 /* ============================================================
@@ -325,49 +372,75 @@ function tennisRankQualifies(info){
   return info.isAustralian ? info.rank <= RANK_TOP_CUTOFF_AUS : info.rank <= RANK_TOP_CUTOFF;
 }
 
-async function fetchTennis(source){
-  // The `dates=` range param is a guess for this endpoint — if it comes back
-  // empty, retry the bare scoreboard URL (ESPN's own default "current event"
-  // behaviour) before giving up.
-  let data = await fetchJsonSafe(source.url);
+// Fetches one tour's scoreboard, retrying the bare URL (ESPN's own default
+// "current event" behaviour) if the `dates=` range param yields nothing.
+async function fetchTennisTourRaw(tour, url){
+  let data = await fetchJsonSafe(url);
   let rawEvents = data && Array.isArray(data.events) ? data.events : [];
   if (!rawEvents.length){
-    const bareUrl = source.url.split('?')[0];
+    const bareUrl = url.split('?')[0];
     const fallback = await fetchJsonSafe(bareUrl);
     if (fallback && Array.isArray(fallback.events) && fallback.events.length){
       data = fallback;
       rawEvents = fallback.events;
     }
   }
-  if (!data) throw new Error('fetch failed');
-  console.debug(`[scoreboard:${source.id}] raw events:`, rawEvents.length);
+  const context = data ? JSON.stringify(data.leagues || data.season || {}).toLowerCase() : '';
+  return rawEvents.map(ev => ({ ev, tour, context }));
+}
 
-  // Tournament name/tier isn't confirmed to live on each event object, so also
-  // search whatever league/season metadata came back with the response.
-  const context = JSON.stringify(data.leagues || data.season || {}).toLowerCase();
-  let tierRaw = rawEvents.filter(ev => matchesTennis500Plus(ev, context));
+async function fetchTennis(source){
+  // A Grand Slam's payload already contains both mens-singles and
+  // womens-singles groupings, but a tour's own single-gender events (e.g. a
+  // WTA-250) only show up under that tour's own endpoint — so both are
+  // still fetched and merged into one list, deduped by match id below.
+  const [atpRaw, wtaRaw] = await Promise.all([
+    fetchTennisTourRaw('atp', withDates(`${ESPN_BASE}/tennis/atp/scoreboard`, 10)),
+    fetchTennisTourRaw('wta', withDates(`${ESPN_BASE}/tennis/wta/scoreboard`, 10)),
+  ]);
+  const rawTournaments = [...atpRaw, ...wtaRaw];
+  if (!rawTournaments.length) throw new Error('fetch failed');
+  console.debug(`[scoreboard:${source.id}] raw tournaments:`, rawTournaments.length);
+
+  let tierRaw = rawTournaments.filter(t => matchesTennis500Plus(t.ev, t.context));
   let tierNote = null;
-  if (rawEvents.length && !tierRaw.length){
-    // The keyword filter matched nothing even though matches exist — more
-    // likely a shape mismatch than an actual empty week. Fail open.
-    tierRaw = rawEvents;
+  if (rawTournaments.length && !tierRaw.length){
+    // The keyword filter matched nothing even though tournaments exist —
+    // more likely a shape mismatch than an actual empty week. Fail open.
+    tierRaw = rawTournaments;
     tierNote = 'Grand Slam/500+ filter matched nothing this refresh — showing all current matches, unfiltered by tournament tier.';
   }
-  const flattenedMatches = tierRaw.flatMap(extractMatchesFromTournamentEvent);
+  let flattenedMatches = tierRaw.flatMap(t => extractMatchesFromTournamentEvent(t.ev, t.tour));
+
+  // A Grand Slam appears in both the ATP and WTA fetches with the same
+  // matches — dedupe by match id before it doubles up the list.
+  const seenIds = new Set();
+  flattenedMatches = flattenedMatches.filter(m => {
+    if (seenIds.has(m.id)) return false;
+    seenIds.add(m.id);
+    return true;
+  });
+
+  // Full tournaments include every round already played, not just today's —
+  // drop matches outside the live/upcoming window.
+  flattenedMatches = flattenedMatches.filter(m => isRelevantMatchDate(m.date, 10));
+
   const tierEvents = flattenedMatches.map(normalizeEvent).filter(Boolean);
   console.debug(`[scoreboard:${source.id}] after tier filter:`, tierEvents.length, tierNote ? '(failed open)' : '');
   if (tierRaw.length && !tierEvents.length){
-    // Every raw event failed to normalize (no nested competitions found) — that's a
-    // shape mismatch worth seeing, not a real empty schedule. Use warn (not
-    // debug) so it shows up without changing devtools' log level.
-    console.warn(`[scoreboard:${source.id}] ${tierRaw.length} raw event(s) but none normalized — sample event:`, tierRaw[0]);
+    // Every raw tournament failed to normalize (no nested competitions
+    // found) — that's a shape mismatch worth seeing, not a real empty
+    // schedule. Use warn (not debug) so it shows up without changing
+    // devtools' log level.
+    console.warn(`[scoreboard:${source.id}] ${tierRaw.length} raw tournament(s) but none normalized — sample:`, tierRaw[0] && tierRaw[0].ev);
   }
 
-  const rankingsMap = await fetchTennisRankings(source.tour);
-  if (!rankingsMap.size){
+  const [atpRankings, wtaRankings] = await Promise.all([fetchTennisRankings('atp'), fetchTennisRankings('wta')]);
+  if (!atpRankings.size && !wtaRankings.size){
     return { events: tierEvents, note: tierNote || 'Rankings unavailable right now — showing all Grand Slam/500+ matches, unfiltered by player ranking.' };
   }
-  const ranked = tierEvents.filter(ev => ev.competitors.some(c => tennisRankQualifies(competitorRankInfo(c, rankingsMap))));
+  const rankingsFor = ev => (ev.tour === 'wta' ? wtaRankings : atpRankings);
+  const ranked = tierEvents.filter(ev => ev.competitors.some(c => tennisRankQualifies(competitorRankInfo(c, rankingsFor(ev)))));
   console.debug(`[scoreboard:${source.id}] after rank filter:`, ranked.length);
   if (tierEvents.length && !ranked.length){
     // Same fail-open reasoning: an unmatched rank filter is more likely a
@@ -417,8 +490,7 @@ async function fetchCricketAustralia(){
 }
 
 const SOURCES = [
-  { id:'atp', label:'ATP — Grand Slam & 500+', tour:'atp', url: withDates(`${ESPN_BASE}/tennis/atp/scoreboard`, 10), fetch: fetchTennis },
-  { id:'wta', label:'WTA — Grand Slam & 500+', tour:'wta', url: withDates(`${ESPN_BASE}/tennis/wta/scoreboard`, 10), fetch: fetchTennis },
+  { id:'tennis', label:'Tennis — Grand Slam & 500+ (ATP & WTA)', fetch: fetchTennis },
   { id:'afl', label:'AFL', url: withDates(`${ESPN_BASE}/australian-football/afl/scoreboard`, 10) },
   { id:'super-rugby', label:'Super Rugby Pacific', url: withDates(`${ESPN_BASE}/rugby/242041/scoreboard`, 10) },
   { id:'rugby-championship', label:'Rugby Championship (Wallabies)', url: withDates(`${ESPN_BASE}/rugby/244293/scoreboard`, 10) },
@@ -463,6 +535,7 @@ function normalizeEvent(raw){
     name: raw.shortName || raw.name || '',
     venue,
     competitors,
+    tour: raw.tour, // tennis-only: 'atp'/'wta', used to pick the right rankings list
     raw,
   };
 }
