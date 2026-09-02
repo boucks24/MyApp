@@ -115,6 +115,22 @@
     color:var(--ink);
     border-bottom-color:var(--accent);
   }
+  /* Main tool tabs stay on one row even on a phone width — evenly split,
+     tighter type/padding, instead of the 3rd label wrapping to its own row. */
+  header.top nav.tabs{
+    flex-wrap:nowrap;
+    margin-left:0;
+  }
+  @media (max-width:480px){
+    header.top nav.tabs button{
+      flex:1 1 0;
+      padding:10px 4px;
+      font-size:12.5px;
+      text-align:center;
+      white-space:normal;
+      line-height:1.2;
+    }
+  }
 
   section.panel{ display:none; }
   section.panel.active{ display:block; animation:fade .25s ease; }
@@ -259,6 +275,7 @@
     align-items:center;
     text-align:center;
   }
+  .mix-compare-row{ display:flex; gap:24px; justify-content:center; flex-wrap:wrap; }
   .mix-swatch{
     width:150px; height:150px;
     border-radius:50% 45% 55% 48% / 48% 55% 45% 52%;
@@ -437,6 +454,25 @@
     font-size:12px;
     color:var(--ink-soft);
   }
+
+  /* ---------- phone-width mixer: shrink the parts that push it into
+     needing so much scrolling, without losing the two-swatch comparison ---------- */
+  @media (max-width:480px){
+    .grid2{ gap:14px; }
+    h2.tool-title{ font-size:20px; margin:0 0 3px; }
+    p.tool-sub{ font-size:13px; margin:0 0 14px; }
+    .paint-row{ padding:8px 0; gap:8px; }
+    .mix-compare-row{ gap:14px; }
+    .mix-swatch{ width:96px; height:96px; margin-bottom:8px; }
+    .mix-hex{ font-size:15px; }
+    .mix-rgb{ font-size:12px; }
+    .copy-btn, .mix-result .btn-secondary{
+      padding:9px 12px; min-height:38px; font-size:13px; margin-top:8px;
+    }
+    #targetModeTabs{ margin-top:14px; margin-bottom:6px; }
+    #targetModeTabs button{ font-size:13px; padding:9px 8px; min-height:38px; }
+    .note{ font-size:12px; margin-top:10px; padding-top:9px; }
+  }
 </style>
 </head>
 <body>
@@ -445,7 +481,6 @@
   <a class="back-link" href="../../"><span class="back-arrow">‹</span>Shelf</a>
   <header class="top">
     <h1 class="wordmark">Underpaint</h1>
-    <p>A small bench of tools for painters: mix paint colours the way pigments actually behave, pull a working palette from a reference photo, and simplify a photo into flat colour shapes for a study.</p>
     <nav class="tabs">
       <button class="tab-btn active" data-tab="mixer">Colour mixer</button>
       <button class="tab-btn" data-tab="palette">Image to palette</button>
@@ -474,7 +509,7 @@
         <button class="add-btn" id="addPaintBtn">+ Add a paint</button>
       </div>
       <div class="card mix-result">
-        <div style="display:flex; gap:24px; justify-content:center; flex-wrap:wrap;">
+        <div class="mix-compare-row">
           <div style="text-align:center;">
             <div class="mix-swatch" id="mixSwatch"></div>
             <div class="mix-hex" id="mixName">—</div>
@@ -1463,6 +1498,22 @@ function buildPaletteLegend(hexes, width){
 function buildSvgFromLabels(labels, w, h, colorsRgb, chaikinIters, dpEpsilon, outW, outH){
   outW = outW || w; outH = outH || h;
   const sx = outW / w, sy = outH / h;
+
+  // Each region's boundary is smoothed independently, so neighbouring shapes
+  // no longer share an exact edge afterwards — that leaves hairline seams
+  // where the background would show through. Use the most common colour as
+  // the background (instead of white) so any pixel a shape doesn't quite
+  // reach reads as more paint, and stroke every shape in its own fill colour
+  // by about one working-pixel (in output space) to bleed across those seams
+  // — the whole point is a flat, fully-covered block-in, not a sketch with
+  // gaps in it.
+  const labelCounts = new Array(colorsRgb.length).fill(0);
+  for (let i=0;i<labels.length;i++) labelCounts[labels[i]]++;
+  let dominant = 0;
+  for (let L=1; L<labelCounts.length; L++){ if (labelCounts[L] > labelCounts[dominant]) dominant = L; }
+  const bgHex = rgbToHex(colorsRgb[dominant]);
+  const gapStroke = Math.max(sx, sy) * 1.15;
+
   let paths = '';
   const usedHexes = [];
   for (let L=0; L<colorsRgb.length; L++){
@@ -1483,13 +1534,13 @@ function buildSvgFromLabels(labels, w, h, colorsRgb, chaikinIters, dpEpsilon, ou
     });
     if (d){
       const hex = rgbToHex(colorsRgb[L]);
-      paths += `<path d="${d}" fill="${hex}" fill-rule="evenodd"/>`;
+      paths += `<path d="${d}" fill="${hex}" stroke="${hex}" stroke-width="${gapStroke.toFixed(2)}" stroke-linejoin="round" fill-rule="evenodd"/>`;
     }
   }
   const legend = buildPaletteLegend(usedHexes, outW);
   const totalH = outH + legend.height;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${outW} ${totalH}" width="${outW}" height="${totalH}">` +
-    `<rect x="0" y="0" width="${outW}" height="${outH}" fill="#FFFFFF"/>` +
+    `<rect x="0" y="0" width="${outW}" height="${outH}" fill="${bgHex}"/>` +
     paths +
     `<g transform="translate(0, ${outH})">${legend.fragment}</g>` +
     `</svg>`;
