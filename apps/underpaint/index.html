@@ -739,40 +739,68 @@ function nearestColorName(hex){
   return best.name;
 }
 
+function gcdOfParts(arr){
+  const nz = arr.filter(v=>v>0);
+  if (!nz.length) return 1;
+  const gcd2 = (a,b)=> b ? gcd2(b, a%b) : a;
+  return nz.reduce((a,b)=>gcd2(a,b));
+}
+
 /* Reverse-solve: given a set of paint hexes and a target hex, search for the
-   parts ratio that gets the RYB mix closest to the target (Lab distance). */
-function solveMixForTarget(hexes, targetHex, iterations){
+   whole-number parts ratio that gets the RYB mix closest to the target
+   (Lab distance). Works directly in integer part-space (0..MAX_SOLVE_PARTS
+   per paint, zero allowed) via hill-climbing from random restarts, so it
+   naturally drops paints that only hurt the match instead of being forced
+   to include a little of everything. */
+function solveMixForTarget(hexes, targetHex){
   const n = hexes.length;
   if (!n) return null;
-  iterations = iterations || 2500;
+  const MAX_SOLVE_PARTS = 12;
+  const RESTARTS = 40;
   const rybList = hexes.map(hex => rgbToRyb01(hexToRgb(hex).map(v=>v/255)));
   const targetLab = rgbToLab(hexToRgb(targetHex));
 
   function mixFromWeights(w){
-    const total = w.reduce((a,b)=>a+b,0) || 1;
+    const total = w.reduce((a,b)=>a+b,0);
+    if (!total) return null;
     let r=0,y=0,b=0;
     rybList.forEach((ryb,i)=>{ const wi=w[i]/total; r+=ryb[0]*wi; y+=ryb[1]*wi; b+=ryb[2]*wi; });
     return rybToRgb01(r,y,b).map(v=>clamp(Math.round(v*255),0,255));
   }
-  function scoreOf(w){ return labDist(rgbToLab(mixFromWeights(w)), targetLab); }
-
-  let best = new Array(n).fill(1);
-  let bestScore = scoreOf(best);
-
-  for (let i=0;i<iterations;i++){
-    const w = new Array(n).fill(0).map(()=> -Math.log(Math.random() + 1e-6));
-    const s = scoreOf(w);
-    if (s<bestScore){ bestScore=s; best=w; }
-  }
-  for (let i=0;i<500;i++){
-    const w = best.map(v=> Math.max(0.02, v + (Math.random()-0.5)*0.4*v));
-    const s = scoreOf(w);
-    if (s<bestScore){ bestScore=s; best=w; }
+  function scoreOf(w){
+    const mixed = mixFromWeights(w);
+    return mixed ? labDist(rgbToLab(mixed), targetLab) : Infinity;
   }
 
-  const minW = Math.min(...best);
-  const scaled = best.map(v=> Math.max(0.5, Math.round((v/minW)*2)/2));
-  return { weights: scaled, distance: scoreOf(scaled) };
+  let globalBest = null, globalBestScore = Infinity;
+
+  for (let r=0; r<RESTARTS; r++){
+    let w = new Array(n).fill(0).map(()=> Math.random()<0.5 ? 0 : 1+Math.floor(Math.random()*MAX_SOLVE_PARTS));
+    if (w.every(v=>v===0)) w[Math.floor(Math.random()*n)] = 1;
+    let score = scoreOf(w);
+    let improved = true;
+    while (improved){
+      improved = false;
+      for (let i=0;i<n;i++){
+        for (const delta of [1,-1]){
+          const nv = w[i]+delta;
+          if (nv<0 || nv>MAX_SOLVE_PARTS) continue;
+          const w2 = w.slice(); w2[i] = nv;
+          if (w2.every(v=>v===0)) continue;
+          const s2 = scoreOf(w2);
+          if (s2 < score - 1e-9){ w = w2; score = s2; improved = true; }
+        }
+      }
+    }
+    const better = score < globalBestScore - 1e-9;
+    const tiedButSimpler = score <= globalBestScore + 1e-9 &&
+      globalBest && w.reduce((a,b)=>a+b,0) < globalBest.reduce((a,b)=>a+b,0);
+    if (better || tiedButSimpler){ globalBestScore = score; globalBest = w; }
+  }
+
+  const g = gcdOfParts(globalBest);
+  const weights = globalBest.map(v => v/g);
+  return { weights, distance: globalBestScore };
 }
 
 /* ============================================================
@@ -907,9 +935,9 @@ function renderPaintRows(){
       ${p.name ? `<span style="font-size:12px; color:var(--ink-soft); min-width:64px;">${p.name}</span>` : ''}
       <div class="parts-wrap">
         <div class="parts-stepper">
-          <button type="button" class="stepper-btn" data-idx="${i}" data-dir="-1" aria-label="Remove a part">−</button>
+          <button type="button" class="stepper-btn" data-idx="${i}" data-dir="-1" aria-label="Decrease parts">−</button>
           <span class="parts-value">${p.parts}</span>
-          <button type="button" class="stepper-btn" data-idx="${i}" data-dir="1" aria-label="Add a part">+</button>
+          <button type="button" class="stepper-btn" data-idx="${i}" data-dir="1" aria-label="Increase parts">+</button>
         </div>
         <div class="parts-label">parts</div>
       </div>
@@ -938,11 +966,7 @@ function renderPaintRows(){
     btn.addEventListener('click', e=>{
       const i = +e.currentTarget.dataset.idx;
       const dir = +e.currentTarget.dataset.dir;
-      if (dir < 0 && paints[i].parts <= 0.5){
-        paints.splice(i,1);
-      } else {
-        paints[i].parts = clamp(paints[i].parts + dir*0.5, 0.5, 99);
-      }
+      paints[i].parts = clamp(paints[i].parts + dir, 0, 99);
       renderPaintRows(); computeMix(); updatePaletteButtons();
     });
   });
