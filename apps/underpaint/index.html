@@ -424,7 +424,18 @@
   <!-- ===================== MIXER ===================== -->
   <section class="panel active" id="panel-mixer">
     <h2 class="tool-title">Colour mixer</h2>
-    <p class="tool-sub">Add two or more paints and set how many parts of each go into the mix. Mixing happens in a pigment-like colour space, so blue and yellow make green instead of grey mud.</p>
+    <p class="tool-sub">Add or remove paints and set how many parts of each go into the mix. Mixing happens in a pigment-like colour space, so blue and yellow make green instead of grey mud.</p>
+
+    <div class="field-row" style="max-width:340px;">
+      <label>Palette</label>
+      <select id="paletteSelect" class="hex-field" style="width:100%; height:44px;">
+        <option value="custom">Custom mix</option>
+        <option value="primary">Primary Triad + White/Black</option>
+        <option value="zorn">Zorn Palette</option>
+        <option value="earth">Earth &amp; Landscape</option>
+      </select>
+    </div>
+
     <div class="grid2">
       <div class="card">
         <div id="paintRows"></div>
@@ -437,6 +448,37 @@
         <button class="copy-btn" id="mixCopyBtn">Copy hex</button>
         <p class="note">This uses an RYB-style approximation of subtractive paint mixing rather than a scientific pigment model (which would need each paint's real reflectance data). Treat the result as a starting point on the palette, not a guarantee — always test small.</p>
       </div>
+    </div>
+
+    <div class="card" style="margin-top:22px;">
+      <h2 class="tool-title" style="font-size:19px;">Target colour</h2>
+      <p class="tool-sub" style="margin-bottom:16px;">Pick a colour to aim for, then either practise mixing it yourself or let Underpaint work out a recipe from your current paints.</p>
+
+      <nav class="tabs" id="targetModeTabs" style="margin-top:0; margin-bottom:18px;">
+        <button class="mode-btn active" data-mode="practice">Practice mixing</button>
+        <button class="mode-btn" data-mode="solve">Give me the mix</button>
+      </nav>
+
+      <div class="grid2">
+        <div class="paint-row" style="border-bottom:none; padding-top:0;">
+          <label class="swap-label">
+            <span class="blob" id="targetBlob" style="background:#7A6B4E;"></span>
+            <input type="color" id="targetColorPicker" value="#7a6b4e" aria-label="Pick target colour">
+          </label>
+          <input type="text" class="hex-field" id="targetHexField" value="#7A6B4E" maxlength="7"
+            autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text">
+          <button class="btn-secondary" id="targetRandomBtn" style="flex:0 0 auto;">🎲 Random</button>
+        </div>
+        <div>
+          <div id="practiceArea">
+            <button class="btn-primary" id="checkMixBtn">Check my mix against target</button>
+          </div>
+          <div id="solveArea" style="display:none;">
+            <button class="btn-primary" id="solveMixBtn">Work out the recipe</button>
+          </div>
+        </div>
+      </div>
+      <div class="status-line" id="targetStatus"></div>
     </div>
   </section>
 
@@ -601,6 +643,47 @@ function mixPaintsRgb(hexColors, weights){
 }
 buildRybLut();
 
+function labDist(a, b){
+  const dl=a[0]-b[0], da=a[1]-b[1], db=a[2]-b[2];
+  return Math.sqrt(dl*dl + da*da + db*db);
+}
+
+/* Reverse-solve: given a set of paint hexes and a target hex, search for the
+   parts ratio that gets the RYB mix closest to the target (Lab distance). */
+function solveMixForTarget(hexes, targetHex, iterations){
+  const n = hexes.length;
+  if (!n) return null;
+  iterations = iterations || 2500;
+  const rybList = hexes.map(hex => rgbToRyb01(hexToRgb(hex).map(v=>v/255)));
+  const targetLab = rgbToLab(hexToRgb(targetHex));
+
+  function mixFromWeights(w){
+    const total = w.reduce((a,b)=>a+b,0) || 1;
+    let r=0,y=0,b=0;
+    rybList.forEach((ryb,i)=>{ const wi=w[i]/total; r+=ryb[0]*wi; y+=ryb[1]*wi; b+=ryb[2]*wi; });
+    return rybToRgb01(r,y,b).map(v=>clamp(Math.round(v*255),0,255));
+  }
+  function scoreOf(w){ return labDist(rgbToLab(mixFromWeights(w)), targetLab); }
+
+  let best = new Array(n).fill(1);
+  let bestScore = scoreOf(best);
+
+  for (let i=0;i<iterations;i++){
+    const w = new Array(n).fill(0).map(()=> -Math.log(Math.random() + 1e-6));
+    const s = scoreOf(w);
+    if (s<bestScore){ bestScore=s; best=w; }
+  }
+  for (let i=0;i<500;i++){
+    const w = best.map(v=> Math.max(0.02, v + (Math.random()-0.5)*0.4*v));
+    const s = scoreOf(w);
+    if (s<bestScore){ bestScore=s; best=w; }
+  }
+
+  const minW = Math.min(...best);
+  const scaled = best.map(v=> Math.max(0.5, Math.round((v/minW)*2)/2));
+  return { weights: scaled, distance: scoreOf(scaled) };
+}
+
 /* ============================================================
    K-MEANS (Lab space)
    ============================================================ */
@@ -684,6 +767,31 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
    MIXER TAB
    ============================================================ */
 const paintRowsEl = document.getElementById('paintRows');
+const paletteSelect = document.getElementById('paletteSelect');
+
+const PALETTES = {
+  primary: [
+    { hex:'#F2C312', name:'Cadmium Yellow' },
+    { hex:'#C1502E', name:'Cadmium Red' },
+    { hex:'#2E4C9E', name:'Ultramarine Blue' },
+    { hex:'#F5F1E6', name:'Titanium White' },
+    { hex:'#2B2622', name:'Ivory Black' }
+  ],
+  zorn: [
+    { hex:'#F2EEE2', name:'Titanium White' },
+    { hex:'#C68A2E', name:'Yellow Ochre' },
+    { hex:'#9B3A2A', name:'Venetian Red' },
+    { hex:'#2A2521', name:'Ivory Black' }
+  ],
+  earth: [
+    { hex:'#8A4B32', name:'Burnt Sienna' },
+    { hex:'#5C4A34', name:'Raw Umber' },
+    { hex:'#C68A2E', name:'Yellow Ochre' },
+    { hex:'#28417A', name:'Ultramarine Blue' },
+    { hex:'#F2EEE2', name:'Titanium White' }
+  ]
+};
+
 let paints = [
   { hex:'#2E4C9E', parts:1 }, // ultramarine-ish
   { hex:'#F2C312', parts:1 }  // yellow
@@ -695,12 +803,15 @@ function renderPaintRows(){
     const row = document.createElement('div');
     row.className = 'paint-row';
     row.innerHTML = `
-      <label class="swap-label">
+      <label class="swap-label" title="${p.name||''}">
         <span class="blob" style="background:${p.hex}"></span>
         <input type="color" value="${p.hex}" data-idx="${i}" class="colorPicker" aria-label="Pick paint colour">
       </label>
-      <input type="text" class="hex-field" value="${p.hex}" data-idx="${i}" maxlength="7"
-        autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text">
+      <div style="display:flex; flex-direction:column; gap:2px;">
+        <input type="text" class="hex-field" value="${p.hex}" data-idx="${i}" maxlength="7"
+          autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text">
+        ${p.name ? `<span style="font-size:11px; color:var(--ink-soft);">${p.name}</span>` : ''}
+      </div>
       <div class="parts-wrap">
         <input type="number" class="parts-field" value="${p.parts}" min="0.5" step="0.5" data-idx="${i}" inputmode="decimal">
         <div class="parts-label">parts</div>
@@ -710,10 +821,20 @@ function renderPaintRows(){
     paintRowsEl.appendChild(row);
   });
 
+  if (!paints.length){
+    const empty = document.createElement('p');
+    empty.className = 'tool-sub';
+    empty.style.margin = '4px 0 0';
+    empty.textContent = 'No paints yet — add one, or pick a palette above.';
+    paintRowsEl.appendChild(empty);
+  }
+
   paintRowsEl.querySelectorAll('.colorPicker').forEach(inp=>{
     inp.addEventListener('input', e=>{
       const i = +e.target.dataset.idx;
       paints[i].hex = e.target.value;
+      delete paints[i].name;
+      paletteSelect.value = 'custom';
       renderPaintRows(); computeMix();
     });
   });
@@ -724,7 +845,10 @@ function renderPaintRows(){
       let v = e.target.value.trim();
       if (!v.startsWith('#')) v = '#'+v;
       if (/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(v)){
-        paints[i].hex = v; renderPaintRows(); computeMix();
+        paints[i].hex = v;
+        delete paints[i].name;
+        paletteSelect.value = 'custom';
+        renderPaintRows(); computeMix();
       }
     });
   });
@@ -737,9 +861,9 @@ function renderPaintRows(){
   });
   paintRowsEl.querySelectorAll('.row-remove').forEach(btn=>{
     btn.addEventListener('click', e=>{
-      if (paints.length<=2) return;
       const i = +e.target.dataset.idx;
       paints.splice(i,1);
+      paletteSelect.value = 'custom';
       renderPaintRows(); computeMix();
     });
   });
@@ -747,23 +871,44 @@ function renderPaintRows(){
 
 document.getElementById('addPaintBtn').addEventListener('click', ()=>{
   if (paints.length>=8) return;
-  const palette = ['#C1502E','#3E7C5A','#D9A441','#5B3E8F','#B23A5B','#3A6EA5'];
-  paints.push({ hex: palette[paints.length % palette.length], parts:1 });
+  const fallback = ['#C1502E','#3E7C5A','#D9A441','#5B3E8F','#B23A5B','#3A6EA5'];
+  paints.push({ hex: fallback[paints.length % fallback.length], parts:1 });
+  paletteSelect.value = 'custom';
   renderPaintRows(); computeMix();
 });
 
+paletteSelect.addEventListener('change', ()=>{
+  const key = paletteSelect.value;
+  if (key === 'custom') return;
+  paints = PALETTES[key].map(p=>({ hex:p.hex, parts:1, name:p.name }));
+  renderPaintRows(); computeMix();
+});
+
+function currentMix(){
+  if (!paints.length) return null;
+  return mixPaintsRgb(paints.map(p=>p.hex), paints.map(p=>p.parts));
+}
+
 function computeMix(){
-  const hexes = paints.map(p=>p.hex);
-  const weights = paints.map(p=>p.parts);
-  const mixed = mixPaintsRgb(hexes, weights);
+  const swatch = document.getElementById('mixSwatch');
+  const hexEl = document.getElementById('mixHex');
+  const rgbEl = document.getElementById('mixRgb');
+  const mixed = currentMix();
+  if (!mixed){
+    swatch.style.background = 'var(--line)';
+    hexEl.textContent = '—';
+    rgbEl.textContent = 'Add at least one paint';
+    return;
+  }
   const hex = rgbToHex(mixed);
-  document.getElementById('mixSwatch').style.background = hex;
-  document.getElementById('mixHex').textContent = hex.toUpperCase();
-  document.getElementById('mixRgb').textContent = `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
+  swatch.style.background = hex;
+  hexEl.textContent = hex.toUpperCase();
+  rgbEl.textContent = `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
 }
 
 document.getElementById('mixCopyBtn').addEventListener('click', async ()=>{
   const hex = document.getElementById('mixHex').textContent;
+  if (hex === '—') return;
   try { await navigator.clipboard.writeText(hex); } catch(e) {}
   const btn = document.getElementById('mixCopyBtn');
   const old = btn.textContent;
@@ -773,6 +918,68 @@ document.getElementById('mixCopyBtn').addEventListener('click', async ()=>{
 
 renderPaintRows();
 computeMix();
+
+/* ---------- target colour: practice vs solve ---------- */
+const targetColorPicker = document.getElementById('targetColorPicker');
+const targetHexField = document.getElementById('targetHexField');
+const targetBlob = document.getElementById('targetBlob');
+const targetStatus = document.getElementById('targetStatus');
+let targetHex = targetHexField.value;
+
+function matchPct(distance){
+  return clamp(Math.round(100 - distance*1.1), 0, 100);
+}
+
+function setTargetHex(hex){
+  targetHex = hex.toUpperCase();
+  targetColorPicker.value = targetHex;
+  targetHexField.value = targetHex;
+  targetBlob.style.background = targetHex;
+  targetStatus.textContent = '';
+}
+targetColorPicker.addEventListener('input', e=> setTargetHex(e.target.value));
+targetHexField.addEventListener('focus', e=>e.target.select());
+targetHexField.addEventListener('change', e=>{
+  let v = e.target.value.trim();
+  if (!v.startsWith('#')) v = '#'+v;
+  if (/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(v)) setTargetHex(v);
+});
+document.getElementById('targetRandomBtn').addEventListener('click', ()=>{
+  const rnd = ()=>Math.floor(Math.random()*256);
+  setTargetHex(rgbToHex([rnd(),rnd(),rnd()]));
+});
+
+document.querySelectorAll('#targetModeTabs .mode-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#targetModeTabs .mode-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const mode = btn.dataset.mode;
+    document.getElementById('practiceArea').style.display = mode==='practice' ? 'block' : 'none';
+    document.getElementById('solveArea').style.display = mode==='solve' ? 'block' : 'none';
+    targetStatus.textContent = '';
+  });
+});
+
+document.getElementById('checkMixBtn').addEventListener('click', ()=>{
+  const mixed = currentMix();
+  if (!mixed){ targetStatus.textContent = 'Add at least one paint to your mix first.'; return; }
+  const distance = labDist(rgbToLab(mixed), rgbToLab(hexToRgb(targetHex)));
+  const pct = matchPct(distance);
+  let verdict;
+  if (pct>=95) verdict = "Excellent — that's essentially a match.";
+  else if (pct>=85) verdict = 'Very close — a trained eye might spot a difference.';
+  else if (pct>=65) verdict = 'In the right family, but adjust the ratio.';
+  else verdict = 'Off — try different paints or parts.';
+  targetStatus.textContent = `Match: ${pct}%. ${verdict}`;
+});
+
+document.getElementById('solveMixBtn').addEventListener('click', ()=>{
+  if (!paints.length){ targetStatus.textContent = 'Add at least one paint (or pick a palette) first.'; return; }
+  const result = solveMixForTarget(paints.map(p=>p.hex), targetHex);
+  paints.forEach((p,i)=> p.parts = result.weights[i]);
+  renderPaintRows(); computeMix();
+  targetStatus.textContent = `Recipe applied — about ${matchPct(result.distance)}% match to the target. Fine-tune the parts if you like.`;
+});
 
 /* ============================================================
    PALETTE TAB
