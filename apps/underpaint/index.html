@@ -404,6 +404,7 @@
   .status-line{
     font-size:13px; color:var(--ink-soft); margin-top:10px; min-height:16px;
   }
+  .status-line.match{ color:#2E7D4F; font-weight:600; }
   .svg-holder{
     margin-top:14px; text-align:center;
     background:
@@ -1041,6 +1042,7 @@ function computeMix(){
     swatch.title = '';
     nameEl.textContent = '—';
     rgbEl.textContent = 'Add at least one paint';
+    autoCheckMatch(null);
     return;
   }
   const hex = rgbToHex(mixed);
@@ -1049,6 +1051,31 @@ function computeMix(){
   swatch.title = hex.toUpperCase();
   nameEl.textContent = nearestColorName(hex);
   rgbEl.textContent = `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
+  autoCheckMatch(hex);
+}
+
+/* Auto-surfaces a match banner as soon as the live mix crosses 95% against
+   the target, without waiting for "Check my mix". Guarded by
+   targetTrackingReady since computeMix() runs once before the target
+   controls (below) exist. */
+let targetTrackingReady = false;
+let autoMatchShown = false;
+function autoCheckMatch(mixHex){
+  if (!targetTrackingReady) return;
+  if (!mixHex){
+    if (autoMatchShown){ targetStatus.textContent = ''; targetStatus.classList.remove('match'); autoMatchShown = false; }
+    return;
+  }
+  const pct = matchPct(labDist(rgbToLab(hexToRgb(mixHex)), rgbToLab(hexToRgb(targetHex))));
+  if (pct>=95){
+    targetStatus.textContent = `✓ Match — ${pct}% to target.`;
+    targetStatus.classList.add('match');
+    autoMatchShown = true;
+  } else if (autoMatchShown){
+    targetStatus.textContent = '';
+    targetStatus.classList.remove('match');
+    autoMatchShown = false;
+  }
 }
 
 document.getElementById('mixCopyBtn').addEventListener('click', async ()=>{
@@ -1075,6 +1102,13 @@ function matchPct(distance){
   return clamp(Math.round(100 - distance*1.1), 0, 100);
 }
 
+function matchVerdict(pct){
+  if (pct>=95) return "Excellent — that's essentially a match.";
+  if (pct>=85) return 'Very close — a trained eye might spot a difference.';
+  if (pct>=65) return 'In the right family, but adjust the ratio.';
+  return 'Off — try different paints or parts.';
+}
+
 function setTargetHex(hex){
   targetHex = hex.toUpperCase();
   targetColorPicker.value = targetHex;
@@ -1082,8 +1116,13 @@ function setTargetHex(hex){
   targetSwatch.parentElement.title = 'Pick a target colour to aim for (' + targetHex + ')';
   targetNameEl.textContent = nearestColorName(targetHex);
   targetStatus.textContent = '';
+  targetStatus.classList.remove('match');
+  autoMatchShown = false;
+  autoCheckMatch(lastMixHex);
 }
 setTargetHex(targetHex);
+targetTrackingReady = true;
+autoCheckMatch(lastMixHex);
 targetColorPicker.addEventListener('input', e=> setTargetHex(e.target.value));
 document.getElementById('targetRandomBtn').addEventListener('click', ()=>{
   const rnd = ()=>Math.floor(Math.random()*256);
@@ -1098,6 +1137,9 @@ document.querySelectorAll('#targetModeTabs .mode-btn').forEach(btn=>{
     document.getElementById('practiceArea').style.display = mode==='practice' ? 'block' : 'none';
     document.getElementById('solveArea').style.display = mode==='solve' ? 'block' : 'none';
     targetStatus.textContent = '';
+    targetStatus.classList.remove('match');
+    autoMatchShown = false;
+    autoCheckMatch(lastMixHex);
   });
 });
 
@@ -1106,12 +1148,9 @@ document.getElementById('checkMixBtn').addEventListener('click', ()=>{
   if (!mixed){ targetStatus.textContent = 'Add at least one paint to your mix first.'; return; }
   const distance = labDist(rgbToLab(mixed), rgbToLab(hexToRgb(targetHex)));
   const pct = matchPct(distance);
-  let verdict;
-  if (pct>=95) verdict = "Excellent — that's essentially a match.";
-  else if (pct>=85) verdict = 'Very close — a trained eye might spot a difference.';
-  else if (pct>=65) verdict = 'In the right family, but adjust the ratio.';
-  else verdict = 'Off — try different paints or parts.';
-  targetStatus.textContent = `Match: ${pct}%. ${verdict}`;
+  targetStatus.textContent = `Match: ${pct}%. ${matchVerdict(pct)}`;
+  targetStatus.classList.toggle('match', pct>=95);
+  autoMatchShown = pct>=95;
 });
 
 document.getElementById('solveMixBtn').addEventListener('click', ()=>{
@@ -1119,7 +1158,10 @@ document.getElementById('solveMixBtn').addEventListener('click', ()=>{
   const result = solveMixForTarget(paints.map(p=>p.hex), targetHex);
   paints.forEach((p,i)=> p.parts = result.weights[i]);
   renderPaintRows(); computeMix();
-  targetStatus.textContent = `Recipe applied — about ${matchPct(result.distance)}% match to the target. Fine-tune the parts if you like.`;
+  const pct = matchPct(result.distance);
+  targetStatus.textContent = `Recipe applied — about ${pct}% match to the target. Fine-tune the parts if you like.`;
+  targetStatus.classList.toggle('match', pct>=95);
+  autoMatchShown = pct>=95;
 });
 
 /* ============================================================
