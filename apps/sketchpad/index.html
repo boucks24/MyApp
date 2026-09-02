@@ -85,6 +85,40 @@
   .icon-btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
   .icon-btn.danger{color:var(--danger); border-color:rgba(224,85,63,0.35);}
 
+  .saved-row{display:flex; align-items:center; gap:10px; margin:-2px 0 14px; flex-wrap:wrap;}
+  .saved-row.hidden{display:none;}
+  .saved-label{
+    font-size:11.5px; font-weight:800; color:var(--ink-soft);
+    text-transform:uppercase; letter-spacing:0.06em;
+  }
+
+  .camera-overlay{
+    position:fixed; inset:0; background:rgba(20,17,12,0.82); z-index:50;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .camera-overlay.hidden{display:none;}
+  .camera-panel{
+    background:var(--panel); border-radius:16px; padding:16px;
+    width:100%; max-width:420px; display:flex; flex-direction:column; gap:12px;
+  }
+  .camera-video-wrap{
+    position:relative; width:100%; aspect-ratio:4/3; border-radius:12px; overflow:hidden;
+    background:#000;
+  }
+  .camera-video-wrap video{width:100%; height:100%; object-fit:cover; display:block;}
+  .camera-crosshair{
+    position:absolute; top:50%; left:50%; width:34px; height:34px; margin:-17px 0 0 -17px;
+    border:2px solid #fff; border-radius:50%; box-shadow:0 0 0 1px rgba(0,0,0,0.4); pointer-events:none;
+  }
+  .camera-preview-row{display:flex; align-items:center; gap:10px;}
+  .camera-swatch{
+    width:36px; height:36px; border-radius:50%; border:2px solid var(--line); flex:0 0 auto;
+  }
+  .camera-hex{font-family:var(--font-body); font-weight:700; font-size:15px; color:var(--ink);}
+  .camera-status{font-size:12.5px; color:var(--ink-soft); line-height:1.5; min-height:18px;}
+  .camera-actions{display:flex; gap:10px;}
+  .camera-actions .icon-btn{flex:1;}
+
   .canvas-wrap{
     background:var(--panel); border:1px solid var(--line); border-radius:16px;
     padding:8px; box-shadow:0 1px 2px rgba(43,38,32,0.04), 0 8px 24px rgba(43,38,32,0.06);
@@ -116,6 +150,7 @@
     <label class="swatch custom-swatch" title="Custom colour">
       <input type="color" id="colorPicker" value="#2B2620" aria-label="Custom colour">
     </label>
+    <button class="icon-btn" id="cameraBtn" title="Pick a colour with your camera">Camera</button>
 
     <div class="divider"></div>
 
@@ -142,11 +177,34 @@
     </div>
   </div>
 
+  <div class="saved-row hidden" id="savedRow">
+    <span class="saved-label">Saved</span>
+    <div class="tool-group" id="savedColorGroup"></div>
+  </div>
+
   <div class="canvas-wrap">
     <canvas id="board"></canvas>
   </div>
 
-  <p class="hint">Draw with a finger, stylus, or mouse. Undo/redo step through your last strokes; Clear wipes the page. Nothing leaves your device — there's no upload, just this browser's local storage.</p>
+  <p class="hint">Draw with a finger, stylus, or mouse. Undo/redo step through your last strokes; Clear wipes the page. The camera button samples a colour from whatever it's pointed at instead of typing in a hex code. Nothing leaves your device — there's no upload, just this browser's local storage and camera.</p>
+</div>
+
+<div class="camera-overlay hidden" id="cameraOverlay">
+  <div class="camera-panel">
+    <div class="camera-video-wrap">
+      <video id="cameraVideo" autoplay playsinline muted></video>
+      <div class="camera-crosshair"></div>
+    </div>
+    <div class="camera-preview-row">
+      <div class="camera-swatch" id="cameraSwatch"></div>
+      <div class="camera-hex" id="cameraHex">—</div>
+    </div>
+    <div class="camera-status" id="cameraStatus"></div>
+    <div class="camera-actions">
+      <button class="icon-btn" id="cameraCancelBtn">Cancel</button>
+      <button class="icon-btn primary" id="cameraUseBtn" disabled>Use this colour</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -156,12 +214,17 @@
   const PAPER = '#FFFFFF'; // the canvas's own drawing surface, independent of the page's --paper
   const PALETTE = ['#2B2620', '#E0553F', '#F2A93E', '#F2D63E', '#4FA65B', '#3E6FF2', '#8B5FE0', '#8A5A3C', '#FFFFFF'];
   const STORAGE_KEY = 'sketchpad.drawing';
+  const SAVED_COLORS_KEY = 'sketchpad.savedColors';
   const MAX_HISTORY = 25;
+  const MAX_SAVED_COLORS = 24;
 
   const canvas = document.getElementById('board');
   const ctx = canvas.getContext('2d');
   const colorGroup = document.getElementById('colorGroup');
   const colorPicker = document.getElementById('colorPicker');
+  const cameraBtn = document.getElementById('cameraBtn');
+  const savedRow = document.getElementById('savedRow');
+  const savedColorGroup = document.getElementById('savedColorGroup');
   const brushBtn = document.getElementById('brushBtn');
   const eraserBtn = document.getElementById('eraserBtn');
   const sizeSlider = document.getElementById('sizeSlider');
@@ -172,6 +235,14 @@
   const clearBtn = document.getElementById('clearBtn');
   const saveBtn = document.getElementById('saveBtn');
 
+  const cameraOverlay = document.getElementById('cameraOverlay');
+  const cameraVideo = document.getElementById('cameraVideo');
+  const cameraSwatch = document.getElementById('cameraSwatch');
+  const cameraHex = document.getElementById('cameraHex');
+  const cameraStatus = document.getElementById('cameraStatus');
+  const cameraCancelBtn = document.getElementById('cameraCancelBtn');
+  const cameraUseBtn = document.getElementById('cameraUseBtn');
+
   let color = PALETTE[0];
   let tool = 'brush'; // 'brush' | 'eraser'
   let brushSize = +sizeSlider.value;
@@ -179,6 +250,10 @@
   let lastX = 0, lastY = 0;
   let undoStack = [];
   let redoStack = [];
+  let savedColors = loadSavedColors();
+  let cameraStream = null;
+  let cameraRAF = null;
+  let liveCameraHex = null;
 
   /* ---------------- canvas sizing ---------------- */
   function sizeCanvas(){
@@ -318,30 +393,67 @@
   canvas.addEventListener('pointercancel', endStroke);
   canvas.addEventListener('pointerleave', () => { if (drawing) endStroke(); });
 
-  /* ---------------- toolbar ---------------- */
+  /* ---------------- colour selection ---------------- */
+  // `save: true` is for colours the user actually picked/created (custom
+  // picker, camera) — clicking an existing preset or already-saved swatch
+  // just selects it, it doesn't re-add or reorder the saved list.
+  function setColor(hex, opts){
+    color = hex.toUpperCase();
+    colorPicker.value = color;
+    setTool('brush');
+    if (opts && opts.save) addSavedColor(color);
+    renderPalette();
+    renderSavedColors();
+  }
+
+  function swatchButton(hex, onClick){
+    const btn = document.createElement('button');
+    btn.className = 'swatch' + (hex.toUpperCase() === color ? ' active' : '');
+    btn.style.background = hex;
+    btn.style.borderColor = hex.toUpperCase() === '#FFFFFF' ? 'var(--line)' : 'rgba(0,0,0,0.08)';
+    btn.setAttribute('aria-label', hex);
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
   function renderPalette(){
     colorGroup.innerHTML = '';
-    PALETTE.forEach(hex => {
-      const btn = document.createElement('button');
-      btn.className = 'swatch' + (hex === color ? ' active' : '');
-      btn.style.background = hex;
-      btn.style.borderColor = hex.toUpperCase() === '#FFFFFF' ? 'var(--line)' : 'rgba(0,0,0,0.08)';
-      btn.setAttribute('aria-label', hex);
-      btn.addEventListener('click', () => {
-        color = hex;
-        colorPicker.value = hex;
-        setTool('brush');
-        renderPalette();
-      });
-      colorGroup.appendChild(btn);
-    });
+    PALETTE.forEach(hex => colorGroup.appendChild(swatchButton(hex, () => setColor(hex))));
+  }
+
+  /* ---------------- saved colours (localStorage) ---------------- */
+  function loadSavedColors(){
+    try {
+      const raw = JSON.parse(localStorage.getItem(SAVED_COLORS_KEY) || '[]');
+      return Array.isArray(raw) ? raw.filter(c => typeof c === 'string') : [];
+    } catch(e){ return []; }
+  }
+
+  function persistSavedColors(){
+    try { localStorage.setItem(SAVED_COLORS_KEY, JSON.stringify(savedColors)); } catch(e){}
+  }
+
+  function addSavedColor(hex){
+    hex = hex.toUpperCase();
+    savedColors = savedColors.filter(c => c !== hex);
+    savedColors.unshift(hex);
+    if (savedColors.length > MAX_SAVED_COLORS) savedColors.length = MAX_SAVED_COLORS;
+    persistSavedColors();
+  }
+
+  function renderSavedColors(){
+    savedRow.classList.toggle('hidden', savedColors.length === 0);
+    savedColorGroup.innerHTML = '';
+    savedColors.forEach(hex => savedColorGroup.appendChild(swatchButton(hex, () => setColor(hex))));
   }
 
   colorPicker.addEventListener('input', () => {
-    color = colorPicker.value;
+    // live preview only while the wheel is being dragged — not saved yet
+    color = colorPicker.value.toUpperCase();
     setTool('brush');
     renderPalette();
   });
+  colorPicker.addEventListener('change', () => setColor(colorPicker.value, { save: true }));
 
   function setTool(next){
     tool = next;
@@ -357,6 +469,71 @@
     sizeDot.style.width = sizeDot.style.height = Math.min(28, 6 + brushSize) + 'px';
   });
   sizeDot.style.width = sizeDot.style.height = Math.min(28, 6 + brushSize) + 'px';
+
+  /* ---------------- camera colour picker ---------------- */
+  const sampleCanvas = document.createElement('canvas');
+  const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+
+  function rgbToHex(r, g, b){
+    return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+  }
+
+  async function openCamera(){
+    cameraOverlay.classList.remove('hidden');
+    cameraUseBtn.disabled = true;
+    liveCameraHex = null;
+    cameraSwatch.style.background = 'transparent';
+    cameraHex.textContent = '—';
+    cameraStatus.textContent = 'Starting camera…';
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      cameraVideo.srcObject = cameraStream;
+      await cameraVideo.play();
+      cameraStatus.textContent = 'Point the circle at a colour, then tap "Use this colour".';
+      sampleLoop();
+    } catch(e){
+      cameraStatus.textContent = "Couldn't access the camera" + (e && e.message ? ': ' + e.message : '.') + ' Check your browser/device permissions and try again.';
+    }
+  }
+
+  function sampleLoop(){
+    if (!cameraStream) return;
+    if (cameraVideo.videoWidth){
+      sampleCanvas.width = cameraVideo.videoWidth;
+      sampleCanvas.height = cameraVideo.videoHeight;
+      sampleCtx.drawImage(cameraVideo, 0, 0);
+      // average a small patch at the centre (under the crosshair) rather
+      // than a single pixel, so sensor noise doesn't jitter the reading
+      const patch = 16;
+      const cx = Math.floor(sampleCanvas.width / 2 - patch / 2);
+      const cy = Math.floor(sampleCanvas.height / 2 - patch / 2);
+      const data = sampleCtx.getImageData(Math.max(0, cx), Math.max(0, cy), patch, patch).data;
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let i = 0; i < data.length; i += 4){ r += data[i]; g += data[i+1]; b += data[i+2]; n++; }
+      liveCameraHex = rgbToHex(Math.round(r/n), Math.round(g/n), Math.round(b/n));
+      cameraSwatch.style.background = liveCameraHex;
+      cameraHex.textContent = liveCameraHex;
+      cameraUseBtn.disabled = false;
+    }
+    cameraRAF = requestAnimationFrame(sampleLoop);
+  }
+
+  function closeCamera(){
+    cameraOverlay.classList.add('hidden');
+    if (cameraRAF) cancelAnimationFrame(cameraRAF);
+    cameraRAF = null;
+    if (cameraStream){ cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+    cameraVideo.srcObject = null;
+  }
+
+  cameraBtn.addEventListener('click', openCamera);
+  cameraCancelBtn.addEventListener('click', closeCamera);
+  cameraUseBtn.addEventListener('click', () => {
+    if (!liveCameraHex) return;
+    setColor(liveCameraHex, { save: true });
+    closeCamera();
+  });
+  window.addEventListener('beforeunload', closeCamera);
 
   undoBtn.addEventListener('click', undo);
   redoBtn.addEventListener('click', redo);
@@ -395,6 +572,7 @@
   });
 
   renderPalette();
+  renderSavedColors();
   init();
 })();
 </script>
