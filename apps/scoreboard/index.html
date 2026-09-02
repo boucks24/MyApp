@@ -73,6 +73,11 @@
   }
   .refresh-btn:active{ transform:scale(0.97); }
   .refresh-btn.spinning{ opacity:0.6; pointer-events:none; }
+  .sort-select{
+    font-family:var(--font-body); font-weight:600; font-size:13px;
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+    padding:9px 10px; border-radius:8px; cursor:pointer;
+  }
 
   .chip-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; }
   .chip{
@@ -119,6 +124,7 @@
   .p-name{ font-size:14px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .p-score{ font-family:var(--font-display); font-size:18px; letter-spacing:0.02em; min-width:22px; text-align:right; }
   .p-sets{ font-size:11px; color:var(--ink-soft); margin-left:6px; }
+  .p-rank{ font-size:11px; color:var(--accent); font-weight:700; }
   .match-venue{ font-size:11px; color:var(--ink-soft); margin-top:8px; border-top:1px solid var(--line); padding-top:6px; }
 
   .note{ font-size:11.5px; color:var(--ink-soft); line-height:1.5; margin-top:28px; }
@@ -135,6 +141,10 @@
     </div>
     <div class="refresh-row">
       <span class="refresh-status" id="refreshStatus">Loading…</span>
+      <select class="sort-select" id="sortModeSelect" aria-label="Sort matches by">
+        <option value="date">Sort: Date &amp; time</option>
+        <option value="rank">Sort: Ranking</option>
+      </select>
       <button class="refresh-btn" id="refreshBtn">Refresh</button>
     </div>
   </header>
@@ -503,7 +513,7 @@ function renderMatchCard(ev){
   const timeText = ev.state === 'pre' ? formatStart(ev.date) : escapeHtml(ev.statusText);
   const participants = ev.competitors.map(c => `
     <div class="participant ${c.winner ? 'winner' : ''}">
-      <span class="p-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+      <span class="p-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}${c.curatedRank != null ? ` <span class="p-rank">#${c.curatedRank}</span>` : ''}</span>
       <span>
         <span class="p-score">${escapeHtml(c.score)}</span>
         ${c.sets.length ? `<span class="p-sets">${c.sets.map(escapeHtml).join(' ')}</span>` : ''}
@@ -532,11 +542,23 @@ function isCurrentAndDetermined(ev){
   return true;
 }
 
-function sortEvents(events){
-  const rank = { in:0, pre:1, post:2 };
+// Best (lowest) curatedRank among a match's competitors; Infinity for
+// non-tennis events or matches with no ranked player, so they sort last
+// under rank mode rather than before genuinely-ranked matches.
+function bestRank(ev){
+  const ranks = ev.competitors.map(c => c.curatedRank).filter(r => r != null);
+  return ranks.length ? Math.min(...ranks) : Infinity;
+}
+
+function sortEvents(events, mode){
+  const stateRank = { in:0, pre:1, post:2 };
   return events.slice().sort((a,b) => {
-    const r = rank[a.state] - rank[b.state];
+    const r = stateRank[a.state] - stateRank[b.state];
     if (r !== 0) return r;
+    if (mode === 'rank'){
+      const br = bestRank(a) - bestRank(b);
+      if (br !== 0) return br;
+    }
     const da = new Date(a.date).getTime(), db = new Date(b.date).getTime();
     return a.state === 'post' ? db - da : da - db;
   });
@@ -591,6 +613,37 @@ function applyVisibility(){
   });
 }
 
+const SORT_MODE_KEY = 'scoreboard.sortMode';
+let sortMode = (localStorage.getItem(SORT_MODE_KEY) === 'rank') ? 'rank' : 'date';
+const sortModeSelect = document.getElementById('sortModeSelect');
+sortModeSelect.value = sortMode;
+
+// Last successfully-fetched (and already recency/TBD-filtered) events per
+// source, so changing sort mode re-renders instantly without refetching.
+const lastEvents = {};
+
+function renderFeedBody(source, events, note){
+  const section = ensureSectionEl(source);
+  const body = section.querySelector(`#feed-${source.id}-body`);
+  const countEl = section.querySelector(`#feed-${source.id}-count`);
+  const noteEl = section.querySelector(`#feed-${source.id}-note`);
+  const sorted = sortEvents(events, sortMode);
+  countEl.textContent = sorted.length ? `${sorted.length} match${sorted.length===1?'':'es'}` : '';
+  body.innerHTML = sorted.length
+    ? `<div class="match-grid">${sorted.map(renderMatchCard).join('')}</div>`
+    : `<div class="feed-empty">Nothing live or upcoming right now.</div>`;
+  noteEl.hidden = !note;
+  noteEl.textContent = note || '';
+}
+
+sortModeSelect.addEventListener('change', () => {
+  sortMode = sortModeSelect.value;
+  try { localStorage.setItem(SORT_MODE_KEY, sortMode); } catch(e){}
+  SOURCES.forEach(source => {
+    if (lastEvents[source.id]) renderFeedBody(source, lastEvents[source.id].events, lastEvents[source.id].note);
+  });
+});
+
 async function loadAll(){
   const btn = document.getElementById('refreshBtn');
   const status = document.getElementById('refreshStatus');
@@ -599,19 +652,16 @@ async function loadAll(){
 
   await Promise.all(SOURCES.map(async source => {
     const section = ensureSectionEl(source);
-    const body = section.querySelector(`#feed-${source.id}-body`);
     const countEl = section.querySelector(`#feed-${source.id}-count`);
     const noteEl = section.querySelector(`#feed-${source.id}-note`);
+    const body = section.querySelector(`#feed-${source.id}-body`);
     try {
       const result = await (source.fetch ? source.fetch(source) : fetchSource(source));
-      const events = sortEvents(result.events.filter(isCurrentAndDetermined));
-      countEl.textContent = events.length ? `${events.length} match${events.length===1?'':'es'}` : '';
-      body.innerHTML = events.length
-        ? `<div class="match-grid">${events.map(renderMatchCard).join('')}</div>`
-        : `<div class="feed-empty">Nothing live or upcoming right now.</div>`;
-      noteEl.hidden = !result.note;
-      noteEl.textContent = result.note || '';
+      const events = result.events.filter(isCurrentAndDetermined);
+      lastEvents[source.id] = { events, note: result.note };
+      renderFeedBody(source, events, result.note);
     } catch (err) {
+      delete lastEvents[source.id];
       countEl.textContent = '';
       noteEl.hidden = true;
       body.innerHTML = `<div class="feed-error">Couldn't load ${escapeHtml(source.label)} (${escapeHtml(err.message)}).</div>`;
