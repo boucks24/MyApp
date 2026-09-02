@@ -316,6 +316,12 @@ async function fetchTennis(source){
   }
   const tierEvents = tierRaw.map(normalizeEvent).filter(Boolean);
   console.debug(`[scoreboard:${source.id}] after tier filter:`, tierEvents.length, tierNote ? '(failed open)' : '');
+  if (tierRaw.length && !tierEvents.length){
+    // Every raw event failed to normalize (no competitions[0]) — that's a
+    // shape mismatch worth seeing, not a real empty schedule. Use warn (not
+    // debug) so it shows up without changing devtools' log level.
+    console.warn(`[scoreboard:${source.id}] ${tierRaw.length} raw event(s) but none normalized — sample event:`, tierRaw[0]);
+  }
 
   const rankingsMap = await fetchTennisRankings(source.tour);
   if (!rankingsMap.size){
