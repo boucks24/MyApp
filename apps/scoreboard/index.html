@@ -225,7 +225,11 @@ function isAustralianEntry(raw){
 
 async function fetchJsonSafe(url){
   try {
-    const res = await fetch(url, { cache:'no-store' });
+    // ESPN's own API sometimes hands back $ref follow-up links as plain
+    // http:// even though the endpoints serve https fine — on an https page
+    // (e.g. GitHub Pages) the browser blocks that as mixed content, so force it.
+    const safeUrl = typeof url === 'string' ? url.replace(/^http:\/\//i, 'https://') : url;
+    const res = await fetch(safeUrl, { cache:'no-store' });
     if (!res.ok) return null;
     return await res.json();
   } catch (e) { return null; }
