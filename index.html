@@ -33,15 +33,20 @@
   .hero .mark span.dot{color:var(--iron);}
   .hero .tag{color:var(--muted);font-size:14px;margin-top:8px;}
 
+  .refresh-wrap{flex:0 0 auto;margin-top:4px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
   .refresh-btn{
-    flex:0 0 auto;margin-top:4px;
     display:flex;align-items:center;gap:6px;
     background:var(--panel);border:1px solid var(--line);color:var(--chalk);
     font-family:var(--font-body);font-weight:600;font-size:12.5px;
     padding:9px 13px;cursor:pointer;touch-action:manipulation;
+    transition:transform .12s ease, opacity .15s ease;
   }
-  .refresh-btn:active{background:var(--line);}
-  .refresh-btn .ic{font-size:14px;line-height:1;color:var(--iron);}
+  .refresh-btn:active{background:var(--line);transform:scale(0.95);}
+  .refresh-btn.spinning{opacity:0.65;pointer-events:none;}
+  .refresh-btn .ic{font-size:14px;line-height:1;color:var(--iron);display:inline-block;}
+  .refresh-btn.spinning .ic{animation:refresh-spin .6s linear infinite;}
+  @keyframes refresh-spin{ to{ transform:rotate(360deg); } }
+  .refresh-status{font-size:11px;color:var(--muted);min-height:13px;}
 
   .menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:10px 20px 30px;}
   .tile{
@@ -67,9 +72,12 @@
       <div class="mark">APP<span class="dot">.</span>SHELF</div>
       <div class="tag">Your own tools, one tap away.</div>
     </div>
-    <button class="refresh-btn" id="refreshBtn" aria-label="Refresh page">
-      <span class="ic">&#x27F3;</span>Refresh
-    </button>
+    <div class="refresh-wrap">
+      <button class="refresh-btn" id="refreshBtn" aria-label="Refresh page">
+        <span class="ic">&#x27F3;</span>Refresh
+      </button>
+      <span class="refresh-status" id="refreshStatus"></span>
+    </div>
   </div>
   <div class="menu-grid">
     <a class="tile" href="apps/531-bbb/">
@@ -108,8 +116,17 @@
   // A plain location.reload() can still be served from the cached copy iOS
   // keeps for a home-screen web app — navigating to a new URL (a fresh query
   // string) forces an actual network fetch instead.
-  document.getElementById('refreshBtn').addEventListener('click', () => {
-    location.href = location.pathname + '?t=' + Date.now();
+  const refreshBtn = document.getElementById('refreshBtn');
+  const refreshStatus = document.getElementById('refreshStatus');
+  refreshBtn.addEventListener('click', () => {
+    refreshBtn.classList.add('spinning');
+    refreshStatus.textContent = 'Refreshing…';
+    // Give the browser a frame to paint the spinning/status state before the
+    // navigation below tears the page down — otherwise a fast reload can
+    // replace the page before any of it is ever shown.
+    setTimeout(() => {
+      location.href = location.pathname + '?t=' + Date.now();
+    }, 60);
   });
 </script>
 </body>
