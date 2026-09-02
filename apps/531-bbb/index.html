@@ -182,19 +182,18 @@
   .plate-line{font-size:11.5px;color:var(--steel);margin-top:8px;font-weight:600;}
   .last-time{font-size:11px;color:var(--muted);margin-top:4px;font-style:italic;}
   .set-row input.reps{
-    width:64px;text-align:center;background:var(--panel-2);border:1px solid var(--line);
-    color:var(--chalk);padding:10px 6px;font-size:16px;font-family:var(--font-display);
+    width:56px;text-align:center;background:var(--panel-2);border:1px solid var(--line);
+    color:var(--chalk);padding:10px 4px;font-size:16px;font-family:var(--font-display);
   }
-  .set-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;}
-  .done-toggle{
-    display:flex;align-items:center;gap:6px;
-    font-size:11px;color:var(--muted);font-weight:600;letter-spacing:0.02em;
-    cursor:pointer;touch-action:manipulation;
+  .set-right{display:flex;flex-direction:row;align-items:center;gap:10px;flex-shrink:0;}
+  .done-tick{
+    width:38px;height:38px;border-radius:50%;flex-shrink:0;
+    border:2px solid var(--line);background:var(--panel-2);color:var(--muted);
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;font-weight:700;line-height:1;cursor:pointer;touch-action:manipulation;
+    transition:background-color .15s,border-color .15s,color .15s;
   }
-  .done-toggle input[type=checkbox]{
-    width:22px;height:22px;margin:0;accent-color:var(--good);cursor:pointer;
-  }
-  .done-toggle:has(input:checked){color:var(--good);}
+  .done-tick.done{background:rgba(95,168,90,0.18);border-color:var(--good);color:var(--good);}
 
   .rest-timer{
     position:fixed;left:0;right:0;bottom:0;
@@ -536,6 +535,8 @@
   let viewingCycle = state.cycle; // which cycle the Home progress grid is paged to
   let pendingPickDay = null; // {dayIndex, week} while the "choose a different day" modal is open
   let pendingCycleTMEdit = null; // {squat,bench,deadlift,press} while the TM-edit modal is open
+  let pendingStartCycleConfirm = null; // true while the "start new cycle" confirmation modal is open
+  let pendingDiscardConfirm = null; // route to go to while the "discard workout" confirmation modal is open
 
   function go(r){
     route = r; bbbDone = 0; repsInput = {}; sessionWeights = null;
@@ -616,6 +617,8 @@
     if (editingHistoryIdx !== null) app.insertAdjacentHTML('beforeend', renderEditHistoryModal());
     if (pendingPickDay) app.insertAdjacentHTML('beforeend', renderPickDayModal());
     if (pendingCycleTMEdit) app.insertAdjacentHTML('beforeend', renderCycleTMEditModal());
+    if (pendingStartCycleConfirm) app.insertAdjacentHTML('beforeend', renderStartCycleConfirmModal());
+    if (pendingDiscardConfirm) app.insertAdjacentHTML('beforeend', renderDiscardConfirmModal());
     bindEvents();
   }
 
@@ -635,9 +638,9 @@
     `;
   }
 
-  function topbar(title, sub, backHref, backRoute){
+  function topbar(title, sub, backHref, backRoute, confirmDiscard){
     const back = backRoute
-      ? `<div class="back" data-action="go" data-route="${backRoute}">‹</div>`
+      ? `<div class="back" data-action="${confirmDiscard ? 'backDiscardConfirm' : 'go'}" data-route="${backRoute}">‹</div>`
       : (backHref ? `<a class="back" href="${backHref}">‹</a>` : '');
     return `
       <header class="topbar">
@@ -768,7 +771,6 @@
           <div class="cp-row"><div class="cp-wk"></div>${header}</div>
           ${rows}
         </div>
-        ${isCurrentCycle ? `<button class="btn secondary" style="margin-top:14px;" data-action="startNewCycle">Start new cycle</button>` : ''}
       </div>
     `;
   }
@@ -797,6 +799,8 @@
         </div>
         <button class="btn" data-action="startWorkout">Start workout</button>
         <button class="btn ghost" data-action="pickDay">Choose a different day</button>
+
+        <button class="btn secondary" style="margin-top:22px;" data-action="startNewCycle">Start new cycle</button>
       </main>
       ${tabs('531home')}
     `;
@@ -825,10 +829,7 @@
             <div class="plate-line">${plateLine} per side</div>
           </div>
           <div class="set-right">
-            <label class="done-toggle">
-              <input type="checkbox" class="set-done" data-kind="warmup" data-idx="${i}" ${warmupDone[i] ? 'checked' : ''}>
-              <span>Done</span>
-            </label>
+            <button type="button" class="done-tick ${warmupDone[i] ? 'done' : ''}" data-action="toggleSetDone" data-kind="warmup" data-idx="${i}" aria-label="Mark warm-up set ${i+1} done">&#10003;</button>
           </div>
         </div>
       `;
@@ -856,10 +857,7 @@
           </div>
           <div class="set-right">
             ${s.amrap ? `<input class="reps" type="number" inputmode="numeric" placeholder="reps" id="amrap-${i}" value="${repsInput[i] ?? ''}">` : ''}
-            <label class="done-toggle">
-              <input type="checkbox" class="set-done" data-kind="main" data-idx="${i}" ${mainDone[i] ? 'checked' : ''}>
-              <span>Done</span>
-            </label>
+            <button type="button" class="done-tick ${mainDone[i] ? 'done' : ''}" data-action="toggleSetDone" data-kind="main" data-idx="${i}" aria-label="Mark main set ${i+1} done">&#10003;</button>
           </div>
         </div>
       `;
@@ -875,7 +873,7 @@
     }
 
     return `
-      ${topbar('Today', 'Week ' + state.week + ' · ' + w.scheme.label, null, '531home')}
+      ${topbar('Today', 'Week ' + state.week + ' · ' + w.scheme.label, null, '531home', true)}
       <main>
         <div class="card">
           <div class="lift-head">
@@ -1185,6 +1183,36 @@
     `;
   }
 
+  function renderStartCycleConfirmModal(){
+    return `
+      <div class="modal-back">
+        <div class="modal">
+          <h2>Start a new cycle?</h2>
+          <p class="desc">This jumps straight to Cycle ${state.cycle + 1}, Week 1, Day 1 — any workouts not yet logged in cycle ${state.cycle} are skipped.</p>
+          <div class="btn-row">
+            <button class="btn secondary" data-action="cancelStartCycle">Cancel</button>
+            <button class="btn" data-action="confirmStartCycle">Start new cycle</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderDiscardConfirmModal(){
+    return `
+      <div class="modal-back">
+        <div class="modal">
+          <h2>Discard this workout?</h2>
+          <p class="desc">Leaving now won't save any progress on this session — sets marked done and any weight edits will be lost.</p>
+          <div class="btn-row">
+            <button class="btn secondary" data-action="cancelDiscardWorkout">Keep training</button>
+            <button class="btn danger" data-action="confirmDiscardWorkout">Discard</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   /* ---------------- actions ---------------- */
   function bindEvents(){
     document.querySelectorAll('[data-action]').forEach(el=>{
@@ -1202,23 +1230,6 @@
       });
     });
 
-    // Checking a set's Done box is what marks it complete — it also starts
-    // that set-type's rest countdown. Unchecking just clears the flag.
-    document.querySelectorAll('.set-done').forEach(el=>{
-      el.addEventListener('change', () => {
-        const kind = el.getAttribute('data-kind');
-        const idx = +el.getAttribute('data-idx');
-        const checked = el.checked;
-        if (kind === 'warmup'){
-          warmupDone[idx] = checked;
-          if (checked) startRest(REST_WARMUP);
-        } else if (kind === 'main'){
-          mainDone[idx] = checked;
-          if (checked) startRest(REST_MAIN);
-        }
-        render();
-      });
-    });
     const bbbWeightInput = document.getElementById('bbbWeightInput');
     if (bbbWeightInput){
       bbbWeightInput.addEventListener('change', () => {
@@ -1264,6 +1275,25 @@
     else if (action === 'cancelCycleTMEdit') { pendingCycleTMEdit = null; render(); }
     else if (action === 'saveCycleTMEdit') doSaveCycleTMEdit();
     else if (action === 'setHistoryLift') { historyLiftFilter = el.getAttribute('data-lift'); render(); }
+    else if (action === 'toggleSetDone') doToggleSetDone(el.getAttribute('data-kind'), parseInt(el.getAttribute('data-idx')));
+    else if (action === 'cancelStartCycle') { pendingStartCycleConfirm = null; render(); }
+    else if (action === 'confirmStartCycle') doConfirmStartNewCycle();
+    else if (action === 'backDiscardConfirm') { pendingDiscardConfirm = el.getAttribute('data-route'); render(); }
+    else if (action === 'cancelDiscardWorkout') { pendingDiscardConfirm = null; render(); }
+    else if (action === 'confirmDiscardWorkout') { const r = pendingDiscardConfirm; pendingDiscardConfirm = null; go(r); }
+  }
+
+  // Toggling a set's tick is what marks it complete — it also starts that
+  // set-type's rest countdown. Tapping it again just clears the flag.
+  function doToggleSetDone(kind, idx){
+    if (kind === 'warmup'){
+      warmupDone[idx] = !warmupDone[idx];
+      if (warmupDone[idx]) startRest(REST_WARMUP);
+    } else if (kind === 'main'){
+      mainDone[idx] = !mainDone[idx];
+      if (mainDone[idx]) startRest(REST_MAIN);
+    }
+    render();
   }
 
   // A done cell opens that workout for editing. An empty cell (current cycle
@@ -1410,7 +1440,12 @@
   }
 
   function doStartNewCycle(){
-    if (!confirm('Start a new cycle now? This jumps straight to Week 1, Day 1 — any weeks left in cycle ' + state.cycle + ' are skipped.')) return;
+    pendingStartCycleConfirm = true;
+    render();
+  }
+
+  function doConfirmStartNewCycle(){
+    pendingStartCycleConfirm = null;
     state.dayIndex = 0;
     state.week = 1;
     state.cycle++;
