@@ -95,6 +95,10 @@
     border:1px solid rgba(255,90,95,0.3); border-radius:8px; padding:9px 12px;
   }
   .feed-empty{ color:var(--ink-soft); font-size:13px; padding:6px 0; }
+  .feed-note{
+    font-size:11.5px; color:#D9A441; background:rgba(217,164,65,0.08);
+    border:1px solid rgba(217,164,65,0.3); border-radius:8px; padding:7px 10px; margin-bottom:8px;
+  }
 
   .match-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:10px; }
   .match-card{
@@ -127,7 +131,7 @@
   <header class="top">
     <div>
       <h1>Scoreboard</h1>
-      <div class="sub">Tennis 500+, AFL, NRL &amp; A-League — live and upcoming</div>
+      <div class="sub">Tennis Grand Slam &amp; 500+, AFL, rugby union, cricket — live and upcoming</div>
     </div>
     <div class="refresh-row">
       <span class="refresh-status" id="refreshStatus">Loading…</span>
@@ -139,13 +143,17 @@
   <div id="feeds"></div>
 
   <p class="note">
-    Scores come from ESPN's public scoreboard feeds, fetched directly from your browser (this page has no server of
-    its own). Those feeds are unofficial, undocumented, and can change or go down without notice — if a section stops
-    loading, that's ESPN's endpoint, not something saved on this device. Tennis is filtered client-side to ATP/WTA 500,
-    Masters/1000, and Grand Slam events by tournament name; that keyword list lives in <code>TENNIS_500PLUS_KEYWORDS</code>
-    near the top of the script and may need a touch-up each season as the tour calendar shifts. Cricket, rugby union and
-    other Australian representative fixtures aren't wired up yet — their ESPN endpoint codes weren't verifiable when this
-    was built; add a new entry to the <code>SOURCES</code> array once you've confirmed one.
+    Scores come from ESPN's public feeds, fetched directly from your browser (this page has no server of its own).
+    Those feeds are unofficial, undocumented, and can change or go down without notice — if a section stops loading,
+    that's ESPN's endpoint, not something saved on this device. Tennis is filtered client-side to Grand Slam, Masters/1000
+    and tour-500 events by tournament name (list: <code>TENNIS_500PLUS_KEYWORDS</code>) and then to matches with at least
+    one player ranked top 50 (top 100 if Australian) using ESPN's separate, even-less-documented rankings API
+    (<code>fetchTennisRankings()</code>) — if that ranking lookup fails, the section falls back to showing all 500+
+    matches unfiltered by rank and says so inline. Rugby union covers Super Rugby Pacific (Australian Super Rugby teams)
+    and the Rugby Championship (Wallabies internationals) by numeric ESPN league ID. Cricket uses a different,
+    cross-domain "personalised header" endpoint filtered to matches involving Australia — Big Bash/WBBL aren't
+    wired up, their league ID wasn't verifiable when this was built. Review each season and adjust
+    <code>SOURCES</code>/<code>TENNIS_500PLUS_KEYWORDS</code> as calendars and endpoints shift.
   </p>
 </div>
 
@@ -185,13 +193,152 @@ function matchesTennis500Plus(rawEvent){
   return TENNIS_500PLUS_KEYWORDS.some(kw => haystack.includes(kw));
 }
 
+/* ============================================================
+   TENNIS PLAYER-RANKING FILTER
+   Show a match only if at least one player is top-50 (world ranking),
+   or top-100 if Australian. ESPN's scoreboard feed doesn't carry
+   rankings, so this fetches ATP/WTA rankings separately from their
+   Core API v2 (a different, less-documented API surface than the
+   site.api.espn.com scoreboard). The exact rankings path isn't
+   confirmed, so several plausible URLs are tried in order; entries
+   may be inline or {$ref}-style pointers needing a follow-up fetch,
+   both are handled. If none of it works, the rank filter is skipped
+   for that tour (all 500+ matches shown) rather than hiding everyone.
+   ============================================================ */
+const RANK_TOP_CUTOFF = 50;
+const RANK_TOP_CUTOFF_AUS = 100;
+const RANKINGS_TTL_MS = 55000;
+const tennisRankingsCache = {}; // tour -> { ts, map }
+
+const DIACRITIC_MARKS_RE = /[̀-ͯ]/g;
+function normalizeName(name){
+  return String(name || '').toLowerCase().normalize('NFD').replace(DIACRITIC_MARKS_RE, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function isAustralianEntry(raw){
+  const haystack = JSON.stringify(raw).toLowerCase();
+  return haystack.includes('australia') || /"aus"/.test(haystack) || /\bcountry":"au\b/.test(haystack);
+}
+
+async function fetchJsonSafe(url){
+  try {
+    const res = await fetch(url, { cache:'no-store' });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) { return null; }
+}
+
+async function fetchTennisRankings(tour){
+  const cached = tennisRankingsCache[tour];
+  if (cached && (Date.now() - cached.ts) < RANKINGS_TTL_MS) return cached.map;
+
+  const year = new Date().getFullYear();
+  const candidateUrls = [
+    `https://sports.core.api.espn.com/v2/sports/tennis/leagues/${tour}/rankings?limit=110`,
+    `https://sports.core.api.espn.com/v2/sports/tennis/leagues/${tour}/seasons/${year}/rankings?limit=110`,
+    `https://sports.core.api.espn.com/v2/sports/tennis/leagues/${tour}/seasons/${year}/types/2/rankings?limit=110`,
+  ];
+
+  const map = new Map();
+  for (const url of candidateUrls){
+    const data = await fetchJsonSafe(url);
+    const items = data && (Array.isArray(data.items) ? data.items : Array.isArray(data.rankings) ? data.rankings : null);
+    if (!items || !items.length) continue;
+
+    const resolved = await Promise.all(items.slice(0, 110).map(item =>
+      (item && item.$ref) ? fetchJsonSafe(item.$ref) : Promise.resolve(item)
+    ));
+
+    resolved.forEach((entry, idx) => {
+      if (!entry) return;
+      const rankNum = Number(entry.current ?? entry.rank ?? (entry.stats && entry.stats.rank) ?? NaN);
+      const rank = isNaN(rankNum) ? (idx + 1) : rankNum;
+      const athleteId = (entry.athlete && entry.athlete.id != null) ? String(entry.athlete.id) : '';
+      const name = (entry.athlete && (entry.athlete.displayName || entry.athlete.shortName)) || entry.name || '';
+      if (!athleteId && !name) return;
+      const info = { rank, isAustralian: isAustralianEntry(entry) };
+      if (athleteId) map.set(`id:${athleteId}`, info);
+      if (name) map.set(`name:${normalizeName(name)}`, info);
+    });
+    if (map.size) break; // this candidate URL worked, stop trying others
+  }
+
+  tennisRankingsCache[tour] = { ts: Date.now(), map };
+  return map;
+}
+
+function competitorRankInfo(competitor, rankingsMap){
+  if (competitor.athleteId && rankingsMap.has(`id:${competitor.athleteId}`)) {
+    return rankingsMap.get(`id:${competitor.athleteId}`);
+  }
+  return rankingsMap.get(`name:${normalizeName(competitor.name)}`) || null;
+}
+
+function tennisRankQualifies(info){
+  if (!info) return false;
+  return info.isAustralian ? info.rank <= RANK_TOP_CUTOFF_AUS : info.rank <= RANK_TOP_CUTOFF;
+}
+
+async function fetchTennis(source){
+  const data = await fetchJsonSafe(source.url);
+  if (!data) throw new Error('fetch failed');
+  const rawEvents = Array.isArray(data.events) ? data.events : [];
+  const tierEvents = rawEvents.filter(matchesTennis500Plus).map(normalizeEvent).filter(Boolean);
+
+  const rankingsMap = await fetchTennisRankings(source.tour);
+  if (!rankingsMap.size){
+    return { events: tierEvents, note: 'Rankings unavailable right now — showing all Grand Slam/500+ matches, unfiltered by player ranking.' };
+  }
+  const events = tierEvents.filter(ev => ev.competitors.some(c => tennisRankQualifies(competitorRankInfo(c, rankingsMap))));
+  return { events, note: null };
+}
+
+/* ============================================================
+   CRICKET (Australia)
+   ESPN's cricket coverage doesn't follow the usual {sport}/{league}/
+   scoreboard pattern (that 404s for cricket) — it's discovered via a
+   "personalized scoreboard header" endpoint on a different host
+   (site.web.api.espn.com) that lists active series/matches. The exact
+   nesting of events in that response isn't confirmed either, so
+   collectEmbeddedEvents() walks the whole JSON tree looking for
+   anything shaped like a standard ESPN event (a `competitions[0]
+   .competitors[]` array) rather than assuming one fixed path.
+   ============================================================ */
+const CRICKET_HEADER_URL = 'https://site.web.api.espn.com/apis/personalized/v2/scoreboard/header?sport=cricket&region=au&tz=Australia%2FSydney';
+
+function collectEmbeddedEvents(node, out, depth){
+  if (!node || depth > 6) return;
+  if (Array.isArray(node)){ node.forEach(n => collectEmbeddedEvents(n, out, depth + 1)); return; }
+  if (typeof node === 'object'){
+    if (Array.isArray(node.competitions) && node.competitions[0] && Array.isArray(node.competitions[0].competitors)){
+      out.push(node);
+      return;
+    }
+    Object.values(node).forEach(v => collectEmbeddedEvents(v, out, depth + 1));
+  }
+}
+
+async function fetchCricketAustralia(){
+  const data = await fetchJsonSafe(CRICKET_HEADER_URL);
+  if (!data) throw new Error('fetch failed');
+  const rawEvents = [];
+  collectEmbeddedEvents(data, rawEvents, 0);
+  const ausEvents = rawEvents.filter(ev => {
+    const comp = ev.competitions && ev.competitions[0];
+    return comp && comp.competitors.some(c =>
+      String((c.team && c.team.displayName) || '').toLowerCase().includes('australia'));
+  });
+  return { events: ausEvents.map(normalizeEvent).filter(Boolean), note: null };
+}
+
 const SOURCES = [
-  { id:'atp', label:'ATP (500+)', url: withDates(`${ESPN_BASE}/tennis/atp/scoreboard`, 10), accept: matchesTennis500Plus },
-  { id:'wta', label:'WTA (500+)', url: withDates(`${ESPN_BASE}/tennis/wta/scoreboard`, 10), accept: matchesTennis500Plus },
+  { id:'atp', label:'ATP — Grand Slam & 500+', tour:'atp', url: withDates(`${ESPN_BASE}/tennis/atp/scoreboard`, 10), fetch: fetchTennis },
+  { id:'wta', label:'WTA — Grand Slam & 500+', tour:'wta', url: withDates(`${ESPN_BASE}/tennis/wta/scoreboard`, 10), fetch: fetchTennis },
   { id:'afl', label:'AFL', url: withDates(`${ESPN_BASE}/australian-football/afl/scoreboard`, 10) },
-  { id:'nrl', label:'NRL', url: withDates(`${ESPN_BASE}/rugby-league/nrl/scoreboard`, 10) },
-  { id:'aleague-m', label:'A-League Men', url: withDates(`${ESPN_BASE}/soccer/aus.1/scoreboard`, 10) },
-  { id:'aleague-w', label:'A-League Women', url: withDates(`${ESPN_BASE}/soccer/aus.w.1/scoreboard`, 10) },
+  { id:'super-rugby', label:'Super Rugby Pacific', url: withDates(`${ESPN_BASE}/rugby/242041/scoreboard`, 10) },
+  { id:'rugby-championship', label:'Rugby Championship (Wallabies)', url: withDates(`${ESPN_BASE}/rugby/244293/scoreboard`, 10) },
+  { id:'cricket-aus', label:'Cricket — Australia', fetch: fetchCricketAustralia },
 ];
 
 const STORAGE_KEY = 'scoreboard.hiddenSources';
@@ -220,7 +367,8 @@ function normalizeEvent(raw){
     const sets = Array.isArray(c.linescores)
       ? c.linescores.map(l => (l.value != null ? l.value : l.displayValue)).filter(v => v != null && v !== '')
       : [];
-    return { name, score: (c.score != null ? String(c.score) : ''), sets, winner: !!c.winner };
+    const athleteId = (c.athlete && c.athlete.id != null) ? String(c.athlete.id) : (c.id != null ? String(c.id) : '');
+    return { name, score: (c.score != null ? String(c.score) : ''), sets, winner: !!c.winner, athleteId };
   });
   const venue = comp.venue && (comp.venue.fullName || (comp.venue.address && comp.venue.address.city));
   return {
@@ -280,7 +428,7 @@ async function fetchSource(source){
   const data = await res.json();
   const rawEvents = Array.isArray(data.events) ? data.events : [];
   const accepted = source.accept ? rawEvents.filter(source.accept) : rawEvents;
-  return accepted.map(normalizeEvent).filter(Boolean);
+  return { events: accepted.map(normalizeEvent).filter(Boolean), note: null };
 }
 
 function ensureSectionEl(source){
@@ -294,6 +442,7 @@ function ensureSectionEl(source){
       <h2>${escapeHtml(source.label)}</h2>
       <span class="count" id="feed-${source.id}-count"></span>
     </div>
+    <div class="feed-note" id="feed-${source.id}-note" hidden></div>
     <div id="feed-${source.id}-body"></div>`;
   document.getElementById('feeds').appendChild(el);
   return el;
@@ -332,14 +481,19 @@ async function loadAll(){
     const section = ensureSectionEl(source);
     const body = section.querySelector(`#feed-${source.id}-body`);
     const countEl = section.querySelector(`#feed-${source.id}-count`);
+    const noteEl = section.querySelector(`#feed-${source.id}-note`);
     try {
-      const events = sortEvents(await fetchSource(source));
+      const result = await (source.fetch ? source.fetch(source) : fetchSource(source));
+      const events = sortEvents(result.events);
       countEl.textContent = events.length ? `${events.length} match${events.length===1?'':'es'}` : '';
       body.innerHTML = events.length
         ? `<div class="match-grid">${events.map(renderMatchCard).join('')}</div>`
         : `<div class="feed-empty">Nothing live or upcoming right now.</div>`;
+      noteEl.hidden = !result.note;
+      noteEl.textContent = result.note || '';
     } catch (err) {
       countEl.textContent = '';
+      noteEl.hidden = true;
       body.innerHTML = `<div class="feed-error">Couldn't load ${escapeHtml(source.label)} (${escapeHtml(err.message)}).</div>`;
     }
   }));
