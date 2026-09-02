@@ -160,8 +160,12 @@
 
     <div class="divider"></div>
 
+    <div class="tool-group" id="brushTypeGroup">
+      <button class="tool-btn active" data-brush="flat" title="Flat brush — chisel edge held across your stroke">Flat</button>
+      <button class="tool-btn" data-brush="round" title="Round brush — bristly, even coverage">Round</button>
+      <button class="tool-btn" data-brush="spray" title="Spray — scattered, airbrush-like">Spray</button>
+    </div>
     <div class="tool-group">
-      <button class="tool-btn active" id="brushBtn" data-tool="brush">Brush</button>
       <button class="tool-btn" id="eraserBtn" data-tool="eraser">Eraser</button>
     </div>
 
@@ -192,7 +196,7 @@
     <canvas id="board"></canvas>
   </div>
 
-  <p class="hint">Draw with a finger, stylus, or mouse. Undo/redo step through your last strokes; Clear wipes the page. The camera button samples a colour from whatever it's pointed at instead of typing in a hex code. Nothing leaves your device — there's no upload, just this browser's local storage and camera.</p>
+  <p class="hint">Draw with a finger, stylus, or mouse. Flat holds a chisel edge crosswise to your stroke, Round lays down bristly coverage, Spray scatters like an airbrush — all three thin out the faster you move, like real paint running low. Undo/redo step through your last strokes; Clear wipes the page. The camera button samples a colour from whatever it's pointed at instead of typing in a hex code. Nothing leaves your device — there's no upload, just this browser's local storage and camera.</p>
 </div>
 
 <div class="camera-overlay hidden" id="cameraOverlay">
@@ -231,7 +235,7 @@
   const cameraBtn = document.getElementById('cameraBtn');
   const savedRow = document.getElementById('savedRow');
   const savedColorGroup = document.getElementById('savedColorGroup');
-  const brushBtn = document.getElementById('brushBtn');
+  const brushTypeButtons = document.querySelectorAll('#brushTypeGroup .tool-btn');
   const eraserBtn = document.getElementById('eraserBtn');
   const sizeSlider = document.getElementById('sizeSlider');
   const sizeVal = document.getElementById('sizeVal');
@@ -251,9 +255,12 @@
 
   let color = PALETTE[0];
   let tool = 'brush'; // 'brush' | 'eraser'
+  let brushType = 'flat'; // 'flat' | 'round' | 'spray'
   let brushSize = +sizeSlider.value;
   let drawing = false;
   let lastX = 0, lastY = 0;
+  let lastTime = 0;
+  let smoothedSpeed = 0; // px/ms, low-pass filtered so width doesn't flicker
   let undoStack = [];
   let redoStack = [];
   let savedColors = loadSavedColors();
@@ -361,30 +368,124 @@
     };
   }
 
-  function strokeStyleFor(){
-    return tool === 'eraser' ? PAPER : color;
+  /* ---------------- brush textures ----------------
+     Three distinct brush "feels", each built from plain canvas primitives
+     (no image assets, so the app stays one self-contained file):
+       - flat:  bristles fanned out along the axis PERPENDICULAR to the
+                direction of travel (a chisel/calligraphy brush's edge is
+                always crosswise to the stroke), each a thin streak with its
+                own opacity so the edge looks textured rather than a solid bar.
+       - round: bristles scattered inside a disc around the stroke, like a
+                round brush's tuft depositing paint unevenly.
+       - spray: a fine scatter of low-opacity dots (airbrush), density
+                weighted toward the centre.
+     All three take the CURRENT (speed-adjusted) size, not the slider's base
+     value, so "thinner when moving fast" falls out of the same code path. */
+  function paintFlat(x0, y0, x1, y1, size, hex){
+    const angle = Math.atan2(y1 - y0, x1 - x0);
+    const perp = angle + Math.PI / 2;
+    const cos = Math.cos(perp), sin = Math.sin(perp);
+    const bristles = 9;
+    ctx.strokeStyle = hex;
+    ctx.lineWidth = Math.max(0.6, size / bristles);
+    for (let i = 0; i < bristles; i++){
+      const t = (i / (bristles - 1)) - 0.5; // -0.5..0.5 across the flat edge
+      const offset = t * size + (Math.random() - 0.5) * size * 0.08;
+      const ox = cos * offset, oy = sin * offset;
+      ctx.globalAlpha = 0.35 + Math.random() * 0.35;
+      ctx.beginPath();
+      ctx.moveTo(x0 + ox, y0 + oy);
+      ctx.lineTo(x1 + ox, y1 + oy);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function paintRound(x0, y0, x1, y1, size, hex){
+    const dabs = 10;
+    ctx.fillStyle = hex;
+    for (let i = 0; i < dabs; i++){
+      const t = Math.random();
+      const theta = Math.random() * Math.PI * 2;
+      const rr = Math.random() * (size / 2);
+      const px = x0 + (x1 - x0) * t + Math.cos(theta) * rr;
+      const py = y0 + (y1 - y0) * t + Math.sin(theta) * rr;
+      const r = Math.max(0.5, size * (0.08 + Math.random() * 0.10));
+      ctx.globalAlpha = 0.28 + Math.random() * 0.32;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function paintSpray(x0, y0, x1, y1, size, hex){
+    const density = Math.max(4, Math.round(size * 0.9));
+    ctx.fillStyle = hex;
+    for (let i = 0; i < density; i++){
+      const t = Math.random();
+      const px = x0 + (x1 - x0) * t;
+      const py = y0 + (y1 - y0) * t;
+      const theta = Math.random() * Math.PI * 2;
+      const rr = Math.random() * Math.random() * size; // squared random biases toward centre
+      const r = 0.6 + Math.random() * 1.2;
+      ctx.globalAlpha = 0.12 + Math.random() * 0.18;
+      ctx.beginPath();
+      ctx.arc(px + Math.cos(theta) * rr, py + Math.sin(theta) * rr, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  const BRUSH_PAINTERS = { flat: paintFlat, round: paintRound, spray: paintSpray };
+
+  // Faster movement -> thinner mark, like real paint running out under a
+  // quick stroke. Speed is in canvas px/ms; SPEED_REF is the speed at which
+  // the brush bottoms out at MIN_SIZE_FACTOR of its slider size.
+  const SPEED_REF = 1.4;
+  const MIN_SIZE_FACTOR = 0.3;
+  function dynamicSizeFor(speed){
+    const norm = Math.min(1, speed / SPEED_REF);
+    const factor = 1 - norm * (1 - MIN_SIZE_FACTOR);
+    return Math.max(1, brushSize * factor);
   }
 
   function startStroke(e){
     drawing = true;
     const p = canvasPoint(e);
     lastX = p.x; lastY = p.y;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, brushSize / 2, 0, Math.PI * 2);
-    ctx.fillStyle = strokeStyleFor();
-    ctx.fill();
+    lastTime = performance.now();
+    smoothedSpeed = 0;
+    if (tool === 'eraser'){
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, brushSize / 2, 0, Math.PI * 2);
+      ctx.fillStyle = PAPER;
+      ctx.fill();
+    } else {
+      BRUSH_PAINTERS[brushType](p.x, p.y, p.x, p.y, brushSize, color);
+    }
   }
 
   function continueStroke(e){
     if (!drawing) return;
     const p = canvasPoint(e);
-    ctx.beginPath();
-    ctx.moveTo(lastX, lastY);
-    ctx.lineTo(p.x, p.y);
-    ctx.strokeStyle = strokeStyleFor();
-    ctx.lineWidth = brushSize;
-    ctx.stroke();
-    lastX = p.x; lastY = p.y;
+    const now = performance.now();
+    const dt = Math.max(1, now - lastTime);
+    const dist = Math.hypot(p.x - lastX, p.y - lastY);
+    smoothedSpeed = smoothedSpeed * 0.7 + (dist / dt) * 0.3;
+
+    if (tool === 'eraser'){
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(p.x, p.y);
+      ctx.strokeStyle = PAPER;
+      ctx.lineWidth = brushSize; // eraser stays exact — no speed thinning
+      ctx.stroke();
+    } else {
+      BRUSH_PAINTERS[brushType](lastX, lastY, p.x, p.y, dynamicSizeFor(smoothedSpeed), color);
+    }
+
+    lastX = p.x; lastY = p.y; lastTime = now;
   }
 
   function endStroke(){
@@ -406,7 +507,7 @@
   function setColor(hex, opts){
     color = hex.toUpperCase();
     colorPicker.value = color;
-    setTool('brush');
+    switchToBrush();
     if (opts && opts.save) addSavedColor(color);
     renderPalette();
     renderSavedColors();
@@ -456,18 +557,30 @@
   colorPicker.addEventListener('input', () => {
     // live preview only while the wheel is being dragged — not saved yet
     color = colorPicker.value.toUpperCase();
-    setTool('brush');
+    switchToBrush();
     renderPalette();
   });
   colorPicker.addEventListener('change', () => setColor(colorPicker.value, { save: true }));
 
-  function setTool(next){
-    tool = next;
-    brushBtn.classList.toggle('active', tool === 'brush');
+  function updateToolButtons(){
+    brushTypeButtons.forEach(btn => {
+      btn.classList.toggle('active', tool === 'brush' && btn.dataset.brush === brushType);
+    });
     eraserBtn.classList.toggle('active', tool === 'eraser');
   }
-  brushBtn.addEventListener('click', () => setTool('brush'));
-  eraserBtn.addEventListener('click', () => setTool('eraser'));
+  function switchToBrush(){
+    tool = 'brush';
+    updateToolButtons();
+  }
+  function setBrushType(type){
+    brushType = type;
+    tool = 'brush';
+    updateToolButtons();
+  }
+  brushTypeButtons.forEach(btn => {
+    btn.addEventListener('click', () => setBrushType(btn.dataset.brush));
+  });
+  eraserBtn.addEventListener('click', () => { tool = 'eraser'; updateToolButtons(); });
 
   sizeSlider.addEventListener('input', () => {
     brushSize = +sizeSlider.value;
