@@ -569,6 +569,17 @@ function renderMatchCard(ev){
     </div>`;
 }
 
+// Applied to every source, not just tennis: drop anything more than a day
+// old (ESPN's `dates=` param isn't reliably honoured by every endpoint), and
+// drop matches where a competitor isn't decided yet ("TBD" — normalizeEvent's
+// fallback name for an empty bracket slot, e.g. "Winner of Match 3").
+function isCurrentAndDetermined(ev){
+  const t = new Date(ev.date).getTime();
+  if (!isNaN(t) && t < (Date.now() - 86400000)) return false;
+  if (ev.competitors.some(c => c.name === 'TBD')) return false;
+  return true;
+}
+
 function sortEvents(events){
   const rank = { in:0, pre:1, post:2 };
   return events.slice().sort((a,b) => {
@@ -641,7 +652,7 @@ async function loadAll(){
     const noteEl = section.querySelector(`#feed-${source.id}-note`);
     try {
       const result = await (source.fetch ? source.fetch(source) : fetchSource(source));
-      const events = sortEvents(result.events);
+      const events = sortEvents(result.events.filter(isCurrentAndDetermined));
       countEl.textContent = events.length ? `${events.length} match${events.length===1?'':'es'}` : '';
       body.innerHTML = events.length
         ? `<div class="match-grid">${events.map(renderMatchCard).join('')}</div>`
