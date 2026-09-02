@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rally Clipper">
+<title>Rally Clipper</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700&display=swap');
+  :root{
+    --court:#244A3D;
+    --court-dark:#1A362D;
+    --line:#F4F1E8;
+    --clay:#C1622E;
+    --ball:#D7E05B;
+    --ink:#16211D;
+    --muted:rgba(244,241,232,0.55);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0; background:var(--court-dark); color:var(--line);
+    font-family:'Archivo', sans-serif;
+    min-height:100vh; padding:28px 16px 60px;
+  }
+  .wrap{max-width:520px; margin:0 auto;}
+  .back-link{display:inline-block; color:var(--muted); font-size:12.5px; font-weight:600; text-decoration:none; margin-bottom:14px;}
+  .back-link:hover{color:var(--line);}
+  header{text-align:center; margin-bottom:24px;}
+  .eyebrow{font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:var(--ball); font-weight:700; margin-bottom:6px;}
+  h1{font-family:'Archivo Black', sans-serif; font-size:28px; line-height:1; margin:0 0 4px; letter-spacing:-0.01em;}
+  .sub{color:var(--muted); font-size:13.5px; line-height:1.5;}
+
+  .card{background:var(--court); border:1px solid rgba(244,241,232,0.12); border-radius:16px; padding:18px; margin-bottom:14px;}
+  .card h2{font-family:'Archivo Black', sans-serif; font-size:15px; margin:0 0 12px; letter-spacing:0.01em;}
+
+  .dropzone{
+    border:1.5px dashed rgba(244,241,232,0.3); border-radius:12px; padding:30px 16px;
+    text-align:center; cursor:pointer; color:var(--muted); font-size:14px;
+    background:var(--court-dark); transition:border-color .15s ease, background .15s ease;
+  }
+  .dropzone.drag{border-color:var(--ball); background:#132621;}
+  .dropzone strong{color:var(--line);}
+
+  video{width:100%; border-radius:10px; margin-top:12px; display:block; background:#000;}
+
+  .field-row{margin-bottom:18px;}
+  .field-row:last-child{margin-bottom:0;}
+  .field-row label{display:flex; justify-content:space-between; font-size:13px; font-weight:600; color:var(--muted); margin-bottom:8px;}
+  .field-row label span.val{color:var(--line); font-family:monospace;}
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:28px; background:transparent;}
+  input[type=range]::-webkit-slider-runnable-track{height:5px; border-radius:3px; background:rgba(244,241,232,0.2);}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:22px; height:22px; margin-top:-9px; border-radius:50%; background:var(--ball); border:2px solid var(--court);}
+  input[type=number]{
+    width:100%; background:var(--court-dark); border:1px solid rgba(244,241,232,0.15); border-radius:8px;
+    color:var(--line); font-family:monospace; font-size:15px; text-align:center; padding:10px;
+  }
+
+  button{
+    width:100%; border:none; border-radius:10px; padding:15px; font-family:'Archivo Black', sans-serif;
+    font-size:15px; letter-spacing:0.02em; cursor:pointer; transition:transform .1s ease, opacity .1s ease;
+  }
+  button:active{transform:scale(0.98);}
+  button.primary{background:var(--ball); color:var(--ink);}
+  button.primary:disabled{background:rgba(215,224,91,0.25); color:rgba(244,241,232,0.4); cursor:not-allowed;}
+  button.secondary{background:transparent; border:1px solid rgba(244,241,232,0.25); color:var(--line);}
+  button.small{padding:8px 10px; font-size:12px; width:auto; border-radius:6px;}
+
+  .status-line{font-size:13px; color:var(--muted); margin-top:10px; line-height:1.5; min-height:16px;}
+  .progress-track{height:6px; border-radius:3px; background:rgba(244,241,232,0.15); margin-top:10px; overflow:hidden;}
+  .progress-fill{height:100%; background:var(--ball); width:0%; transition:width .15s ease;}
+
+  .timeline{display:flex; height:34px; border-radius:6px; overflow:hidden; margin:12px 0; background:var(--court-dark);}
+  .timeline .seg{background:var(--ball); border-right:1px solid var(--court); cursor:pointer;}
+  .timeline .gap{background:transparent;}
+  .timeline .seg.off{background:rgba(244,241,232,0.15);}
+
+  .shot-item{
+    background:var(--court-dark); border:1px solid rgba(244,241,232,0.12); border-radius:10px;
+    padding:12px; margin-bottom:8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  .shot-item .idx{font-family:'Archivo Black', sans-serif; font-size:13px; color:var(--ball); width:22px;}
+  .shot-item .times{display:flex; gap:6px; align-items:center; flex:1; min-width:180px;}
+  .shot-item .times input{width:64px; padding:6px; font-size:13px;}
+  .shot-item .dur{font-size:11px; color:var(--muted); width:100%;}
+  .shot-item input[type=checkbox]{width:20px; height:20px; accent-color:var(--ball);}
+
+  .summary{display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin-bottom:10px;}
+  .summary b{color:var(--line);}
+
+  .note{font-size:12px; color:var(--muted); line-height:1.6; margin-top:12px; border-top:1px solid rgba(244,241,232,0.12); padding-top:12px;}
+  .hidden{display:none !important;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back-link" href="../../">‹ Shelf</a>
+  <header>
+    <div class="eyebrow">Tennis</div>
+    <h1>Rally Clipper</h1>
+    <div class="sub">Upload a match video. It scans for motion and racket-hit sounds to guess where the actual rallies are, then cuts and exports just those parts.</div>
+  </header>
+
+  <div class="card" id="uploadCard">
+    <h2>1. Upload video</h2>
+    <div class="dropzone" id="dropzone">
+      <div><strong>Tap to choose</strong> a video from your phone</div>
+      <div style="margin-top:4px;">MP4 or MOV, ideally under a few minutes for a first try</div>
+    </div>
+    <input type="file" id="fileInput" accept="video/*" style="display:none;">
+    <video id="previewVideo" class="hidden" controls playsinline></video>
+  </div>
+
+  <div class="card hidden" id="settingsCard">
+    <h2>2. Detection settings</h2>
+    <div class="field-row">
+      <label>Motion sensitivity <span class="val" id="motionVal">50</span></label>
+      <input type="range" id="motionSlider" min="0" max="100" value="50">
+    </div>
+    <div class="field-row">
+      <label>Sound sensitivity <span class="val" id="audioVal">50</span></label>
+      <input type="range" id="audioSlider" min="0" max="100" value="50">
+    </div>
+    <div class="field-row">
+      <label>Minimum shot length (s) <span class="val" id="minLenVal">1.0</span></label>
+      <input type="range" id="minLenSlider" min="0.2" max="4" step="0.1" value="1.0">
+    </div>
+    <div class="field-row">
+      <label>Padding around each shot (s) <span class="val" id="padVal">0.4</span></label>
+      <input type="range" id="padSlider" min="0" max="1.5" step="0.1" value="0.4">
+    </div>
+
+    <div class="field-row" style="border-top:1px solid rgba(244,241,232,0.12); padding-top:16px;">
+      <label style="margin-bottom:4px;">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <input type="checkbox" id="mlToggle" style="width:18px;height:18px;accent-color:var(--ball);">
+          Ball &amp; swing tracking (experimental)
+        </span>
+      </label>
+      <div style="font-size:12px; color:var(--muted); line-height:1.5; margin:4px 0 10px;">
+        Uses TensorFlow.js to spot the ball and a player's swinging wrist frame-by-frame, as a second opinion alongside motion/sound. Downloads ~15–20MB of models on first use and is considerably slower — a general-purpose model, not one trained on tennis, so treat it as a rough extra signal rather than a reliable ball tracker.
+      </div>
+      <div id="mlWeightRow" class="hidden">
+        <label>Ball &amp; swing weight <span class="val" id="mlVal">50</span></label>
+        <input type="range" id="mlSlider" min="0" max="100" value="50">
+        <label style="margin-top:12px;">Sample every (s) <span class="val" id="mlIntervalVal">0.3</span></label>
+        <input type="range" id="mlIntervalSlider" min="0.15" max="1" step="0.05" value="0.3">
+      </div>
+    </div>
+
+    <button class="primary" id="analyzeBtn">Analyze video</button>
+    <div class="status-line" id="analyzeStatus"></div>
+    <div class="progress-track hidden" id="analyzeProgressTrack"><div class="progress-fill" id="analyzeProgressFill"></div></div>
+  </div>
+
+  <div class="card hidden" id="resultsCard">
+    <h2>3. Detected shots</h2>
+    <div class="summary">
+      <span>Shots found: <b id="shotCount">0</b></span>
+      <span>Kept: <b id="keptDuration">0s</b> / <span id="totalDuration">0s</span></span>
+    </div>
+    <div class="timeline" id="timeline"></div>
+    <div id="shotList"></div>
+    <div class="note">Cuts snap to the nearest keyframe by default, so exported clips may start a few frames early/late. Toggle a shot off if it's a false positive (camera bump, ball bounce between points), or nudge its start/end below.</div>
+  </div>
+
+  <div class="card hidden" id="exportCard">
+    <h2>4. Export</h2>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:14px;">
+      <input type="checkbox" id="preciseCutsToggle" style="width:18px;height:18px;accent-color:var(--ball);">
+      Frame-accurate cuts (re-encodes — much slower, but exact)
+    </label>
+    <button class="primary" id="exportBtn">Export clipped video</button>
+    <div class="status-line" id="exportStatus"></div>
+    <div class="progress-track hidden" id="exportProgressTrack"><div class="progress-fill" id="exportProgressFill"></div></div>
+    <video id="outputVideo" class="hidden" controls playsinline></video>
+    <button class="secondary hidden" id="downloadBtn" style="margin-top:10px;">Download video</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const previewVideo = document.getElementById('previewVideo');
+  const settingsCard = document.getElementById('settingsCard');
+  const resultsCard = document.getElementById('resultsCard');
+  const exportCard = document.getElementById('exportCard');
+
+  const motionSlider = document.getElementById('motionSlider');
+  const audioSlider = document.getElementById('audioSlider');
+  const minLenSlider = document.getElementById('minLenSlider');
+  const padSlider = document.getElementById('padSlider');
+  const mlToggle = document.getElementById('mlToggle');
+  const mlWeightRow = document.getElementById('mlWeightRow');
+  const mlSlider = document.getElementById('mlSlider');
+  const mlIntervalSlider = document.getElementById('mlIntervalSlider');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const analyzeStatus = document.getElementById('analyzeStatus');
+  const analyzeProgressTrack = document.getElementById('analyzeProgressTrack');
+  const analyzeProgressFill = document.getElementById('analyzeProgressFill');
+
+  const timelineEl = document.getElementById('timeline');
+  const shotListEl = document.getElementById('shotList');
+  const shotCountEl = document.getElementById('shotCount');
+  const keptDurationEl = document.getElementById('keptDuration');
+  const totalDurationEl = document.getElementById('totalDuration');
+
+  const preciseCutsToggle = document.getElementById('preciseCutsToggle');
+  const exportBtn = document.getElementById('exportBtn');
+  const exportStatus = document.getElementById('exportStatus');
+  const exportProgressTrack = document.getElementById('exportProgressTrack');
+  const exportProgressFill = document.getElementById('exportProgressFill');
+  const outputVideo = document.getElementById('outputVideo');
+  const downloadBtn = document.getElementById('downloadBtn');
+
+  let currentFile = null;
+  let shots = []; // {start, end, include}
+  let videoDuration = 0;
+  let outputBlobUrl = null;
+
+  /* ---------------- upload ---------------- */
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+  ['dragover'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, () => dropzone.classList.remove('drag')));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+
+  function handleFile(file){
+    currentFile = file;
+    const url = URL.createObjectURL(file);
+    previewVideo.src = url;
+    previewVideo.classList.remove('hidden');
+    settingsCard.classList.remove('hidden');
+    resultsCard.classList.add('hidden');
+    exportCard.classList.add('hidden');
+    analyzeStatus.textContent = '';
+    previewVideo.onloadedmetadata = () => { videoDuration = previewVideo.duration; };
+  }
+
+  [motionSlider, audioSlider, minLenSlider, padSlider, mlSlider, mlIntervalSlider].forEach(s => {
+    const label = {
+      motionSlider:'motionVal', audioSlider:'audioVal', minLenSlider:'minLenVal',
+      padSlider:'padVal', mlSlider:'mlVal', mlIntervalSlider:'mlIntervalVal'
+    }[s.id];
+    s.addEventListener('input', () => { document.getElementById(label).textContent = s.value; });
+  });
+
+  mlToggle.addEventListener('change', () => {
+    mlWeightRow.classList.toggle('hidden', !mlToggle.checked);
+  });
+
+  /* ---------------- motion analysis (fast playthrough) ---------------- */
+  function analyzeMotion(video, onProgress){
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64; canvas.height = 36;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      let prevData = null;
+      const samples = [];
+      const useRVFC = typeof video.requestVideoFrameCallback === 'function';
+
+      function sampleFrame(mediaTime){
+        try {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const frame = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+          let score = 0;
+          if (prevData){
+            for (let i = 0; i < frame.length; i += 4){
+              score += Math.abs(frame[i]-prevData[i]) + Math.abs(frame[i+1]-prevData[i+1]) + Math.abs(frame[i+2]-prevData[i+2]);
+            }
+            score = score / (canvas.width * canvas.height * 3 * 255);
+          }
+          prevData = frame;
+          samples.push({ t: mediaTime, score });
+          if (video.duration) onProgress(Math.min(1, mediaTime / video.duration));
+        } catch(e){ /* frame not ready / cross-origin, skip */ }
+      }
+
+      function finish(){
+        video.playbackRate = 1;
+        video.pause();
+        resolve(samples);
+      }
+
+      video.muted = true;
+      video.playbackRate = 4;
+
+      if (useRVFC){
+        function onFrame(now, metadata){
+          sampleFrame(metadata.mediaTime);
+          if (!video.ended && !video.paused) video.requestVideoFrameCallback(onFrame);
+          else finish();
+        }
+        video.addEventListener('ended', finish, { once: true });
+        video.requestVideoFrameCallback(onFrame);
+      } else {
+        const onTime = () => {
+          sampleFrame(video.currentTime);
+          if (video.ended) finish();
+        };
+        video.addEventListener('timeupdate', onTime);
+        video.addEventListener('ended', () => { video.removeEventListener('timeupdate', onTime); finish(); }, { once: true });
+      }
+
+      video.currentTime = 0;
+      video.play().catch(() => resolve(samples));
+    });
+  }
+
+  /* ---------------- audio analysis (decoded up front) ---------------- */
+  async function analyzeAudio(file){
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const actx = new AudioCtx();
+      const audioBuffer = await new Promise((resolve, reject) => {
+        actx.decodeAudioData(arrayBuffer.slice(0), resolve, reject);
+      });
+      const channel = audioBuffer.getChannelData(0);
+      const sr = audioBuffer.sampleRate;
+      const windowSize = Math.floor(sr * 0.1);
+      const samples = [];
+      for (let i = 0; i < channel.length; i += windowSize){
+        const end = Math.min(i + windowSize, channel.length);
+        let sumSq = 0, peak = 0;
+        for (let j = i; j < end; j++){
+          const v = channel[j];
+          sumSq += v*v;
+          const a = Math.abs(v);
+          if (a > peak) peak = a;
+        }
+        samples.push({ t: i / sr, rms: Math.sqrt(sumSq / (end - i)), peak });
+      }
+      actx.close();
+      return samples;
+    } catch(e){
+      console.error('Audio analysis failed', e);
+      return [];
+    }
+  }
+
+  /* ---------------- ML analysis: ball + wrist-swing tracking ---------------- */
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = resolve;
+      el.onerror = () => reject(new Error('Failed to load ' + src));
+      document.head.appendChild(el);
+    });
+  }
+
+  let cocoModel = null, poseModel = null;
+
+  async function getMlModels(onStatus){
+    if (!window.tf){
+      onStatus('Loading TensorFlow.js…');
+      await loadScript('https://unpkg.com/@tensorflow/tfjs@4.20.0/dist/tf.min.js');
+    }
+    if (!window.cocoSsd){
+      onStatus('Loading ball/person detector…');
+      await loadScript('https://unpkg.com/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js');
+    }
+    if (!window.poseDetection){
+      onStatus('Loading swing/pose detector…');
+      await loadScript('https://unpkg.com/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js');
+    }
+    if (!cocoModel){
+      onStatus('Initializing ball/person model…');
+      cocoModel = await window.cocoSsd.load({ base: 'lite_mobilenet_v2' });
+    }
+    if (!poseModel){
+      onStatus('Initializing pose model…');
+      poseModel = await window.poseDetection.createDetector(
+        window.poseDetection.SupportedModels.MoveNet,
+        { modelType: window.poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+      );
+    }
+  }
+
+  function seekTo(video, t){
+    return new Promise(resolve => {
+      const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve(); };
+      video.addEventListener('seeked', onSeeked);
+      video.currentTime = t;
+    });
+  }
+
+  async function analyzeML(video, sampleInterval, onProgress, onStatus){
+    await getMlModels(onStatus);
+    onStatus('Scanning for the ball and player swings…');
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = Math.max(1, Math.round(320 * (video.videoHeight / video.videoWidth || 0.5625)));
+    const ctx = canvas.getContext('2d');
+
+    const samples = [];
+    let prevBall = null;
+    let prevWrist = null;
+    const duration = video.duration || 0;
+
+    video.pause();
+    for (let t = 0; t < duration; t += sampleInterval){
+      await seekTo(video, t);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      let ballSpeed = 0;
+      let wristSpeed = 0;
+
+      try {
+        const preds = await cocoModel.detect(canvas);
+        const ball = preds.find(p => p.class === 'sports ball');
+        if (ball){
+          const cx = ball.bbox[0] + ball.bbox[2] / 2;
+          const cy = ball.bbox[1] + ball.bbox[3] / 2;
+          if (prevBall) ballSpeed = Math.hypot(cx - prevBall.x, cy - prevBall.y);
+          prevBall = { x: cx, y: cy };
+        } else {
+          prevBall = null;
+        }
+      } catch(e){ /* skip frame on detector error */ }
+
+      try {
+        const poses = await poseModel.estimatePoses(canvas);
+        if (poses.length){
+          const kp = poses[0].keypoints;
+          const candidates = kp.filter(k => (k.name === 'left_wrist' || k.name === 'right_wrist') && k.score > 0.3);
+          const wrist = candidates.sort((a,b) => b.score - a.score)[0];
+          if (wrist){
+            if (prevWrist) wristSpeed = Math.hypot(wrist.x - prevWrist.x, wrist.y - prevWrist.y);
+            prevWrist = { x: wrist.x, y: wrist.y };
+          } else {
+            prevWrist = null;
+          }
+        }
+      } catch(e){ /* skip frame on detector error */ }
+
+      samples.push({ t, ballSpeed, wristSpeed });
+      onProgress(Math.min(1, t / duration));
+    }
+
+    return samples;
+  }
+
+  function mlValueAt(mlSamples, sampleInterval, t, field){
+    if (!mlSamples.length) return 0;
+    const idx = Math.max(0, Math.min(mlSamples.length - 1, Math.round(t / sampleInterval)));
+    return mlSamples[idx][field] || 0;
+  }
+
+  /* ---------------- combine + threshold ---------------- */
+  function normalize(values){
+    const max = Math.max(...values, 1e-6);
+    return values.map(v => v / max);
+  }
+
+  function buildSegments(motionSamples, audioSamples, opts){
+    const binSize = 0.1; // seconds
+    const numBins = Math.ceil(videoDuration / binSize);
+    const motionBins = new Array(numBins).fill(0);
+    const motionCounts = new Array(numBins).fill(0);
+    motionSamples.forEach(s => {
+      const b = Math.min(numBins - 1, Math.floor(s.t / binSize));
+      motionBins[b] += s.score;
+      motionCounts[b]++;
+    });
+    for (let i = 0; i < numBins; i++) if (motionCounts[i]) motionBins[i] /= motionCounts[i];
+
+    const audioPeakBins = new Array(numBins).fill(0);
+    audioSamples.forEach(s => {
+      const b = Math.min(numBins - 1, Math.floor(s.t / binSize));
+      audioPeakBins[b] = Math.max(audioPeakBins[b], s.peak);
+    });
+    // transient score: how much louder than a trailing local average
+    const audioTransient = new Array(numBins).fill(0);
+    const trailWindow = 15; // 1.5s of history
+    for (let i = 0; i < numBins; i++){
+      const start = Math.max(0, i - trailWindow);
+      let sum = 0, n = 0;
+      for (let j = start; j < i; j++){ sum += audioPeakBins[j]; n++; }
+      const baseline = n ? sum / n : 0;
+      audioTransient[i] = Math.max(0, audioPeakBins[i] - baseline);
+    }
+
+    const motionNorm = normalize(motionBins);
+    const audioNorm = normalize(audioTransient);
+
+    const motionWeight = opts.motionSensitivity / 100;
+    const audioWeight = opts.audioSensitivity / 100;
+    let combined = motionNorm.map((m, i) => m * motionWeight + audioNorm[i] * audioWeight);
+
+    if (opts.mlSamples && opts.mlSamples.length){
+      const ballBins = new Array(numBins).fill(0);
+      const wristBins = new Array(numBins).fill(0);
+      for (let i = 0; i < numBins; i++){
+        const t = i * binSize;
+        ballBins[i] = mlValueAt(opts.mlSamples, opts.mlSampleInterval, t, 'ballSpeed');
+        wristBins[i] = mlValueAt(opts.mlSamples, opts.mlSampleInterval, t, 'wristSpeed');
+      }
+      const ballNorm = normalize(ballBins);
+      const wristNorm = normalize(wristBins);
+      const mlWeight = (opts.mlSensitivity || 0) / 100;
+      combined = combined.map((v, i) => v + (ballNorm[i] * 0.6 + wristNorm[i] * 0.4) * mlWeight);
+    }
+
+    const threshold = 0.18; // fixed; sensitivity sliders scale contribution instead of the bar
+    const active = combined.map(v => v >= threshold);
+
+    // merge active bins into raw segments, closing small gaps
+    const mergeGapBins = Math.round(0.6 / binSize);
+    const raw = [];
+    let curStart = null, lastActive = -999;
+    for (let i = 0; i < numBins; i++){
+      if (active[i]){
+        if (curStart === null) curStart = i;
+        lastActive = i;
+      } else if (curStart !== null && (i - lastActive) > mergeGapBins){
+        raw.push([curStart, lastActive]);
+        curStart = null;
+      }
+    }
+    if (curStart !== null) raw.push([curStart, lastActive]);
+
+    const pad = opts.padding;
+    const minLen = opts.minLength;
+    return raw
+      .map(([s, e]) => ({
+        start: Math.max(0, s * binSize - pad),
+        end: Math.min(videoDuration, (e + 1) * binSize + pad)
+      }))
+      .filter(seg => (seg.end - seg.start) >= minLen)
+      .map(seg => ({ ...seg, include: true }));
+  }
+
+  /* ---------------- run analysis ---------------- */
+  analyzeBtn.addEventListener('click', async () => {
+    if (!currentFile) return;
+    analyzeBtn.disabled = true;
+    analyzeProgressTrack.classList.remove('hidden');
+    const useMl = mlToggle.checked;
+
+    analyzeStatus.textContent = 'Scanning audio for hits…';
+    analyzeProgressFill.style.width = '5%';
+    const audioSamples = await analyzeAudio(currentFile);
+
+    const motionBudget = useMl ? [10, 40] : [10, 90];
+    analyzeProgressFill.style.width = motionBudget[0] + '%';
+    analyzeStatus.textContent = 'Playing through video to measure motion (fast-forward, muted)…';
+    const motionSamples = await analyzeMotion(previewVideo, (p) => {
+      analyzeProgressFill.style.width = (motionBudget[0] + p * (motionBudget[1]-motionBudget[0])).toFixed(0) + '%';
+    });
+
+    let mlSamples = [];
+    const mlSampleInterval = +mlIntervalSlider.value;
+    if (useMl){
+      try {
+        mlSamples = await analyzeML(previewVideo, mlSampleInterval, (p) => {
+          analyzeProgressFill.style.width = (40 + p * 50).toFixed(0) + '%';
+        }, (msg) => { analyzeStatus.textContent = msg; });
+      } catch(e){
+        console.error('ML analysis failed', e);
+        analyzeStatus.textContent = 'Ball/swing tracking failed to load — continuing with motion + sound only.';
+        mlSamples = [];
+      }
+    }
+
+    analyzeProgressFill.style.width = '95%';
+    analyzeStatus.textContent = 'Combining signals…';
+
+    shots = buildSegments(motionSamples, audioSamples, {
+      motionSensitivity: +motionSlider.value,
+      audioSensitivity: +audioSlider.value,
+      minLength: +minLenSlider.value,
+      padding: +padSlider.value,
+      mlSamples,
+      mlSampleInterval,
+      mlSensitivity: +mlSlider.value
+    });
+
+    analyzeProgressFill.style.width = '100%';
+    analyzeStatus.textContent = shots.length
+      ? `Found ${shots.length} likely shot${shots.length===1?'':'s'}. Review below before exporting.`
+      : 'No clear shots detected — try lowering sensitivity or check a different clip.';
+
+    renderResults();
+    analyzeBtn.disabled = false;
+    resultsCard.classList.remove('hidden');
+    exportCard.classList.toggle('hidden', shots.length === 0);
+  });
+
+  function renderResults(){
+    shotCountEl.textContent = shots.length;
+    totalDurationEl.textContent = fmtTime(videoDuration);
+    updateKeptDuration();
+    renderTimeline();
+    renderShotList();
+  }
+
+  function updateKeptDuration(){
+    const kept = shots.filter(s => s.include).reduce((sum, s) => sum + (s.end - s.start), 0);
+    keptDurationEl.textContent = fmtTime(kept);
+  }
+
+  function fmtTime(sec){
+    sec = Math.max(0, sec || 0);
+    const m = Math.floor(sec / 60);
+    const s = (sec % 60).toFixed(1);
+    return `${m}:${s.padStart(4,'0')}`;
+  }
+
+  function renderTimeline(){
+    timelineEl.innerHTML = '';
+    if (!videoDuration) return;
+    let cursor = 0;
+    shots.forEach((s) => {
+      if (s.start > cursor){
+        const gap = document.createElement('div');
+        gap.className = 'gap';
+        gap.style.width = ((s.start - cursor) / videoDuration * 100) + '%';
+        timelineEl.appendChild(gap);
+      }
+      const seg = document.createElement('div');
+      seg.className = 'seg' + (s.include ? '' : ' off');
+      seg.style.width = ((s.end - s.start) / videoDuration * 100) + '%';
+      seg.title = `${fmtTime(s.start)} – ${fmtTime(s.end)}`;
+      seg.addEventListener('click', () => {
+        previewVideo.currentTime = s.start;
+        previewVideo.play();
+      });
+      timelineEl.appendChild(seg);
+      cursor = s.end;
+    });
+    if (cursor < videoDuration){
+      const gap = document.createElement('div');
+      gap.className = 'gap';
+      gap.style.width = ((videoDuration - cursor) / videoDuration * 100) + '%';
+      timelineEl.appendChild(gap);
+    }
+  }
+
+  function renderShotList(){
+    shotListEl.innerHTML = '';
+    shots.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'shot-item';
+      row.innerHTML = `
+        <input type="checkbox" ${s.include ? 'checked' : ''} data-idx="${i}" class="incl-check">
+        <div class="idx">${i+1}</div>
+        <div class="times">
+          <input type="number" step="0.1" value="${s.start.toFixed(1)}" data-idx="${i}" class="start-field">
+          <span style="color:var(--muted);">to</span>
+          <input type="number" step="0.1" value="${s.end.toFixed(1)}" data-idx="${i}" class="end-field">
+          <button class="small secondary preview-btn" data-idx="${i}" type="button">▶</button>
+        </div>
+        <div class="dur">${(s.end - s.start).toFixed(1)}s</div>
+      `;
+      shotListEl.appendChild(row);
+    });
+
+    shotListEl.querySelectorAll('.incl-check').forEach(el => {
+      el.addEventListener('change', e => {
+        shots[+e.target.dataset.idx].include = e.target.checked;
+        updateKeptDuration();
+        renderTimeline();
+      });
+    });
+    shotListEl.querySelectorAll('.start-field').forEach(el => {
+      el.addEventListener('change', e => {
+        const i = +e.target.dataset.idx;
+        shots[i].start = Math.max(0, Math.min(shots[i].end - 0.1, parseFloat(e.target.value) || 0));
+        renderResults();
+      });
+    });
+    shotListEl.querySelectorAll('.end-field').forEach(el => {
+      el.addEventListener('change', e => {
+        const i = +e.target.dataset.idx;
+        shots[i].end = Math.min(videoDuration, Math.max(shots[i].start + 0.1, parseFloat(e.target.value) || videoDuration));
+        renderResults();
+      });
+    });
+    shotListEl.querySelectorAll('.preview-btn').forEach(el => {
+      el.addEventListener('click', e => {
+        const i = +e.target.dataset.idx;
+        const s = shots[i];
+        previewVideo.currentTime = s.start;
+        previewVideo.play();
+        const stopAt = () => {
+          if (previewVideo.currentTime >= s.end){
+            previewVideo.pause();
+            previewVideo.removeEventListener('timeupdate', stopAt);
+          }
+        };
+        previewVideo.addEventListener('timeupdate', stopAt);
+      });
+    });
+  }
+
+  /* ---------------- export via ffmpeg.wasm ---------------- */
+  let ffmpegInstance = null;
+
+  async function getFfmpeg(onLog){
+    if (ffmpegInstance) return ffmpegInstance;
+    if (!window.FFmpeg){
+      await loadScript('https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
+    }
+    const { createFFmpeg } = window.FFmpeg;
+    ffmpegInstance = createFFmpeg({
+      log: false,
+      corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+      progress: ({ ratio }) => { if (onLog && ratio >= 0) onLog(ratio); }
+    });
+    await ffmpegInstance.load();
+    return ffmpegInstance;
+  }
+
+  exportBtn.addEventListener('click', async () => {
+    const included = shots.filter(s => s.include);
+    if (!included.length || !currentFile) return;
+
+    exportBtn.disabled = true;
+    exportProgressTrack.classList.remove('hidden');
+    exportProgressFill.style.width = '0%';
+    exportStatus.textContent = 'Loading video engine (first time only, ~20MB)…';
+
+    try {
+      const ffmpeg = await getFfmpeg((ratio) => {
+        exportProgressFill.style.width = Math.min(95, ratio * 100).toFixed(0) + '%';
+      });
+      const { fetchFile } = window.FFmpeg;
+
+      exportStatus.textContent = 'Preparing video…';
+      ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(currentFile));
+
+      const precise = preciseCutsToggle.checked;
+      const listLines = [];
+
+      for (let i = 0; i < included.length; i++){
+        const s = included[i];
+        const outName = `seg${i}.mp4`;
+        exportStatus.textContent = `Cutting shot ${i+1} of ${included.length}…`;
+        const duration = Math.max(0.1, s.end - s.start);
+        const args = precise
+          ? ['-ss', String(s.start), '-i', 'input.mp4', '-t', String(duration), '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', outName]
+          : ['-ss', String(s.start), '-i', 'input.mp4', '-t', String(duration), '-c', 'copy', outName];
+        await ffmpeg.run(...args);
+        listLines.push(`file '${outName}'`);
+        exportProgressFill.style.width = (5 + (i+1)/included.length * 70).toFixed(0) + '%';
+      }
+
+      ffmpeg.FS('writeFile', 'list.txt', new TextEncoder().encode(listLines.join('\n')));
+      exportStatus.textContent = 'Joining shots together…';
+      await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'output.mp4');
+
+      const data = ffmpeg.FS('readFile', 'output.mp4');
+      const blob = new Blob([data.buffer], { type: 'video/mp4' });
+      if (outputBlobUrl) URL.revokeObjectURL(outputBlobUrl);
+      outputBlobUrl = URL.createObjectURL(blob);
+
+      outputVideo.src = outputBlobUrl;
+      outputVideo.classList.remove('hidden');
+      downloadBtn.classList.remove('hidden');
+      exportProgressFill.style.width = '100%';
+      exportStatus.textContent = `Done — ${included.length} shots joined into one clip.`;
+    } catch (err){
+      console.error(err);
+      exportStatus.textContent = 'Export failed — try "Frame-accurate cuts" off, or a shorter video.';
+    }
+
+    exportBtn.disabled = false;
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!outputBlobUrl) return;
+    const a = document.createElement('a');
+    a.href = outputBlobUrl;
+    a.download = 'rally-clips.mp4';
+    a.click();
+  });
+})();
+</script>
+</body>
+</html>

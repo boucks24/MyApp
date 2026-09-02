@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#EDE7D8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Underpaint — mixing, palettes &amp; simplified studies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas:#EDE7D8;
+    --surface:#F8F4EA;
+    --surface-2:#FFFFFF;
+    --ink:#221E19;
+    --ink-soft:#665D4E;
+    --line:#CFC3A5;
+    --line-soft:#DED4B9;
+    --accent:#C1502E;
+    --accent-deep:#9C3D22;
+    --accent-ink:#FBF3E9;
+    --shadow: 0 1px 0 rgba(34,30,25,0.05);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html{ -webkit-text-size-adjust:100%; }
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--canvas);
+    color:var(--ink);
+    font-family:'Work Sans', sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+    touch-action:manipulation;
+  }
+  ::selection{ background:var(--accent); color:var(--accent-ink); }
+
+  .wrap{
+    max-width:960px;
+    margin:0 auto;
+    padding:32px max(18px, env(safe-area-inset-right)) max(60px, env(safe-area-inset-bottom))
+            max(18px, env(safe-area-inset-left));
+  }
+  @media (max-width:480px){
+    .wrap{ padding-top:24px; }
+  }
+
+  .back-link{
+    display:inline-block;
+    color:var(--ink-soft);
+    font-size:12.5px;
+    font-weight:600;
+    text-decoration:none;
+    margin-bottom:14px;
+  }
+  .back-link:hover{ color:var(--ink); }
+
+  header.top{
+    padding-bottom:22px;
+    border-bottom:1px solid var(--line);
+    margin-bottom:26px;
+  }
+  h1.wordmark{
+    font-family:'Fraunces', serif;
+    font-optical-sizing:auto;
+    font-weight:600;
+    font-size:clamp(32px, 5vw, 44px);
+    letter-spacing:-0.01em;
+    margin:0 0 6px 0;
+    color:var(--ink);
+  }
+  header.top p{
+    margin:0;
+    color:var(--ink-soft);
+    font-size:15px;
+    max-width:46ch;
+  }
+
+  nav.tabs{
+    display:flex;
+    gap:2px;
+    margin-top:20px;
+    flex-wrap:wrap;
+    margin-left:-4px;
+  }
+  nav.tabs button{
+    font-family:'Work Sans', sans-serif;
+    font-size:15px;
+    font-weight:600;
+    color:var(--ink-soft);
+    background:transparent;
+    border:none;
+    border-bottom:3px solid transparent;
+    padding:12px 10px;
+    min-height:44px;
+    cursor:pointer;
+    touch-action:manipulation;
+    transition:color .15s ease, border-color .15s ease;
+  }
+  nav.tabs button:hover{ color:var(--ink); }
+  nav.tabs button:active{ color:var(--accent-deep); }
+  nav.tabs button.active{
+    color:var(--ink);
+    border-bottom-color:var(--accent);
+  }
+
+  section.panel{ display:none; }
+  section.panel.active{ display:block; animation:fade .25s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
+
+  h2.tool-title{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:24px;
+    margin:4px 0 4px;
+  }
+  p.tool-sub{
+    color:var(--ink-soft);
+    font-size:14px;
+    margin:0 0 22px;
+    max-width:60ch;
+  }
+
+  .grid2{
+    display:grid;
+    grid-template-columns:1.05fr 1fr;
+    gap:26px;
+    align-items:start;
+  }
+  @media (max-width:760px){
+    .grid2{ grid-template-columns:1fr; }
+  }
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:18px;
+  }
+  @media (max-width:480px){
+    .card{ padding:14px; }
+  }
+
+  /* ---------- mixer ---------- */
+  .paint-row{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:10px;
+    padding:12px 0;
+    border-bottom:1px solid var(--line-soft);
+  }
+  .paint-row:last-of-type{ border-bottom:none; }
+  .swap-label{
+    display:inline-flex;
+    cursor:pointer;
+    touch-action:manipulation;
+    border-radius:63% 37% 54% 46% / 55% 45% 55% 45%;
+  }
+  .blob{
+    width:48px; height:48px; flex:0 0 auto;
+    border:1px solid rgba(0,0,0,0.15);
+    border-radius:63% 37% 54% 46% / 55% 45% 55% 45%;
+    box-shadow: inset 0 -3px 4px rgba(0,0,0,0.15), inset 0 2px 3px rgba(255,255,255,0.3);
+  }
+  input[type=color]{
+    -webkit-appearance:none; appearance:none;
+    width:0; height:0; border:none; padding:0; opacity:0; position:absolute;
+  }
+  .hex-field{
+    width:96px;
+    font-family:'Work Sans', monospace;
+    font-size:16px;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    border-radius:8px;
+    padding:10px 10px;
+    color:var(--ink);
+    -webkit-appearance:none; appearance:none;
+  }
+  .parts-wrap{ display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .parts-field{
+    width:60px;
+    font-size:16px;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    border-radius:8px;
+    padding:10px 6px;
+    text-align:center;
+    color:var(--ink);
+    -webkit-appearance:none; appearance:none;
+  }
+  .parts-label{ font-size:12px; color:var(--ink-soft); }
+  .row-remove{
+    margin-left:auto;
+    border:none; background:none; color:var(--ink-soft);
+    cursor:pointer; font-size:22px; line-height:1;
+    width:44px; height:44px;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:50%;
+    touch-action:manipulation;
+  }
+  .row-remove:hover{ color:var(--accent-deep); }
+  .row-remove:active{ background:var(--line-soft); }
+  .add-btn{
+    margin-top:14px;
+    background:none;
+    border:1px dashed var(--line);
+    color:var(--ink-soft);
+    border-radius:8px;
+    padding:13px 14px;
+    min-height:48px;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    width:100%;
+    touch-action:manipulation;
+  }
+  .add-btn:hover{ border-color:var(--accent); color:var(--accent-deep); }
+  .add-btn:active{ background:var(--line-soft); }
+
+  .mix-result{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+  }
+  .mix-swatch{
+    width:150px; height:150px;
+    border-radius:50% 45% 55% 48% / 48% 55% 45% 52%;
+    border:1px solid rgba(0,0,0,0.15);
+    box-shadow: inset 0 -8px 14px rgba(0,0,0,0.18), inset 0 5px 10px rgba(255,255,255,0.25), 0 6px 16px rgba(34,30,25,0.12);
+    margin-bottom:16px;
+  }
+  .mix-hex{
+    font-family:'Work Sans', monospace;
+    font-size:18px;
+    font-weight:600;
+    letter-spacing:0.02em;
+  }
+  .mix-rgb{ font-size:13.5px; color:var(--ink-soft); margin-top:2px; }
+  .copy-btn{
+    margin-top:14px;
+    background:var(--accent);
+    color:var(--accent-ink);
+    border:none;
+    border-radius:8px;
+    padding:13px 20px;
+    min-height:46px;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    touch-action:manipulation;
+  }
+  .copy-btn:hover{ background:var(--accent-deep); }
+  .note{
+    font-size:13px;
+    color:var(--ink-soft);
+    margin-top:16px;
+    line-height:1.5;
+    border-top:1px solid var(--line-soft);
+    padding-top:12px;
+  }
+
+  /* ---------- shared: dropzone ---------- */
+  .dropzone{
+    border:1.5px dashed var(--line);
+    border-radius:10px;
+    padding:30px 16px;
+    text-align:center;
+    cursor:pointer;
+    color:var(--ink-soft);
+    font-size:14px;
+    background:var(--surface-2);
+    touch-action:manipulation;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .dropzone.drag{ border-color:var(--accent); background:#FDF6EF; }
+  .dropzone:active{ background:#FDF6EF; }
+  .dropzone strong{ color:var(--ink); }
+  .preview-wrap{ margin-top:14px; text-align:center; }
+  .preview-wrap img, .preview-wrap canvas{
+    max-width:100%; max-height:220px;
+    border-radius:8px;
+    border:1px solid var(--line);
+  }
+
+  .field-row{ margin-bottom:22px; }
+  .field-row label{
+    display:flex; justify-content:space-between;
+    font-size:13.5px; font-weight:600; color:var(--ink-soft);
+    margin-bottom:10px;
+  }
+  .field-row label span.val{ color:var(--ink); font-family:'Work Sans', monospace; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none;
+    width:100%;
+    height:32px;
+    background:transparent;
+    margin:0;
+    touch-action:manipulation;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:6px;
+    border-radius:3px;
+    background:var(--line);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none;
+    width:28px; height:28px;
+    margin-top:-11px;
+    border-radius:50%;
+    background:var(--accent);
+    border:3px solid var(--accent-ink);
+    box-shadow:0 1px 4px rgba(34,30,25,0.35);
+  }
+  input[type=range]::-moz-range-track{
+    height:6px;
+    border-radius:3px;
+    background:var(--line);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:26px; height:26px;
+    border-radius:50%;
+    background:var(--accent);
+    border:3px solid var(--accent-ink);
+    box-shadow:0 1px 4px rgba(34,30,25,0.35);
+  }
+
+  /* ---------- palette swatches ---------- */
+  .palette-list{ display:flex; flex-direction:column; gap:10px; margin-top:8px; }
+  .palette-chip{
+    display:flex; align-items:center; gap:12px;
+    background:var(--surface-2);
+    border:1px solid var(--line);
+    border-radius:9px;
+    padding:10px 12px;
+    min-height:48px;
+    cursor:pointer;
+    touch-action:manipulation;
+    position:relative;
+  }
+  .palette-chip:hover{ border-color:var(--accent); }
+  .palette-chip:active{ background:#FDF6EF; }
+  .chip-color{
+    width:36px; height:36px; border-radius:8px; flex:0 0 auto;
+    border:1px solid rgba(0,0,0,0.12);
+  }
+  .chip-info{ display:flex; flex-direction:column; }
+  .chip-hex{ font-family:'Work Sans', monospace; font-size:14px; font-weight:600; }
+  .chip-pct{ font-size:12px; color:var(--ink-soft); }
+  .chip-copied{
+    position:absolute; right:12px; top:50%; transform:translateY(-50%);
+    font-size:12px; color:var(--accent-deep); font-weight:700;
+    opacity:0; transition:opacity .15s ease;
+  }
+  .chip-copied.show{ opacity:1; }
+
+  /* ---------- vectorizer ---------- */
+  .btn-primary{
+    background:var(--accent); color:var(--accent-ink);
+    border:none; border-radius:8px;
+    padding:14px 18px; min-height:50px; font-size:15px; font-weight:600;
+    cursor:pointer; width:100%;
+    touch-action:manipulation;
+  }
+  .btn-primary:hover{ background:var(--accent-deep); }
+  .btn-primary:disabled{ background:#C9BFA8; cursor:not-allowed; }
+  .btn-secondary{
+    background:var(--surface-2); color:var(--ink);
+    border:1px solid var(--line); border-radius:8px;
+    padding:12px 14px; min-height:46px; font-size:14px; font-weight:600;
+    cursor:pointer; flex:1;
+    touch-action:manipulation;
+  }
+  .btn-secondary:hover{ border-color:var(--accent); color:var(--accent-deep); }
+  .btn-secondary:active{ background:#FDF6EF; }
+  .btn-row{ display:flex; gap:10px; margin-top:12px; }
+  .status-line{
+    font-size:13px; color:var(--ink-soft); margin-top:10px; min-height:16px;
+  }
+  .svg-holder{
+    margin-top:14px; text-align:center;
+    background:
+      linear-gradient(45deg, #e7ddc4 25%, transparent 25%),
+      linear-gradient(-45deg, #e7ddc4 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #e7ddc4 75%),
+      linear-gradient(-45deg, transparent 75%, #e7ddc4 75%);
+    background-size:16px 16px;
+    background-position:0 0, 0 8px, 8px -8px, -8px 0px;
+    background-color:#f4efdf;
+    border-radius:8px;
+    border:1px solid var(--line);
+    padding:10px;
+  }
+  .svg-holder svg{ max-width:100%; max-height:340px; display:block; margin:0 auto; }
+
+  footer.app-footer{
+    margin-top:46px;
+    padding-top:16px;
+    border-top:1px solid var(--line);
+    font-size:12px;
+    color:var(--ink-soft);
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <a class="back-link" href="../../">‹ Shelf</a>
+  <header class="top">
+    <h1 class="wordmark">Underpaint</h1>
+    <p>A small bench of tools for painters: mix paint colours the way pigments actually behave, pull a working palette from a reference photo, and simplify a photo into flat colour shapes for a study.</p>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="mixer">Colour mixer</button>
+      <button class="tab-btn" data-tab="palette">Image to palette</button>
+      <button class="tab-btn" data-tab="vector">Simplify to vector</button>
+    </nav>
+  </header>
+
+  <!-- ===================== MIXER ===================== -->
+  <section class="panel active" id="panel-mixer">
+    <h2 class="tool-title">Colour mixer</h2>
+    <p class="tool-sub">Add two or more paints and set how many parts of each go into the mix. Mixing happens in a pigment-like colour space, so blue and yellow make green instead of grey mud.</p>
+    <div class="grid2">
+      <div class="card">
+        <div id="paintRows"></div>
+        <button class="add-btn" id="addPaintBtn">+ Add a paint</button>
+      </div>
+      <div class="card mix-result">
+        <div class="mix-swatch" id="mixSwatch"></div>
+        <div class="mix-hex" id="mixHex">#000000</div>
+        <div class="mix-rgb" id="mixRgb">rgb(0, 0, 0)</div>
+        <button class="copy-btn" id="mixCopyBtn">Copy hex</button>
+        <p class="note">This uses an RYB-style approximation of subtractive paint mixing rather than a scientific pigment model (which would need each paint's real reflectance data). Treat the result as a starting point on the palette, not a guarantee — always test small.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PALETTE ===================== -->
+  <section class="panel" id="panel-palette">
+    <h2 class="tool-title">Image to palette</h2>
+    <p class="tool-sub">Drop in a reference photo to pull out the colours you'd need to mix for it. Click any swatch to copy its hex code.</p>
+    <div class="grid2">
+      <div class="card">
+        <div class="dropzone" id="paletteDropzone">
+          <div><strong>Click to upload</strong> or drag a photo here</div>
+          <div style="margin-top:4px;">JPG, PNG or WEBP</div>
+        </div>
+        <input type="file" id="paletteFileInput" accept="image/*" style="display:none;">
+        <div class="preview-wrap" id="palettePreviewWrap" style="display:none;">
+          <img id="palettePreviewImg" alt="Uploaded reference">
+        </div>
+      </div>
+      <div class="card">
+        <div class="field-row">
+          <label>Number of colours <span class="val" id="paletteKVal">6</span></label>
+          <input type="range" id="paletteKSlider" min="3" max="12" value="6">
+        </div>
+        <div class="palette-list" id="paletteList"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== VECTOR ===================== -->
+  <section class="panel" id="panel-vector">
+    <h2 class="tool-title">Simplify to vector</h2>
+    <p class="tool-sub">Flattens a photo into a small number of solid colour shapes and traces them into an SVG — handy for a value study, a stencil, or a simplified block-in.</p>
+    <div class="grid2">
+      <div class="card">
+        <div class="dropzone" id="vectorDropzone">
+          <div><strong>Click to upload</strong> or drag a photo here</div>
+          <div style="margin-top:4px;">JPG, PNG or WEBP</div>
+        </div>
+        <input type="file" id="vectorFileInput" accept="image/*" style="display:none;">
+        <div class="preview-wrap" id="vectorPreviewWrap" style="display:none;">
+          <img id="vectorPreviewImg" alt="Uploaded reference">
+        </div>
+      </div>
+      <div class="card">
+        <div class="field-row">
+          <label>Colours <span class="val" id="vecKVal">8</span></label>
+          <input type="range" id="vecKSlider" min="2" max="16" value="8">
+        </div>
+        <div class="field-row">
+          <label>Detail <span class="val" id="vecDetailVal">180px</span></label>
+          <input type="range" id="vecDetailSlider" min="60" max="320" step="10" value="180">
+        </div>
+        <div class="field-row">
+          <label>Smoothing <span class="val" id="vecSmoothVal">1</span></label>
+          <input type="range" id="vecSmoothSlider" min="0" max="3" value="1">
+        </div>
+        <button class="btn-primary" id="vecRenderBtn" disabled>Simplify image</button>
+        <div class="status-line" id="vecStatus"></div>
+      </div>
+    </div>
+    <div class="svg-holder" id="vecSvgHolder" style="display:none;"></div>
+    <div class="btn-row" id="vecDownloadRow" style="display:none; max-width:960px;">
+      <button class="btn-secondary" id="vecDownloadSvgBtn">Download SVG</button>
+      <button class="btn-secondary" id="vecDownloadPngBtn">Download PNG</button>
+    </div>
+  </section>
+
+  <footer class="app-footer">Everything runs in your browser — images aren't uploaded anywhere.</footer>
+</div>
+
+<script>
+/* ============================================================
+   SHARED COLOUR UTILITIES
+   ============================================================ */
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+function hexToRgb(hex){
+  hex = hex.replace('#','').trim();
+  if (hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const num = parseInt(hex,16);
+  return [ (num>>16)&255, (num>>8)&255, num&255 ];
+}
+function rgbToHex(rgb){
+  return '#' + rgb.map(v=>clamp(Math.round(v),0,255).toString(16).padStart(2,'0')).join('');
+}
+
+function rgbToLab(rgbIn){
+  let [r,g,b] = rgbIn.map(v=>v/255);
+  [r,g,b] = [r,g,b].map(v => v>0.04045 ? Math.pow((v+0.055)/1.055,2.4) : v/12.92);
+  let x = (r*0.4124+g*0.3576+b*0.1805)/0.95047;
+  let y = (r*0.2126+g*0.7152+b*0.0722)/1.0;
+  let z = (r*0.0193+g*0.1192+b*0.9505)/1.08883;
+  [x,y,z] = [x,y,z].map(v => v>0.008856 ? Math.cbrt(v) : (7.787*v + 16/116));
+  return [116*y-16, 500*(x-y), 200*(y-z)];
+}
+function labToRgb(lab){
+  let [L,a,b] = lab;
+  let y = (L+16)/116;
+  let x = a/500 + y;
+  let z = y - b/200;
+  const finv = t => { const t3=t*t*t; return t3>0.008856 ? t3 : (t-16/116)/7.787; };
+  x = finv(x)*0.95047; y = finv(y)*1.0; z = finv(z)*1.08883;
+  let r = x*3.2406 + y*-1.5372 + z*-0.4986;
+  let g = x*-0.9689 + y*1.8758 + z*0.0415;
+  let bl = x*0.0557 + y*-0.2040 + z*1.0570;
+  const gam = v => v>0.0031308 ? 1.055*Math.pow(v,1/2.4)-0.055 : 12.92*v;
+  return [r,g,bl].map(v=>clamp(Math.round(gam(v)*255),0,255));
+}
+
+/* ============================================================
+   RYB PAINT-MIXING MODEL
+   ============================================================ */
+const RYB_CORNERS = {
+  '000':[1,1,1], '100':[1,0,0], '010':[1,1,0], '001':[0.163,0.373,0.6],
+  '110':[1,0.5,0], '101':[0.5,0,0.5], '011':[0.0,0.66,0.2], '111':[0.2,0.094,0.0]
+};
+function rybToRgb01(r,y,b){
+  const c000=RYB_CORNERS['000'],c100=RYB_CORNERS['100'],c010=RYB_CORNERS['010'],c001=RYB_CORNERS['001'];
+  const c110=RYB_CORNERS['110'],c101=RYB_CORNERS['101'],c011=RYB_CORNERS['011'],c111=RYB_CORNERS['111'];
+  const out=[0,0,0];
+  for (let i=0;i<3;i++){
+    const x00=c000[i]*(1-r)+c100[i]*r;
+    const x10=c010[i]*(1-r)+c110[i]*r;
+    const x01=c001[i]*(1-r)+c101[i]*r;
+    const x11=c011[i]*(1-r)+c111[i]*r;
+    const y0=x00*(1-y)+x10*y;
+    const y1=x01*(1-y)+x11*y;
+    out[i]=y0*(1-b)+y1*b;
+  }
+  return out;
+}
+let RYB_LUT = null;
+function buildRybLut(){
+  const steps=20; RYB_LUT=[];
+  for (let ri=0; ri<=steps; ri++)
+    for (let yi=0; yi<=steps; yi++)
+      for (let bi=0; bi<=steps; bi++){
+        const r=ri/steps,y=yi/steps,b=bi/steps;
+        RYB_LUT.push({ryb:[r,y,b], rgb:rybToRgb01(r,y,b)});
+      }
+}
+function rgbToRyb01(rgb01){
+  let best=null, bestD=Infinity;
+  for (const entry of RYB_LUT){
+    const dr=entry.rgb[0]-rgb01[0], dg=entry.rgb[1]-rgb01[1], db=entry.rgb[2]-rgb01[2];
+    const d=dr*dr+dg*dg+db*db;
+    if (d<bestD){ bestD=d; best=entry; }
+  }
+  return best.ryb;
+}
+function mixPaintsRgb(hexColors, weights){
+  const totalW = weights.reduce((a,b)=>a+b,0) || 1;
+  let r=0,y=0,b=0;
+  hexColors.forEach((hex,i)=>{
+    const rgb01 = hexToRgb(hex).map(v=>v/255);
+    const ryb = rgbToRyb01(rgb01);
+    const w = weights[i]/totalW;
+    r += ryb[0]*w; y += ryb[1]*w; b += ryb[2]*w;
+  });
+  const mixedRgb01 = rybToRgb01(r,y,b);
+  return mixedRgb01.map(v=>clamp(Math.round(v*255),0,255));
+}
+buildRybLut();
+
+/* ============================================================
+   K-MEANS (Lab space)
+   ============================================================ */
+function kmeansLab(pixelsLab, k, iters){
+  const n = pixelsLab.length;
+  k = Math.min(k, n);
+  let centroids = [];
+  const used = new Set();
+  // spread initial centroids using stride sampling for stability
+  const stride = Math.max(1, Math.floor(n/k));
+  for (let i=0; i<k; i++){
+    let idx = (i*stride) % n;
+    while (used.has(idx)) idx = (idx+1)%n;
+    used.add(idx);
+    centroids.push(pixelsLab[idx].slice());
+  }
+  let labels = new Array(n).fill(0);
+  for (let it=0; it<iters; it++){
+    for (let i=0;i<n;i++){
+      let best=0, bestD=Infinity;
+      const p = pixelsLab[i];
+      for (let c=0;c<centroids.length;c++){
+        const dl=p[0]-centroids[c][0], da=p[1]-centroids[c][1], db=p[2]-centroids[c][2];
+        const d=dl*dl+da*da+db*db;
+        if (d<bestD){ bestD=d; best=c; }
+      }
+      labels[i]=best;
+    }
+    const sums = centroids.map(()=>[0,0,0,0]);
+    for (let i=0;i<n;i++){
+      const s = sums[labels[i]], p = pixelsLab[i];
+      s[0]+=p[0]; s[1]+=p[1]; s[2]+=p[2]; s[3]++;
+    }
+    for (let c=0;c<centroids.length;c++){
+      if (sums[c][3]>0) centroids[c]=[sums[c][0]/sums[c][3], sums[c][1]/sums[c][3], sums[c][2]/sums[c][3]];
+    }
+  }
+  return { centroids, labels };
+}
+
+/* ============================================================
+   IMAGE LOADING HELPERS
+   ============================================================ */
+function loadImageFile(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+function drawToCanvas(img, maxDim){
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width*scale));
+  const h = Math.max(1, Math.round(img.height*scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  return { canvas, ctx, w, h };
+}
+
+/* ============================================================
+   TAB SWITCHING
+   ============================================================ */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ============================================================
+   MIXER TAB
+   ============================================================ */
+const paintRowsEl = document.getElementById('paintRows');
+let paints = [
+  { hex:'#2E4C9E', parts:1 }, // ultramarine-ish
+  { hex:'#F2C312', parts:1 }  // yellow
+];
+
+function renderPaintRows(){
+  paintRowsEl.innerHTML = '';
+  paints.forEach((p, i)=>{
+    const row = document.createElement('div');
+    row.className = 'paint-row';
+    row.innerHTML = `
+      <label class="swap-label">
+        <span class="blob" style="background:${p.hex}"></span>
+        <input type="color" value="${p.hex}" data-idx="${i}" class="colorPicker" aria-label="Pick paint colour">
+      </label>
+      <input type="text" class="hex-field" value="${p.hex}" data-idx="${i}" maxlength="7"
+        autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text">
+      <div class="parts-wrap">
+        <input type="number" class="parts-field" value="${p.parts}" min="0.5" step="0.5" data-idx="${i}" inputmode="decimal">
+        <div class="parts-label">parts</div>
+      </div>
+      <button class="row-remove" data-idx="${i}" title="Remove" aria-label="Remove paint">&times;</button>
+    `;
+    paintRowsEl.appendChild(row);
+  });
+
+  paintRowsEl.querySelectorAll('.colorPicker').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const i = +e.target.dataset.idx;
+      paints[i].hex = e.target.value;
+      renderPaintRows(); computeMix();
+    });
+  });
+  paintRowsEl.querySelectorAll('.hex-field').forEach(inp=>{
+    inp.addEventListener('focus', e=>e.target.select());
+    inp.addEventListener('change', e=>{
+      const i = +e.target.dataset.idx;
+      let v = e.target.value.trim();
+      if (!v.startsWith('#')) v = '#'+v;
+      if (/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(v)){
+        paints[i].hex = v; renderPaintRows(); computeMix();
+      }
+    });
+  });
+  paintRowsEl.querySelectorAll('.parts-field').forEach(inp=>{
+    inp.addEventListener('input', e=>{
+      const i = +e.target.dataset.idx;
+      paints[i].parts = clamp(parseFloat(e.target.value)||0.5, 0.5, 99);
+      computeMix();
+    });
+  });
+  paintRowsEl.querySelectorAll('.row-remove').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      if (paints.length<=2) return;
+      const i = +e.target.dataset.idx;
+      paints.splice(i,1);
+      renderPaintRows(); computeMix();
+    });
+  });
+}
+
+document.getElementById('addPaintBtn').addEventListener('click', ()=>{
+  if (paints.length>=8) return;
+  const palette = ['#C1502E','#3E7C5A','#D9A441','#5B3E8F','#B23A5B','#3A6EA5'];
+  paints.push({ hex: palette[paints.length % palette.length], parts:1 });
+  renderPaintRows(); computeMix();
+});
+
+function computeMix(){
+  const hexes = paints.map(p=>p.hex);
+  const weights = paints.map(p=>p.parts);
+  const mixed = mixPaintsRgb(hexes, weights);
+  const hex = rgbToHex(mixed);
+  document.getElementById('mixSwatch').style.background = hex;
+  document.getElementById('mixHex').textContent = hex.toUpperCase();
+  document.getElementById('mixRgb').textContent = `rgb(${mixed[0]}, ${mixed[1]}, ${mixed[2]})`;
+}
+
+document.getElementById('mixCopyBtn').addEventListener('click', async ()=>{
+  const hex = document.getElementById('mixHex').textContent;
+  try { await navigator.clipboard.writeText(hex); } catch(e) {}
+  const btn = document.getElementById('mixCopyBtn');
+  const old = btn.textContent;
+  btn.textContent = 'Copied!';
+  setTimeout(()=>btn.textContent = old, 1100);
+});
+
+renderPaintRows();
+computeMix();
+
+/* ============================================================
+   PALETTE TAB
+   ============================================================ */
+const paletteDropzone = document.getElementById('paletteDropzone');
+const paletteFileInput = document.getElementById('paletteFileInput');
+const palettePreviewWrap = document.getElementById('palettePreviewWrap');
+const palettePreviewImg = document.getElementById('palettePreviewImg');
+const paletteList = document.getElementById('paletteList');
+const paletteKSlider = document.getElementById('paletteKSlider');
+const paletteKVal = document.getElementById('paletteKVal');
+
+let paletteImg = null;
+
+function setupDropzone(zone, input, onFile){
+  zone.addEventListener('click', ()=>input.click());
+  input.addEventListener('change', ()=>{ if (input.files[0]) onFile(input.files[0]); });
+  zone.addEventListener('dragover', e=>{ e.preventDefault(); zone.classList.add('drag'); });
+  zone.addEventListener('dragleave', ()=>zone.classList.remove('drag'));
+  zone.addEventListener('drop', e=>{
+    e.preventDefault(); zone.classList.remove('drag');
+    if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+  });
+}
+
+setupDropzone(paletteDropzone, paletteFileInput, async (file)=>{
+  paletteImg = await loadImageFile(file);
+  palettePreviewImg.src = paletteImg.src;
+  palettePreviewWrap.style.display = 'block';
+  runPaletteExtraction();
+});
+
+paletteKSlider.addEventListener('input', ()=>{
+  paletteKVal.textContent = paletteKSlider.value;
+  if (paletteImg) runPaletteExtraction();
+});
+
+function runPaletteExtraction(){
+  const k = +paletteKSlider.value;
+  const { ctx, w, h } = drawToCanvas(paletteImg, 140);
+  const data = ctx.getImageData(0,0,w,h).data;
+  const pixelsRgb = [];
+  for (let i=0;i<data.length;i+=4){
+    if (data[i+3] < 10) continue; // skip transparent
+    pixelsRgb.push([data[i], data[i+1], data[i+2]]);
+  }
+  const pixelsLab = pixelsRgb.map(rgbToLab);
+  const { centroids, labels } = kmeansLab(pixelsLab, k, 7);
+  const counts = new Array(centroids.length).fill(0);
+  labels.forEach(l=>counts[l]++);
+  const total = labels.length;
+
+  const swatches = centroids.map((c,i)=>({ rgb: labToRgb(c), pct: counts[i]/total }))
+    .sort((a,b)=>b.pct-a.pct);
+
+  paletteList.innerHTML = '';
+  swatches.forEach(sw=>{
+    const hex = rgbToHex(sw.rgb);
+    const chip = document.createElement('div');
+    chip.className = 'palette-chip';
+    chip.innerHTML = `
+      <div class="chip-color" style="background:${hex}"></div>
+      <div class="chip-info">
+        <div class="chip-hex">${hex.toUpperCase()}</div>
+        <div class="chip-pct">${Math.round(sw.pct*100)}% of image</div>
+      </div>
+      <div class="chip-copied">Copied</div>
+    `;
+    chip.addEventListener('click', async ()=>{
+      try { await navigator.clipboard.writeText(hex); } catch(e) {}
+      const tag = chip.querySelector('.chip-copied');
+      tag.classList.add('show');
+      setTimeout(()=>tag.classList.remove('show'), 1000);
+    });
+    paletteList.appendChild(chip);
+  });
+}
+
+/* ============================================================
+   VECTOR TAB
+   ============================================================ */
+const vectorDropzone = document.getElementById('vectorDropzone');
+const vectorFileInput = document.getElementById('vectorFileInput');
+const vectorPreviewWrap = document.getElementById('vectorPreviewWrap');
+const vectorPreviewImg = document.getElementById('vectorPreviewImg');
+const vecKSlider = document.getElementById('vecKSlider');
+const vecKVal = document.getElementById('vecKVal');
+const vecDetailSlider = document.getElementById('vecDetailSlider');
+const vecDetailVal = document.getElementById('vecDetailVal');
+const vecSmoothSlider = document.getElementById('vecSmoothSlider');
+const vecSmoothVal = document.getElementById('vecSmoothVal');
+const vecRenderBtn = document.getElementById('vecRenderBtn');
+const vecStatus = document.getElementById('vecStatus');
+const vecSvgHolder = document.getElementById('vecSvgHolder');
+const vecDownloadRow = document.getElementById('vecDownloadRow');
+const vecDownloadSvgBtn = document.getElementById('vecDownloadSvgBtn');
+const vecDownloadPngBtn = document.getElementById('vecDownloadPngBtn');
+
+let vectorImg = null;
+let lastSvgString = null;
+
+setupDropzone(vectorDropzone, vectorFileInput, async (file)=>{
+  vectorImg = await loadImageFile(file);
+  vectorPreviewImg.src = vectorImg.src;
+  vectorPreviewWrap.style.display = 'block';
+  vecRenderBtn.disabled = false;
+  vecStatus.textContent = 'Ready — press "Simplify image".';
+});
+
+vecKSlider.addEventListener('input', ()=>vecKVal.textContent = vecKSlider.value);
+vecDetailSlider.addEventListener('input', ()=>vecDetailVal.textContent = vecDetailSlider.value+'px');
+vecSmoothSlider.addEventListener('input', ()=>vecSmoothVal.textContent = vecSmoothSlider.value);
+
+function smoothLabels(labels, w, h, iterations){
+  let cur = labels.slice();
+  for (let it=0; it<iterations; it++){
+    const next = cur.slice();
+    for (let y=0;y<h;y++){
+      for (let x=0;x<w;x++){
+        const counts = new Map();
+        for (let dy=-1;dy<=1;dy++){
+          for (let dx=-1;dx<=1;dx++){
+            const nx=x+dx, ny=y+dy;
+            if (nx<0||ny<0||nx>=w||ny>=h) continue;
+            const l = cur[ny*w+nx];
+            counts.set(l, (counts.get(l)||0)+1);
+          }
+        }
+        let best=cur[y*w+x], bestC=-1;
+        counts.forEach((c,l)=>{ if (c>bestC){ bestC=c; best=l; } });
+        next[y*w+x]=best;
+      }
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+function traceLabelBoundaries(mask, w, h){
+  const idx=(x,y)=>y*w+x;
+  const getVal=(x,y)=>(x<0||y<0||x>=w||y>=h) ? 0 : mask[idx(x,y)];
+  const edgeSet = new Set();
+  function addEdge(x1,y1,x2,y2){
+    const k1=x1+','+y1, k2=x2+','+y2;
+    const key = (k1<k2) ? k1+'|'+k2 : k2+'|'+k1;
+    edgeSet.add(key);
+  }
+  for (let y=0;y<h;y++){
+    for (let x=0;x<w;x++){
+      const here = getVal(x,y);
+      if (getVal(x+1,y)!==here) addEdge(x+1,y,x+1,y+1);
+      if (getVal(x-1,y)!==here) addEdge(x,y,x,y+1);
+      if (getVal(x,y+1)!==here) addEdge(x,y+1,x+1,y+1);
+      if (getVal(x,y-1)!==here) addEdge(x,y,x+1,y);
+    }
+  }
+  const cleanAdj = new Map();
+  edgeSet.forEach(key=>{
+    const [k1,k2] = key.split('|');
+    if (!cleanAdj.has(k1)) cleanAdj.set(k1, []);
+    if (!cleanAdj.has(k2)) cleanAdj.set(k2, []);
+    cleanAdj.get(k1).push(k2);
+    cleanAdj.get(k2).push(k1);
+  });
+  const visitedEdges = new Set();
+  const edgeKey=(a,b)=>(a<b)?a+'|'+b:b+'|'+a;
+  const pointOf=(k)=>{ const parts=k.split(','); return [+parts[0], +parts[1]]; };
+
+  const loops = [];
+  cleanAdj.forEach((neighbors, startKey)=>{
+    neighbors.forEach(n0=>{
+      const ek = edgeKey(startKey, n0);
+      if (visitedEdges.has(ek)) return;
+      const loopPts = [pointOf(startKey)];
+      let prev = startKey, cur = n0;
+      visitedEdges.add(ek);
+      let safety = 0;
+      while (cur !== startKey && safety < 200000){
+        safety++;
+        loopPts.push(pointOf(cur));
+        const curNeighbors = cleanAdj.get(cur) || [];
+        const [px,py] = pointOf(prev), [cx,cy] = pointOf(cur);
+        const inAngle = Math.atan2(cy-py, cx-px);
+        let bestScore = -Infinity, bestCand = null;
+        for (const cand of curNeighbors){
+          const ek2 = edgeKey(cur, cand);
+          if (visitedEdges.has(ek2)) continue;
+          const [nx,ny] = pointOf(cand);
+          const outAngle = Math.atan2(ny-cy, nx-cx);
+          let turn = outAngle - inAngle;
+          while (turn <= -Math.PI) turn += 2*Math.PI;
+          while (turn > Math.PI) turn -= 2*Math.PI;
+          const score = -turn;
+          if (score > bestScore){ bestScore = score; bestCand = cand; }
+        }
+        if (bestCand === null) break;
+        visitedEdges.add(edgeKey(cur, bestCand));
+        prev = cur; cur = bestCand;
+      }
+      loops.push(loopPts);
+    });
+  });
+  return loops;
+}
+
+function chaikin(loop, iterations){
+  let pts = loop;
+  for (let it=0; it<iterations; it++){
+    const newPts = [];
+    const n = pts.length;
+    for (let i=0;i<n;i++){
+      const p0 = pts[i], p1 = pts[(i+1)%n];
+      newPts.push([p0[0]*0.75+p1[0]*0.25, p0[1]*0.75+p1[1]*0.25]);
+      newPts.push([p0[0]*0.25+p1[0]*0.75, p0[1]*0.25+p1[1]*0.75]);
+    }
+    pts = newPts;
+  }
+  return pts;
+}
+
+function perpendicularDistance(pt, a, b){
+  const [x,y]=pt, [x1,y1]=a, [x2,y2]=b;
+  const dx=x2-x1, dy=y2-y1;
+  const len = Math.hypot(dx,dy);
+  if (len===0) return Math.hypot(x-x1,y-y1);
+  return Math.abs(dy*x - dx*y + x2*y1 - y2*x1)/len;
+}
+function douglasPeucker(points, epsilon){
+  const n = points.length;
+  if (n<3) return points.slice();
+  const keep = new Uint8Array(n);
+  keep[0]=1; keep[n-1]=1;
+  const stack = [[0,n-1]];
+  while (stack.length){
+    const [start,end] = stack.pop();
+    if (end<=start+1) continue;
+    let maxD=0, idx=-1;
+    for (let i=start+1;i<end;i++){
+      const d = perpendicularDistance(points[i], points[start], points[end]);
+      if (d>maxD){ maxD=d; idx=i; }
+    }
+    if (maxD>epsilon && idx!==-1){
+      keep[idx]=1;
+      stack.push([start, idx]);
+      stack.push([idx, end]);
+    }
+  }
+  const result=[];
+  for (let i=0;i<n;i++) if (keep[i]) result.push(points[i]);
+  return result;
+}
+
+function buildSvgFromLabels(labels, w, h, colorsRgb, chaikinIters, dpEpsilon){
+  let paths = '';
+  for (let L=0; L<colorsRgb.length; L++){
+    const mask = new Uint8Array(w*h);
+    let any=false;
+    for (let i=0;i<w*h;i++){ if (labels[i]===L){ mask[i]=1; any=true; } }
+    if (!any) continue;
+    const loops = traceLabelBoundaries(mask, w, h);
+    if (!loops.length) continue;
+    let d = '';
+    loops.forEach(loop=>{
+      if (loop.length<3) return;
+      let pts = chaikinIters>0 ? chaikin(loop, chaikinIters) : loop;
+      pts = douglasPeucker(pts.concat([pts[0]]), dpEpsilon);
+      if (pts.length<3) return;
+      d += 'M ' + pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L ') + ' Z ';
+    });
+    if (d){
+      const hex = rgbToHex(colorsRgb[L]);
+      paths += `<path d="${d}" fill="${hex}" fill-rule="evenodd"/>`;
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${paths}</svg>`;
+}
+
+vecRenderBtn.addEventListener('click', ()=>{
+  if (!vectorImg) return;
+  vecRenderBtn.disabled = true;
+  vecStatus.textContent = 'Simplifying… this can take a few seconds for busy photos.';
+  vecSvgHolder.style.display = 'none';
+  vecDownloadRow.style.display = 'none';
+  // let the UI paint the status message before the heavy work starts
+  setTimeout(()=>{
+    try {
+      runVectorize();
+    } catch(err){
+      vecStatus.textContent = 'Something went wrong simplifying that image — try a smaller detail level.';
+      console.error(err);
+    }
+    vecRenderBtn.disabled = false;
+  }, 30);
+});
+
+function runVectorize(){
+  const k = +vecKSlider.value;
+  const maxDim = +vecDetailSlider.value;
+  const smooth = +vecSmoothSlider.value;
+
+  const { ctx, w, h } = drawToCanvas(vectorImg, maxDim);
+  const data = ctx.getImageData(0,0,w,h).data;
+  const pixelsRgb = [];
+  for (let i=0;i<w*h;i++){
+    const o = i*4;
+    pixelsRgb.push([data[o], data[o+1], data[o+2]]);
+  }
+  const pixelsLab = pixelsRgb.map(rgbToLab);
+  const { centroids, labels } = kmeansLab(pixelsLab, k, 6);
+  const colorsRgb = centroids.map(labToRgb);
+
+  const smoothedLabels = smoothLabels(labels, w, h, smooth);
+
+  const chaikinIters = Math.min(2, smooth);
+  const dpEpsilon = 0.5 + smooth*0.35;
+
+  const svgString = buildSvgFromLabels(smoothedLabels, w, h, colorsRgb, chaikinIters, dpEpsilon);
+  lastSvgString = svgString;
+
+  vecSvgHolder.innerHTML = svgString;
+  vecSvgHolder.style.display = 'block';
+  vecDownloadRow.style.display = 'flex';
+  vecStatus.textContent = `Done — ${w}×${h} working size, ${colorsRgb.length} colours.`;
+}
+
+vecDownloadSvgBtn.addEventListener('click', ()=>{
+  if (!lastSvgString) return;
+  const blob = new Blob([lastSvgString], { type:'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'underpaint-simplified.svg';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+vecDownloadPngBtn.addEventListener('click', ()=>{
+  if (!lastSvgString) return;
+  const svgBlob = new Blob([lastSvgString], { type:'image/svg+xml' });
+  const url = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.onload = ()=>{
+    const scaleUp = 3;
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width*scaleUp; canvas.height = img.height*scaleUp;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(blob=>{
+      const pngUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = pngUrl; a.download = 'underpaint-simplified.png';
+      a.click();
+      URL.revokeObjectURL(pngUrl);
+      URL.revokeObjectURL(url);
+    });
+  };
+  img.src = url;
+});
+</script>
+</body>
+</html>

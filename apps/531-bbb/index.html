@@ -132,6 +132,10 @@
   .set-row .pct{font-size:12px;color:var(--muted);}
   .set-row .weight{font-family:var(--font-display);font-size:22px;font-weight:600;}
   .set-row .target{font-size:12px;color:var(--muted);margin-top:2px;}
+  .set-row .plate-line{font-size:11.5px;color:var(--steel);margin-top:6px;font-weight:600;}
+  .set-row .last-time{font-size:11px;color:var(--muted);margin-top:3px;font-style:italic;}
+  .plate-line{font-size:11.5px;color:var(--steel);margin-top:8px;font-weight:600;}
+  .last-time{font-size:11px;color:var(--muted);margin-top:4px;font-style:italic;}
   .set-row input.reps{
     width:64px;text-align:center;background:var(--panel-2);border:1px solid var(--line);
     color:var(--chalk);padding:10px 6px;font-size:16px;font-family:var(--font-display);
@@ -229,6 +233,7 @@
       unit:'kg',
       increment:2.5,
       bbbPercent:50,
+      barWeight:20,
       order:['press','deadlift','bench','squat'],
       tms:{ squat:95, bench:97.5, deadlift:135, press:57.5 }
     };
@@ -242,6 +247,8 @@
   const LIFT_LABEL = { squat:'Squat', bench:'Bench Press', deadlift:'Deadlift', press:'Overhead Press' };
   const LIFT_CLASS = { squat:'squat', bench:'bench', deadlift:'deadlift', press:'press' };
   const LIFT_ABBR = { squat:'SQ', bench:'BP', deadlift:'DL', press:'OH' };
+  const PLATES_KG = [25, 20, 15, 10, 5, 2.5, 1.25];
+  const PLATES_LB = [45, 35, 25, 10, 5, 2.5];
 
   const WEEK_SCHEME = {
     1:{ label:'5s',    pct:[65,75,85],  reps:['5','5','5+'] },
@@ -282,6 +289,149 @@
     const bbbLift = ALT_LIFT[lift];
     const bbbWeight = round(settings.tms[bbbLift] * settings.bbbPercent / 100);
     return { lift, tm, scheme, mainSets, bbbLift, bbbWeight };
+  }
+
+  /* ---------------- plate math ---------------- */
+  function barWeight(){
+    if (settings.barWeight) return settings.barWeight;
+    return settings.unit === 'kg' ? 20 : 45;
+  }
+
+  function plateDenoms(){
+    return settings.unit === 'kg' ? PLATES_KG : PLATES_LB;
+  }
+
+  // Greedy per-side plate breakdown for a given total bar weight. Works in
+  // quarter-kg units to avoid floating-point drift.
+  function plateBreakdown(totalWeight){
+    const bar = barWeight();
+    const perSide = Math.max(0, (totalWeight - bar) / 2);
+    const denoms = plateDenoms();
+    const counts = {};
+    let remaining = Math.round(perSide * 4);
+    denoms.forEach(p => {
+      const pq = Math.round(p * 4);
+      const n = Math.floor(remaining / pq);
+      if (n > 0){ counts[p] = n; remaining -= n * pq; }
+    });
+    return counts;
+  }
+
+  function diffPlateCounts(prev, next){
+    const add = {}, remove = {};
+    const keys = new Set([...Object.keys(prev || {}), ...Object.keys(next || {})]);
+    keys.forEach(k => {
+      const before = (prev && prev[k]) || 0;
+      const after = (next && next[k]) || 0;
+      if (after > before) add[k] = after - before;
+      else if (before > after) remove[k] = before - after;
+    });
+    return { add, remove };
+  }
+
+  // Walks a session's stage weights in order and returns the plates to load
+  // at each stage. When weight goes up, plates are only ever ADDED on top of
+  // whatever's already loaded (never swapped out). When weight drops (e.g.
+  // stepping down into BBB), it falls back to a fresh minimal breakdown and
+  // reports only the actual difference to remove.
+  function buildSessionPlateStages(weights){
+    const denoms = plateDenoms();
+    const bigDenoms = denoms.filter(p => p >= 10);     // never removed once loaded
+    const smallDenoms = denoms.filter(p => p < 10);    // 5, 2.5, 1.25 — fine to pull off
+
+    let current = {};   // plate size -> count currently loaded, per side
+    let currentQ = 0;    // current per-side weight in quarter-kg units
+
+    return weights.map(w => {
+      const targetQ = Math.round(Math.max(0, (w - barWeight()) / 2) * 4);
+      const deltaQ = targetQ - currentQ;
+      let add = {}, remove = {};
+
+      if (deltaQ >= 0){
+        let remaining = deltaQ;
+        denoms.forEach(p => {
+          const pq = Math.round(p * 4);
+          const n = Math.floor(remaining / pq);
+          if (n > 0){
+            add[p] = (add[p] || 0) + n;
+            current[p] = (current[p] || 0) + n;
+            remaining -= n * pq;
+          }
+        });
+      } else {
+        const bigTotalQ = bigDenoms.reduce((sum,p) => sum + (current[p]||0) * Math.round(p*4), 0);
+        let fresh;
+
+        if (targetQ >= bigTotalQ){
+          // Keep every 10kg+ plate exactly as loaded — only adjust 5/2.5/1.25.
+          let remaining = targetQ - bigTotalQ;
+          const freshSmall = {};
+          smallDenoms.forEach(p => {
+            const pq = Math.round(p * 4);
+            const n = Math.floor(remaining / pq);
+            if (n > 0){ freshSmall[p] = n; remaining -= n * pq; }
+          });
+          fresh = {};
+          bigDenoms.forEach(p => { if (current[p]) fresh[p] = current[p]; });
+          Object.keys(freshSmall).forEach(p => { fresh[p] = freshSmall[p]; });
+        } else {
+          // Target is lighter than the big plates alone — a big plate has to
+          // come off too; no way to hit this one without it.
+          fresh = {};
+          let remaining = targetQ;
+          denoms.forEach(p => {
+            const pq = Math.round(p * 4);
+            const n = Math.floor(remaining / pq);
+            if (n > 0){ fresh[p] = n; remaining -= n * pq; }
+          });
+        }
+
+        const d = diffPlateCounts(current, fresh);
+        add = d.add; remove = d.remove;
+        current = fresh;
+      }
+
+      currentQ = targetQ;
+      return { add, remove, total: Object.assign({}, current) };
+    });
+  }
+
+  function formatPlateCounts(counts){
+    const keys = Object.keys(counts).map(Number).sort((a,b) => b - a);
+    if (!keys.length) return '';
+    return keys.map(k => `${counts[k]}×${k}`).join(', ') + settings.unit;
+  }
+
+  function formatPlateStage(stage){
+    const addStr = formatPlateCounts(stage.add);
+    const removeStr = formatPlateCounts(stage.remove);
+    if (!addStr && !removeStr){
+      return Object.keys(stage.total || {}).length ? 'No change' : 'Bar only';
+    }
+    const parts = [];
+    if (addStr) parts.push(`+ ${addStr}`);
+    if (removeStr) parts.push(`− ${removeStr}`);
+    return parts.join('&nbsp;&nbsp;·&nbsp;&nbsp;');
+  }
+
+  /* ---------------- last time recall ---------------- */
+  function lastTimeForSet(lift, week, setIndex){
+    const matches = history
+      .filter(h => h.lift === lift && h.week === week && h.mainSets[setIndex])
+      .sort((a,b) => a.date.localeCompare(b.date));
+    if (!matches.length) return null;
+    const h = matches[matches.length - 1];
+    const s = h.mainSets[setIndex];
+    return { weight: s.weight, reps: s.actualReps ?? null, repsLabel: s.repsLabel };
+  }
+
+  function lastTimeForBBB(bbbLift){
+    const matches = history
+      .filter(h => h.bbbLift === bbbLift && h.bbbWeight != null)
+      .sort((a,b) => a.date.localeCompare(b.date));
+    if (!matches.length) return null;
+    const h = matches[matches.length - 1];
+    return { weight: h.bbbWeight, sets: h.bbbSets };
   }
 
   /* ---------------- navigation state ---------------- */
@@ -380,6 +530,10 @@
               <option value="2.5" ${settings.increment==2.5?'selected':''}>2.5</option>
               <option value="5" ${settings.increment==5?'selected':''}>5</option>
             </select>
+          </label>
+          <label class="field">
+            <span>Barbell weight (for plate suggestions)</span>
+            <input type="number" inputmode="decimal" id="f-bar" value="${settings.barWeight ?? (settings.unit==='kg' ? 20 : 45)}">
           </label>
         </div>
 
@@ -491,16 +645,35 @@
   function renderTrain(){
     const w = computeWorkout();
     const lift = w.lift;
-    let setsHtml = w.mainSets.map((s,i)=>`
-      <div class="set-row">
-        <div class="set-left">
-          <div class="pct">${s.pct}% of TM</div>
-          <div class="weight">${fmtW(s.weight)}</div>
-          <div class="target">Target: ${s.repsLabel} reps</div>
+
+    const stageWeights = w.mainSets.map(s => s.weight).concat([w.bbbWeight]);
+    const plateStages = buildSessionPlateStages(stageWeights);
+
+    let setsHtml = w.mainSets.map((s,i)=>{
+      const plateLine = formatPlateStage(plateStages[i]);
+
+      const lt = lastTimeForSet(lift, state.week, i);
+      const ltLine = lt
+        ? `Last time: ${fmtW(lt.weight)} × ${lt.reps ?? lt.repsLabel}`
+        : '';
+
+      return `
+        <div class="set-row">
+          <div class="set-left">
+            <div class="pct">${s.pct}% of TM</div>
+            <div class="weight">${fmtW(s.weight)}</div>
+            <div class="target">Target: ${s.repsLabel} reps</div>
+            <div class="plate-line">${plateLine} per side</div>
+            ${ltLine ? `<div class="last-time">${ltLine}</div>` : ''}
+          </div>
+          ${s.amrap ? `<input class="reps" type="number" inputmode="numeric" placeholder="reps" id="amrap-${i}" value="${repsInput[i] ?? ''}">` : ''}
         </div>
-        ${s.amrap ? `<input class="reps" type="number" inputmode="numeric" placeholder="reps" id="amrap-${i}" value="${repsInput[i] ?? ''}">` : ''}
-      </div>
-    `).join('');
+      `;
+    }).join('');
+
+    const bbbPlateLine = formatPlateStage(plateStages[3]);
+    const bbbLast = lastTimeForBBB(w.bbbLift);
+    const bbbLastLine = bbbLast ? `Last time: ${fmtW(bbbLast.weight)} × ${bbbLast.sets}/5 sets` : '';
 
     let bbbDots = '';
     for (let i=0;i<5;i++){
@@ -528,6 +701,8 @@
         <div class="card">
           <h2>Boring But Big — ${LIFT_LABEL[w.bbbLift]}</h2>
           <div class="row"><span class="label">5 sets × 10 reps</span><span class="value">${fmtW(w.bbbWeight)}</span></div>
+          <div class="plate-line">${bbbPlateLine} per side</div>
+          ${bbbLastLine ? `<div class="last-time">${bbbLastLine}</div>` : ''}
           <div class="bbb-counter">${bbbDots}</div>
         </div>
 
@@ -775,6 +950,7 @@
     }
     settings.unit = document.getElementById('f-unit').value;
     settings.increment = parseFloat(document.getElementById('f-inc').value);
+    settings.barWeight = parseFloat(document.getElementById('f-bar').value) || (document.getElementById('f-unit').value === 'kg' ? 20 : 45);
     settings.bbbPercent = parseInt(document.getElementById('f-bbb').value);
     settings.tms = { squat, bench, deadlift, press };
     save(SKEY, settings);
