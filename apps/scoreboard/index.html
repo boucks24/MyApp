@@ -148,8 +148,10 @@
     that's ESPN's endpoint, not something saved on this device. Tennis is filtered client-side to Grand Slam, Masters/1000
     and tour-500 events by tournament name (list: <code>TENNIS_500PLUS_KEYWORDS</code>) and then to matches with at least
     one player ranked top 50 (top 100 if Australian) using ESPN's separate, even-less-documented rankings API
-    (<code>fetchTennisRankings()</code>) — if that ranking lookup fails, the section falls back to showing all 500+
-    matches unfiltered by rank and says so inline. Rugby union covers Super Rugby Pacific (Australian Super Rugby teams)
+    (<code>fetchTennisRankings()</code>). Both of those tennis filters fail open: if the tier or ranking filter would
+    have matched nothing despite matches actually being on, it shows everything unfiltered at that stage instead and
+    says so inline — a filter matching zero real matches is treated as the filter being broken, not the schedule being
+    empty. Rugby union covers Super Rugby Pacific (Australian Super Rugby teams)
     and the Rugby Championship (Wallabies internationals) by numeric ESPN league ID. Cricket uses a different,
     cross-domain "personalised header" endpoint filtered to matches involving Australia — Big Bash/WBBL aren't
     wired up, their league ID wasn't verifiable when this was built. Review each season and adjust
@@ -188,8 +190,8 @@ const TENNIS_500PLUS_KEYWORDS = [
   'atp finals','wta finals','nitto atp finals'
 ];
 
-function matchesTennis500Plus(rawEvent){
-  const haystack = JSON.stringify(rawEvent).toLowerCase();
+function matchesTennis500Plus(rawEvent, extraContext){
+  const haystack = JSON.stringify(rawEvent).toLowerCase() + ' ' + (extraContext || '');
   return TENNIS_500PLUS_KEYWORDS.some(kw => haystack.includes(kw));
 }
 
@@ -281,17 +283,49 @@ function tennisRankQualifies(info){
 }
 
 async function fetchTennis(source){
-  const data = await fetchJsonSafe(source.url);
+  // The `dates=` range param is a guess for this endpoint — if it comes back
+  // empty, retry the bare scoreboard URL (ESPN's own default "current event"
+  // behaviour) before giving up.
+  let data = await fetchJsonSafe(source.url);
+  let rawEvents = data && Array.isArray(data.events) ? data.events : [];
+  if (!rawEvents.length){
+    const bareUrl = source.url.split('?')[0];
+    const fallback = await fetchJsonSafe(bareUrl);
+    if (fallback && Array.isArray(fallback.events) && fallback.events.length){
+      data = fallback;
+      rawEvents = fallback.events;
+    }
+  }
   if (!data) throw new Error('fetch failed');
-  const rawEvents = Array.isArray(data.events) ? data.events : [];
-  const tierEvents = rawEvents.filter(matchesTennis500Plus).map(normalizeEvent).filter(Boolean);
+  console.debug(`[scoreboard:${source.id}] raw events:`, rawEvents.length);
+
+  // Tournament name/tier isn't confirmed to live on each event object, so also
+  // search whatever league/season metadata came back with the response.
+  const context = JSON.stringify(data.leagues || data.season || {}).toLowerCase();
+  let tierRaw = rawEvents.filter(ev => matchesTennis500Plus(ev, context));
+  let tierNote = null;
+  if (rawEvents.length && !tierRaw.length){
+    // The keyword filter matched nothing even though matches exist — more
+    // likely a shape mismatch than an actual empty week. Fail open.
+    tierRaw = rawEvents;
+    tierNote = 'Grand Slam/500+ filter matched nothing this refresh — showing all current matches, unfiltered by tournament tier.';
+  }
+  const tierEvents = tierRaw.map(normalizeEvent).filter(Boolean);
+  console.debug(`[scoreboard:${source.id}] after tier filter:`, tierEvents.length, tierNote ? '(failed open)' : '');
 
   const rankingsMap = await fetchTennisRankings(source.tour);
   if (!rankingsMap.size){
-    return { events: tierEvents, note: 'Rankings unavailable right now — showing all Grand Slam/500+ matches, unfiltered by player ranking.' };
+    return { events: tierEvents, note: tierNote || 'Rankings unavailable right now — showing all Grand Slam/500+ matches, unfiltered by player ranking.' };
   }
-  const events = tierEvents.filter(ev => ev.competitors.some(c => tennisRankQualifies(competitorRankInfo(c, rankingsMap))));
-  return { events, note: null };
+  const ranked = tierEvents.filter(ev => ev.competitors.some(c => tennisRankQualifies(competitorRankInfo(c, rankingsMap))));
+  console.debug(`[scoreboard:${source.id}] after rank filter:`, ranked.length);
+  if (tierEvents.length && !ranked.length){
+    // Same fail-open reasoning: an unmatched rank filter is more likely a
+    // name/ID join failure than every single current match being outside
+    // the top 50/100.
+    return { events: tierEvents, note: tierNote || 'Ranking filter matched nobody this refresh — showing all Grand Slam/500+ matches, unfiltered by player ranking.' };
+  }
+  return { events: ranked, note: tierNote };
 }
 
 /* ============================================================
