@@ -3,27 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#EDE7D8">
+<meta name="theme-color" content="#1C1A17">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Underpaint — mixing, palettes &amp; simplified studies</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --canvas:#EDE7D8;
-    --surface:#F8F4EA;
-    --surface-2:#FFFFFF;
-    --ink:#221E19;
-    --ink-soft:#665D4E;
-    --line:#CFC3A5;
-    --line-soft:#DED4B9;
-    --accent:#C1502E;
-    --accent-deep:#9C3D22;
-    --accent-ink:#FBF3E9;
-    --shadow: 0 1px 0 rgba(34,30,25,0.05);
+    --canvas:#1C1A17;
+    --surface:#26231F;
+    --surface-2:#332E28;
+    --ink:#F1EAE0;
+    --ink-soft:#B3A99B;
+    --line:#413B33;
+    --line-soft:#332E28;
+    --accent:#D69A3D;
+    --accent-deep:#B87F27;
+    --accent-ink:#1C1A17;
+    --surface-hover:#3A342C;
+    --shadow: 0 1px 0 rgba(0,0,0,0.3);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html{ -webkit-text-size-adjust:100%; }
@@ -31,7 +32,7 @@
   body{
     background:var(--canvas);
     color:var(--ink);
-    font-family:'Work Sans', sans-serif;
+    font-family:'Karla', sans-serif;
     -webkit-font-smoothing:antialiased;
     min-height:100vh;
     touch-action:manipulation;
@@ -73,7 +74,7 @@
     margin-bottom:26px;
   }
   h1.wordmark{
-    font-family:'Fraunces', serif;
+    font-family:'Bitter', serif;
     font-optical-sizing:auto;
     font-weight:600;
     font-size:clamp(32px, 5vw, 44px);
@@ -96,7 +97,7 @@
     margin-left:-4px;
   }
   nav.tabs button{
-    font-family:'Work Sans', sans-serif;
+    font-family:'Karla', sans-serif;
     font-size:15px;
     font-weight:600;
     color:var(--ink-soft);
@@ -137,7 +138,7 @@
   @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:translateY(0);} }
 
   h2.tool-title{
-    font-family:'Fraunces', serif;
+    font-family:'Bitter', serif;
     font-weight:600;
     font-size:24px;
     margin:4px 0 4px;
@@ -164,6 +165,7 @@
     border:1px solid var(--line);
     border-radius:10px;
     padding:18px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.25);
   }
   @media (max-width:480px){
     .card{ padding:14px; }
@@ -197,7 +199,7 @@
   }
   .hex-field{
     width:96px;
-    font-family:'Work Sans', monospace;
+    font-family:'Karla', monospace;
     font-size:16px;
     border:1px solid var(--line);
     background:var(--surface-2);
@@ -236,7 +238,7 @@
   .parts-value{
     min-width:34px;
     text-align:center;
-    font-family:'Work Sans', monospace;
+    font-family:'Karla', monospace;
     font-size:15px;
     font-weight:600;
     color:var(--ink);
@@ -284,7 +286,7 @@
     margin-bottom:16px;
   }
   .mix-hex{
-    font-family:'Work Sans', monospace;
+    font-family:'Karla', monospace;
     font-size:18px;
     font-weight:600;
     letter-spacing:0.02em;
@@ -326,8 +328,8 @@
     touch-action:manipulation;
     transition:border-color .15s ease, background .15s ease;
   }
-  .dropzone.drag{ border-color:var(--accent); background:#FDF6EF; }
-  .dropzone:active{ background:#FDF6EF; }
+  .dropzone.drag{ border-color:var(--accent); background:var(--surface-hover); }
+  .dropzone:active{ background:var(--surface-hover); }
   .dropzone strong{ color:var(--ink); }
   .preview-wrap{ margin-top:14px; text-align:center; }
   .preview-wrap img, .preview-wrap canvas{
@@ -342,7 +344,7 @@
     font-size:13.5px; font-weight:600; color:var(--ink-soft);
     margin-bottom:10px;
   }
-  .field-row label span.val{ color:var(--ink); font-family:'Work Sans', monospace; }
+  .field-row label span.val{ color:var(--ink); font-family:'Karla', monospace; }
   input[type=range]{
     -webkit-appearance:none; appearance:none;
     width:100%;
@@ -392,13 +394,13 @@
     position:relative;
   }
   .palette-chip:hover{ border-color:var(--accent); }
-  .palette-chip:active{ background:#FDF6EF; }
+  .palette-chip:active{ background:var(--surface-hover); }
   .chip-color{
     width:36px; height:36px; border-radius:8px; flex:0 0 auto;
     border:1px solid rgba(0,0,0,0.12);
   }
   .chip-info{ display:flex; flex-direction:column; }
-  .chip-hex{ font-family:'Work Sans', monospace; font-size:14px; font-weight:600; }
+  .chip-hex{ font-family:'Karla', monospace; font-size:14px; font-weight:600; }
   .chip-pct{ font-size:12px; color:var(--ink-soft); }
   .chip-copied{
     position:absolute; right:12px; top:50%; transform:translateY(-50%);
@@ -416,7 +418,7 @@
     touch-action:manipulation;
   }
   .btn-primary:hover{ background:var(--accent-deep); }
-  .btn-primary:disabled{ background:#C9BFA8; cursor:not-allowed; }
+  .btn-primary:disabled{ background:#5A5347; cursor:not-allowed; }
   .btn-secondary{
     background:var(--surface-2); color:var(--ink);
     border:1px solid var(--line); border-radius:8px;
@@ -425,12 +427,14 @@
     touch-action:manipulation;
   }
   .btn-secondary:hover{ border-color:var(--accent); color:var(--accent-deep); }
-  .btn-secondary:active{ background:#FDF6EF; }
+  .btn-secondary:active{ background:var(--surface-hover); }
+  .medium-btn.active{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  .medium-btn.active:hover{ color:var(--accent-ink); }
   .btn-row{ display:flex; gap:10px; margin-top:12px; }
   .status-line{
     font-size:13px; color:var(--ink-soft); margin-top:10px; min-height:16px;
   }
-  .status-line.match{ color:#2E7D4F; font-weight:600; }
+  .status-line.match{ color:#7FBF8A; font-weight:600; }
   .svg-holder{
     margin-top:14px; text-align:center;
     background:
@@ -441,6 +445,7 @@
     background-size:16px 16px;
     background-position:0 0, 0 8px, 8px -8px, -8px 0px;
     background-color:#f4efdf;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
     border-radius:8px;
     border:1px solid var(--line);
     padding:10px;
@@ -491,7 +496,20 @@
   <!-- ===================== MIXER ===================== -->
   <section class="panel active" id="panel-mixer">
     <h2 class="tool-title">Colour mixer</h2>
-    <p class="tool-sub">Add or remove paints and set how many parts of each go into the mix. Mixing happens in a pigment-like colour space, so blue and yellow make green instead of grey mud.</p>
+    <p class="tool-sub">Pick a medium, add or remove paints, and set how many parts of each go into the mix. Mixing uses a pigment-absorption model, so blue and yellow make green instead of grey mud.</p>
+
+    <div class="field-row" style="max-width:560px;">
+      <label>Medium</label>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <button type="button" class="btn-secondary medium-btn active" data-medium="oil" style="flex:0 0 auto;">Oil</button>
+        <button type="button" class="btn-secondary medium-btn" data-medium="gouache" style="flex:0 0 auto;">Gouache</button>
+        <button type="button" class="btn-secondary medium-btn" data-medium="watercolour" style="flex:0 0 auto;">Watercolour</button>
+      </div>
+    </div>
+    <div class="field-row" id="waterDilutionRow" style="max-width:560px; display:none;">
+      <label>Water (dilution) <span class="val" id="waterDilutionVal">40%</span></label>
+      <input type="range" id="waterDilutionSlider" min="0" max="90" value="40">
+    </div>
 
     <div class="field-row" style="max-width:560px;">
       <label>Palette</label>
@@ -539,7 +557,7 @@
         </div>
         <div class="status-line" id="targetStatus" style="text-align:center;"></div>
 
-        <p class="note">This uses an RYB-style approximation of subtractive paint mixing rather than a scientific pigment model (which would need each paint's real reflectance data). Treat the result as a starting point on the palette, not a guarantee — always test small. Colour names are estimated from the nearest common colour, not an exact match.</p>
+        <p class="note">This uses a simplified Kubelka-Munk pigment model — the same absorption/scattering theory behind tools like Mixbox — rather than each paint's exact measured reflectance data, so treat the result as a strong starting point, not a guarantee — always test small. Oil is mixed at full strength; gouache dries a little lighter and flatter as its chalk fillers set; watercolour is modelled as a transparent wash diluted with paper-white rather than mixed with white paint. Colour names are estimated from the nearest common colour, not an exact match.</p>
       </div>
     </div>
   </section>
@@ -650,59 +668,80 @@ function labToRgb(lab){
 }
 
 /* ============================================================
-   RYB PAINT-MIXING MODEL
-   ============================================================ */
-const RYB_CORNERS = {
-  '000':[1,1,1], '100':[1,0,0], '010':[1,1,0], '001':[0.163,0.373,0.6],
-  '110':[1,0.5,0], '101':[0.5,0,0.5], '011':[0.0,0.66,0.2], '111':[0.2,0.094,0.0]
-};
-function rybToRgb01(r,y,b){
-  const c000=RYB_CORNERS['000'],c100=RYB_CORNERS['100'],c010=RYB_CORNERS['010'],c001=RYB_CORNERS['001'];
-  const c110=RYB_CORNERS['110'],c101=RYB_CORNERS['101'],c011=RYB_CORNERS['011'],c111=RYB_CORNERS['111'];
-  const out=[0,0,0];
-  for (let i=0;i<3;i++){
-    const x00=c000[i]*(1-r)+c100[i]*r;
-    const x10=c010[i]*(1-r)+c110[i]*r;
-    const x01=c001[i]*(1-r)+c101[i]*r;
-    const x11=c011[i]*(1-r)+c111[i]*r;
-    const y0=x00*(1-y)+x10*y;
-    const y1=x01*(1-y)+x11*y;
-    out[i]=y0*(1-b)+y1*b;
-  }
-  return out;
+   KUBELKA-MUNK PIGMENT MIXING
+   ============================================================
+   Real pigment-mixing tools (Mixbox, Spectral.js) work by converting each
+   colour to an absorption/scattering ratio (K/S) per wavelength, summing
+   those ratios by mixing proportion, then converting back — that's what
+   makes blue+yellow give green instead of the grey a plain RGB/RYB average
+   produces. This is the single-constant, per-RGB-channel simplification of
+   that theory (no real spectral reflectance data per paint, since paints
+   here are arbitrary user-picked hex colours, not measured pigments). */
+function reflectanceToKS(r){
+  // Real pigments' reflectance curves never sit exactly at 0 or 1 in a band —
+  // that's what keeps K/S finite. Paints here are picked as arbitrary sRGB
+  // hex values (including flat 0/255 primaries via the colour picker), so
+  // clamp well inside the extremes rather than only just off them, or one
+  // fully-saturated channel in any single paint would swamp the whole mix.
+  r = clamp(r, 0.02, 0.98);
+  return (1-r)*(1-r) / (2*r);
 }
-let RYB_LUT = null;
-function buildRybLut(){
-  const steps=20; RYB_LUT=[];
-  for (let ri=0; ri<=steps; ri++)
-    for (let yi=0; yi<=steps; yi++)
-      for (let bi=0; bi<=steps; bi++){
-        const r=ri/steps,y=yi/steps,b=bi/steps;
-        RYB_LUT.push({ryb:[r,y,b], rgb:rybToRgb01(r,y,b)});
-      }
+function ksToReflectance(ks){
+  return clamp(1 + ks - Math.sqrt(ks*ks + 2*ks), 0, 1);
 }
-function rgbToRyb01(rgb01){
-  let best=null, bestD=Infinity;
-  for (const entry of RYB_LUT){
-    const dr=entry.rgb[0]-rgb01[0], dg=entry.rgb[1]-rgb01[1], db=entry.rgb[2]-rgb01[2];
-    const d=dr*dr+dg*dg+db*db;
-    if (d<bestD){ bestD=d; best=entry; }
-  }
-  return best.ryb;
-}
-function mixPaintsRgb(hexColors, weights){
+function mixPigmentsKM(hexColors, weights){
   const totalW = weights.reduce((a,b)=>a+b,0) || 1;
-  let r=0,y=0,b=0;
-  hexColors.forEach((hex,i)=>{
-    const rgb01 = hexToRgb(hex).map(v=>v/255);
-    const ryb = rgbToRyb01(rgb01);
-    const w = weights[i]/totalW;
-    r += ryb[0]*w; y += ryb[1]*w; b += ryb[2]*w;
-  });
-  const mixedRgb01 = rybToRgb01(r,y,b);
-  return mixedRgb01.map(v=>clamp(Math.round(v*255),0,255));
+  const out = [0,0,0];
+  for (let ch=0; ch<3; ch++){
+    let ksSum = 0;
+    hexColors.forEach((hex,i)=>{
+      const r01 = hexToRgb(hex)[ch]/255;
+      ksSum += reflectanceToKS(r01) * (weights[i]/totalW);
+    });
+    out[ch] = ksToReflectance(ksSum);
+  }
+  return out.map(v=>clamp(Math.round(v*255),0,255));
 }
-buildRybLut();
+
+/* ============================================================
+   MEDIUM-SPECIFIC FINISH
+   ============================================================
+   The K-M mix above models the pigment chemistry, which is the same
+   whichever medium carries it — the differences between oil, gouache and
+   watercolour are physical properties of the binder, applied as a finish
+   on top of that shared mix rather than a different colour model:
+   - Oil's binder has a higher refractive index, which visibly deepens and
+     enriches colour compared to the same pigment dry (the well-known
+     "oil darkening" effect) — modelled as a small chroma boost + value dip.
+   - Gouache's chalk-like opacifying fillers make it dry lighter and flatter
+     than the wet mix — modelled as a lightness lift + chroma cut.
+   - Watercolour is transparent: its lightening comes from diluting with
+     water so the white paper shows through a thin wash, not from mixing in
+     white paint — modelled as an literal blend toward paper white, driven
+     by a dilution amount the K-M mix itself has no notion of. */
+const MEDIA = {
+  oil: { label:'Oil' },
+  gouache: { label:'Gouache' },
+  watercolour: { label:'Watercolour' }
+};
+function applyMediumFinish(rgb, medium, dilution){
+  if (medium === 'gouache'){
+    const lab = rgbToLab(rgb);
+    lab[0] = clamp(lab[0]*1.05 + 2, 0, 100);
+    lab[1] *= 0.85; lab[2] *= 0.85;
+    return labToRgb(lab);
+  }
+  if (medium === 'watercolour'){
+    const d = dilution==null ? 0.4 : dilution;
+    const paper = [255,255,255];
+    return rgb.map((v,i)=> clamp(Math.round(v*(1-d) + paper[i]*d), 0, 255));
+  }
+  // oil (default): richer, slightly deeper than the raw pigment mix
+  const lab = rgbToLab(rgb);
+  lab[0] = clamp(lab[0]*0.97, 0, 100);
+  lab[1] *= 1.12; lab[2] *= 1.12;
+  return labToRgb(lab);
+}
 
 function labDist(a, b){
   const dl=a[0]-b[0], da=a[1]-b[1], db=a[2]-b[2];
@@ -792,25 +831,22 @@ function gcdOfParts(arr){
 }
 
 /* Reverse-solve: given a set of paint hexes and a target hex, search for the
-   whole-number parts ratio that gets the RYB mix closest to the target
-   (Lab distance). Works directly in integer part-space (0..MAX_SOLVE_PARTS
-   per paint, zero allowed) via hill-climbing from random restarts, so it
-   naturally drops paints that only hurt the match instead of being forced
-   to include a little of everything. */
-function solveMixForTarget(hexes, targetHex){
+   whole-number parts ratio that gets the K-M mix (with the chosen medium's
+   finish applied) closest to the target (Lab distance). Works directly in
+   integer part-space (0..MAX_SOLVE_PARTS per paint, zero allowed) via
+   hill-climbing from random restarts, so it naturally drops paints that only
+   hurt the match instead of being forced to include a little of everything. */
+function solveMixForTarget(hexes, targetHex, medium, dilution){
   const n = hexes.length;
   if (!n) return null;
   const MAX_SOLVE_PARTS = 12;
   const RESTARTS = 40;
-  const rybList = hexes.map(hex => rgbToRyb01(hexToRgb(hex).map(v=>v/255)));
   const targetLab = rgbToLab(hexToRgb(targetHex));
 
   function mixFromWeights(w){
     const total = w.reduce((a,b)=>a+b,0);
     if (!total) return null;
-    let r=0,y=0,b=0;
-    rybList.forEach((ryb,i)=>{ const wi=w[i]/total; r+=ryb[0]*wi; y+=ryb[1]*wi; b+=ryb[2]*wi; });
-    return rybToRgb01(r,y,b).map(v=>clamp(Math.round(v*255),0,255));
+    return applyMediumFinish(mixPigmentsKM(hexes, w), medium, dilution);
   }
   function scoreOf(w){
     const mixed = mixFromWeights(w);
@@ -965,6 +1001,8 @@ const PALETTES = {
 };
 
 let paints = [];
+let currentMedium = 'oil';
+let waterDilution = 0.4;
 
 function renderPaintRows(){
   paintRowsEl.innerHTML = '';
@@ -1070,8 +1108,27 @@ document.querySelectorAll('.palette-btn').forEach(btn=>{
 
 function currentMix(){
   if (!paints.length) return null;
-  return mixPaintsRgb(paints.map(p=>p.hex), paints.map(p=>p.parts));
+  const km = mixPigmentsKM(paints.map(p=>p.hex), paints.map(p=>p.parts));
+  return applyMediumFinish(km, currentMedium, waterDilution);
 }
+
+const waterDilutionRow = document.getElementById('waterDilutionRow');
+const waterDilutionSlider = document.getElementById('waterDilutionSlider');
+const waterDilutionVal = document.getElementById('waterDilutionVal');
+document.querySelectorAll('.medium-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.medium-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMedium = btn.dataset.medium;
+    waterDilutionRow.style.display = currentMedium==='watercolour' ? 'block' : 'none';
+    computeMix();
+  });
+});
+waterDilutionSlider.addEventListener('input', ()=>{
+  waterDilution = (+waterDilutionSlider.value)/100;
+  waterDilutionVal.textContent = waterDilutionSlider.value + '%';
+  computeMix();
+});
 
 let lastMixHex = null;
 
@@ -1199,7 +1256,7 @@ document.getElementById('checkMixBtn').addEventListener('click', ()=>{
 
 document.getElementById('solveMixBtn').addEventListener('click', ()=>{
   if (!paints.length){ targetStatus.textContent = 'Add at least one paint (or pick a palette) first.'; return; }
-  const result = solveMixForTarget(paints.map(p=>p.hex), targetHex);
+  const result = solveMixForTarget(paints.map(p=>p.hex), targetHex, currentMedium, waterDilution);
   paints.forEach((p,i)=> p.parts = result.weights[i]);
   renderPaintRows(); computeMix();
   const pct = matchPct(result.distance);
@@ -1479,18 +1536,19 @@ function buildPaletteLegend(hexes, width){
   let x = padX, y = padY;
   const placed = [];
   hexes.forEach(hex=>{
-    const textW = hex.length * 7.5 + 6;
+    const label = nearestColorName(hex);
+    const textW = label.length * 6.7 + 10;
     const itemW = swatch + 8 + textW;
     if (x + itemW > width - padX && x > padX){ x = padX; y += rowH; }
-    placed.push({ hex, x, y });
+    placed.push({ hex, label, x, y });
     x += itemW + gap;
   });
   const height = y + rowH + (padY - 16) + 8;
-  let frag = `<rect x="0" y="0" width="${width}" height="${height}" fill="#F8F4EA"/>`;
-  frag += `<line x1="0" y1="0" x2="${width}" y2="0" stroke="#CFC3A5" stroke-width="1"/>`;
+  let frag = `<rect x="0" y="0" width="${width}" height="${height}" fill="#26231F"/>`;
+  frag += `<line x1="0" y1="0" x2="${width}" y2="0" stroke="#413B33" stroke-width="1"/>`;
   placed.forEach(p=>{
-    frag += `<rect x="${p.x}" y="${p.y}" width="${swatch}" height="${swatch}" rx="4" fill="${p.hex}" stroke="rgba(0,0,0,0.15)"/>`;
-    frag += `<text x="${p.x+swatch+8}" y="${p.y+swatch*0.68}" font-family="'Work Sans', monospace" font-size="13" fill="#221E19">${p.hex.toUpperCase()}</text>`;
+    frag += `<rect x="${p.x}" y="${p.y}" width="${swatch}" height="${swatch}" rx="4" fill="${p.hex}" stroke="rgba(0,0,0,0.25)"/>`;
+    frag += `<text x="${p.x+swatch+8}" y="${p.y+swatch*0.68}" font-family="'Karla', sans-serif" font-size="13" fill="#F1EAE0">${p.label}</text>`;
   });
   return { fragment: frag, height };
 }
