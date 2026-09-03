@@ -7,7 +7,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tennis Analysis">
 <title>Tennis Analysis</title>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700&display=swap');
   :root{
@@ -239,9 +238,8 @@
   <section class="tool-panel" id="panel-library">
     <div class="card">
       <h2>Add a clip</h2>
-      <div class="note" style="margin:0 0 12px; padding:0; border:none;">Pick a video and tag it by shot type. On a browser that supports it (desktop Chrome/Edge), a device file stays where it is and this just remembers a reference, re-asking permission to open it when needed. On others (including iOS Safari) there's no way to keep that link, so you'll be asked to re-pick the same file when you want to play it back. Google Photos works the same everywhere — a picked clip is remembered by ID and reopened by reconnecting your account, no re-picking needed — but the connection here is running in Google's "testing" mode, so it only works for the Google account(s) added as test users, and sign-in may show an "unverified app" warning to click past.</div>
-      <button class="primary" id="addClipBtn">+ Add from this device</button>
-      <button class="secondary" id="addFromGoogleBtn" style="margin-top:10px;">+ Add from Google Photos</button>
+      <div class="note" style="margin:0 0 12px; padding:0; border:none;">Pick a video from your phone or computer and tag it by shot type. On a browser that supports it (desktop Chrome/Edge), the clip stays where it is and this just remembers a reference, re-asking permission to open it when needed. On others (including iOS Safari) there's no way to keep that link, so you'll be asked to re-pick the same file when you want to play it back.</div>
+      <button class="primary" id="addClipBtn">+ Add a clip</button>
       <input type="file" id="pendingFileInput" accept="video/*" style="display:none;">
       <div class="status-line" id="libraryStatus"></div>
     </div>
@@ -931,93 +929,6 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
   };
   const supportsFileHandle = 'showOpenFilePicker' in window;
 
-  /* ---------------- Google Photos (Picker API) ----------------
-     Set this to the OAuth 2.0 "Web application" Client ID from your own
-     Google Cloud project (console.cloud.google.com → APIs & Services →
-     Credentials). It's not secret — Client IDs are meant to be public in
-     browser code. You'll also need, in that same project:
-       - APIs & Services → Library → enable "Google Photos Picker API"
-       - APIs & Services → OAuth consent screen → External → Testing,
-         with your own Google account added under "Test users"
-       - That Credentials → OAuth client → Authorized JavaScript origins:
-         add the origin (scheme+host, no path) this page is served from
-     In testing mode only accounts on the test-user list can sign in, and
-     Google shows an "unverified app" screen to click through — expected,
-     not a bug, for a personal single-user setup like this. */
-  const GOOGLE_CLIENT_ID = 'REPLACE_WITH_YOUR_CLIENT_ID.apps.googleusercontent.com';
-  const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/photospicker.mediaitems.readonly';
-  const googleConfigured = !GOOGLE_CLIENT_ID.startsWith('REPLACE_WITH_');
-
-  let googleAccessToken = null;
-  let googleTokenExpiry = 0;
-
-  function requestGoogleToken({ silent } = {}){
-    return new Promise((resolve, reject) => {
-      if (!window.google || !window.google.accounts || !window.google.accounts.oauth2){
-        reject(new Error('Google sign-in script not loaded yet — try again in a moment'));
-        return;
-      }
-      const client = window.google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: GOOGLE_SCOPE,
-        prompt: silent ? '' : 'consent',
-        callback: (resp) => {
-          if (!resp || resp.error){ reject(new Error((resp && resp.error) || 'sign-in failed')); return; }
-          googleAccessToken = resp.access_token;
-          googleTokenExpiry = Date.now() + (resp.expires_in * 1000) - 30000;
-          resolve(googleAccessToken);
-        }
-      });
-      client.requestAccessToken();
-    });
-  }
-
-  async function ensureGoogleToken(){
-    if (googleAccessToken && Date.now() < googleTokenExpiry) return googleAccessToken;
-    try { return await requestGoogleToken({ silent:true }); }
-    catch(e){ return null; }
-  }
-
-  async function createPickerSession(token){
-    const res = await fetch('https://photospicker.googleapis.com/v1/sessions', {
-      method:'POST', headers:{ Authorization:`Bearer ${token}` }
-    });
-    if (!res.ok) throw new Error('could not open the picker (' + res.status + ')');
-    return res.json();
-  }
-
-  async function pollPickerSession(token, session){
-    const pollMs = (session.pollingConfig && session.pollingConfig.pollInterval)
-      ? parseFloat(session.pollingConfig.pollInterval) * 1000 : 2000;
-    const deadline = Date.now() + 5 * 60 * 1000;
-    while (Date.now() < deadline){
-      await new Promise(r => setTimeout(r, pollMs));
-      const res = await fetch(`https://photospicker.googleapis.com/v1/sessions/${session.id}`, {
-        headers:{ Authorization:`Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error('lost track of the picker session (' + res.status + ')');
-      const updated = await res.json();
-      if (updated.mediaItemsSet){
-        const listRes = await fetch(`https://photospicker.googleapis.com/v1/mediaItems?sessionId=${session.id}`, {
-          headers:{ Authorization:`Bearer ${token}` }
-        });
-        if (!listRes.ok) throw new Error('could not read what you picked (' + listRes.status + ')');
-        const data = await listRes.json();
-        return (data.mediaItems || []).filter(mi => mi.mediaFile && mi.mediaFile.mimeType && mi.mediaFile.mimeType.startsWith('video/'));
-      }
-    }
-    throw new Error('timed out waiting for a pick — try again');
-  }
-
-  function blobToDataUrl(blob){
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  }
-
   /* ---------------- IndexedDB (video handles/metadata only — no video bytes) ---------------- */
   const DB_NAME = 'tennis-analysis', DB_VERSION = 1, STORE = 'clips';
   function openDb(){
@@ -1055,7 +966,6 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
   }
 
   const addClipBtn = document.getElementById('addClipBtn');
-  const addFromGoogleBtn = document.getElementById('addFromGoogleBtn');
   const pendingFileInput = document.getElementById('pendingFileInput');
   const libraryStatus = document.getElementById('libraryStatus');
   const tagFormCard = document.getElementById('tagFormCard');
@@ -1080,15 +990,9 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
 
   let library = [];
   let libraryFilter = 'all';
-  let pendingFile = null, pendingHandle = null, pendingGoogleItem = null, pendingCategory = null, pendingSubcategory = null;
-  let googlePickQueue = [];
+  let pendingFile = null, pendingHandle = null, pendingCategory = null, pendingSubcategory = null;
   let playerObjectUrl = null;
   let relinkTarget = null;
-
-  if (!googleConfigured){
-    addFromGoogleBtn.disabled = true;
-    addFromGoogleBtn.title = 'Set GOOGLE_CLIENT_ID in the code first — see the comment above it.';
-  }
 
   function fmtDate(ts){
     const d = new Date(ts);
@@ -1117,41 +1021,11 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
     pendingFileInput.value = '';
   });
 
-  addFromGoogleBtn.addEventListener('click', async () => {
-    libraryStatus.textContent = 'Connecting to Google Photos…';
-    let token;
-    try { token = await ensureGoogleToken() || await requestGoogleToken({ silent:false }); }
-    catch(e){ libraryStatus.textContent = 'Google sign-in failed: ' + e.message; return; }
-
-    try {
-      libraryStatus.textContent = 'Opening the Google Photos picker in a new tab…';
-      const session = await createPickerSession(token);
-      window.open(session.pickerUri, '_blank', 'noopener');
-      libraryStatus.textContent = 'Choose video(s) in that tab, then come back here.';
-      const items = await pollPickerSession(token, session);
-      if (!items.length){
-        libraryStatus.textContent = 'No videos were picked (photos are skipped here) — try again.';
-        return;
-      }
-      libraryStatus.textContent = `${items.length} video${items.length===1?'':'s'} picked — tag ${items.length===1?'it':'them'} below.`;
-      googlePickQueue = items.slice(1);
-      openTagForm(null, null, items[0]);
-    } catch(e){
-      console.error(e);
-      libraryStatus.textContent = 'Google Photos picker failed: ' + e.message;
-    }
-  });
-
-  function openTagForm(file, handle, googleItem){
-    pendingFile = file; pendingHandle = handle; pendingGoogleItem = googleItem || null;
+  function openTagForm(file, handle){
+    pendingFile = file; pendingHandle = handle;
     pendingCategory = null; pendingSubcategory = null;
-    if (googleItem){
-      tagPreviewVideo.src = googleItem.mediaFile.baseUrl + '=dv';
-      tagFileName.textContent = googleItem.mediaFile.filename || googleItem.filename || 'Google Photos video';
-    } else {
-      tagPreviewVideo.src = URL.createObjectURL(file);
-      tagFileName.textContent = file.name;
-    }
+    tagPreviewVideo.src = URL.createObjectURL(file);
+    tagFileName.textContent = file.name;
     tagNote.value = '';
     renderCategoryChips();
     subcategoryRow.classList.add('hidden');
@@ -1164,14 +1038,11 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
 
   function closeTagForm(){
     tagFormCard.classList.add('hidden');
-    if (pendingFile && tagPreviewVideo.src) URL.revokeObjectURL(tagPreviewVideo.src);
+    if (tagPreviewVideo.src) URL.revokeObjectURL(tagPreviewVideo.src);
     tagPreviewVideo.removeAttribute('src');
-    pendingFile = null; pendingHandle = null; pendingGoogleItem = null;
+    pendingFile = null; pendingHandle = null;
   }
-  cancelTagBtn.addEventListener('click', () => {
-    googlePickQueue = [];
-    closeTagForm();
-  });
+  cancelTagBtn.addEventListener('click', closeTagForm);
 
   function renderCategoryChips(){
     categoryChips.innerHTML = '';
@@ -1234,59 +1105,29 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
   }
 
   saveClipBtn.addEventListener('click', async () => {
-    if (!pendingCategory || !pendingSubcategory) return;
-    if (!pendingFile && !pendingGoogleItem) return;
+    if (!pendingFile || !pendingCategory || !pendingSubcategory) return;
     saveClipBtn.disabled = true;
     saveClipBtn.textContent = 'Saving…';
-
-    let entry;
-    if (pendingGoogleItem){
-      const item = pendingGoogleItem;
-      let thumbnail = null;
-      try {
-        const thumbRes = await fetch(item.mediaFile.baseUrl + '=w320-h180-c');
-        thumbnail = await blobToDataUrl(await thumbRes.blob());
-      } catch(e){ console.error(e); }
-      entry = {
-        id: 'clip_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-        category: pendingCategory,
-        subcategory: pendingSubcategory,
-        note: tagNote.value.trim(),
-        addedAt: Date.now(),
-        fileName: item.mediaFile.filename || item.filename || 'Google Photos video',
-        fileSize: null,
-        fileLastModified: null,
-        thumbnail,
-        kind: 'google',
-        googleMediaItemId: item.id
-      };
-    } else {
-      const thumbnail = await captureThumbnail(tagPreviewVideo);
-      entry = {
-        id: 'clip_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-        category: pendingCategory,
-        subcategory: pendingSubcategory,
-        note: tagNote.value.trim(),
-        addedAt: Date.now(),
-        fileName: pendingFile.name,
-        fileSize: pendingFile.size,
-        fileLastModified: pendingFile.lastModified,
-        thumbnail,
-        kind: pendingHandle ? 'handle' : 'meta'
-      };
-      if (pendingHandle) entry.handle = pendingHandle;
-    }
-
+    const thumbnail = await captureThumbnail(tagPreviewVideo);
+    const entry = {
+      id: 'clip_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      category: pendingCategory,
+      subcategory: pendingSubcategory,
+      note: tagNote.value.trim(),
+      addedAt: Date.now(),
+      fileName: pendingFile.name,
+      fileSize: pendingFile.size,
+      fileLastModified: pendingFile.lastModified,
+      thumbnail,
+      kind: pendingHandle ? 'handle' : 'meta'
+    };
+    if (pendingHandle) entry.handle = pendingHandle;
     try {
       await dbPut(entry);
       library.unshift(entry);
       renderLibrary();
       libraryStatus.textContent = 'Saved to library.';
       closeTagForm();
-      if (googlePickQueue.length){
-        const next = googlePickQueue.shift();
-        openTagForm(null, null, next);
-      }
     } catch(e){
       console.error(e);
       libraryStatus.textContent = 'Could not save that clip — try again.';
@@ -1326,7 +1167,7 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
           <div class="lib-cat">${catLabel}</div>
           <div class="lib-sub">${entry.subcategory}</div>
           <div class="lib-name">${entry.fileName}</div>
-          <div class="lib-badge">${entry.kind === 'handle' ? 'Linked' : entry.kind === 'google' ? 'Google Photos' : fmtDate(entry.addedAt)}</div>
+          <div class="lib-badge">${entry.kind === 'handle' ? 'Linked' : fmtDate(entry.addedAt)}</div>
         </div>
       `;
       card.addEventListener('click', () => playEntry(entry));
@@ -1351,11 +1192,7 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
   function showPlayer(file, entry, warning){
     if (playerObjectUrl) URL.revokeObjectURL(playerObjectUrl);
     playerObjectUrl = URL.createObjectURL(file);
-    showPlayerFromUrl(playerObjectUrl, entry, warning);
-  }
-
-  function showPlayerFromUrl(url, entry, warning){
-    playerVideo.src = url;
+    playerVideo.src = playerObjectUrl;
     const catLabel = SHOT_CATEGORIES[entry.category] ? SHOT_CATEGORIES[entry.category].label : entry.category;
     playerTitle.textContent = `${catLabel} — ${entry.subcategory}`;
     playerStatus.textContent = warning || '';
@@ -1371,17 +1208,8 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
     playerTitle.textContent = `${catLabel} — ${entry.subcategory}`;
     playerStatus.textContent = message;
     relinkTarget = entry;
-    relinkBtn.textContent = entry.kind === 'google' ? 'Reconnect Google Photos' : 'Re-select file';
     relinkRow.classList.remove('hidden');
     playerOverlay.classList.remove('hidden');
-  }
-
-  async function fetchGoogleMediaItem(entry, token){
-    const res = await fetch(`https://photospicker.googleapis.com/v1/mediaItems/${entry.googleMediaItemId}`, {
-      headers:{ Authorization:`Bearer ${token}` }
-    });
-    if (!res.ok) throw new Error('status ' + res.status);
-    return res.json();
   }
 
   async function playEntry(entry){
@@ -1399,21 +1227,6 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
         return;
       }
     }
-    if (entry.kind === 'google'){
-      const token = await ensureGoogleToken();
-      if (!token){
-        showRelinkPrompt(entry, 'Reconnect your Google account to play this clip.');
-        return;
-      }
-      try {
-        const item = await fetchGoogleMediaItem(entry, token);
-        showPlayerFromUrl(item.mediaFile.baseUrl + '=dv', entry);
-      } catch(e){
-        console.error(e);
-        showRelinkPrompt(entry, "Couldn't load that clip from Google Photos — reconnect and try again.");
-      }
-      return;
-    }
     showRelinkPrompt(entry, `This browser can't keep a link to your files — re-select "${entry.fileName}" to play it.`);
   }
 
@@ -1429,17 +1242,6 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
   relinkBtn.addEventListener('click', async () => {
     const entry = relinkTarget;
     if (!entry) return;
-    if (entry.kind === 'google'){
-      try {
-        const token = await requestGoogleToken({ silent:false });
-        const item = await fetchGoogleMediaItem(entry, token);
-        showPlayerFromUrl(item.mediaFile.baseUrl + '=dv', entry);
-      } catch(e){
-        console.error(e);
-        playerStatus.textContent = 'Still could not load this clip: ' + e.message;
-      }
-      return;
-    }
     let file = null, handle = null;
     if (supportsFileHandle){
       try {
