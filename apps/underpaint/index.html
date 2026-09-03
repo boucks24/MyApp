@@ -514,7 +514,7 @@
     <div class="field-row" style="max-width:560px;">
       <label>Palette</label>
       <div style="display:flex; flex-wrap:wrap; gap:8px;">
-        <button type="button" class="btn-secondary palette-btn" data-palette="primary" style="flex:0 0 auto;">+ Primary Triad + White/Black</button>
+        <button type="button" class="btn-secondary palette-btn" data-palette="basic" style="flex:0 0 auto;">+ Basic Palette</button>
         <button type="button" class="btn-secondary palette-btn" data-palette="zorn" style="flex:0 0 auto;">+ Zorn Palette</button>
         <button type="button" class="btn-secondary palette-btn" data-palette="earth" style="flex:0 0 auto;">+ Earth &amp; Landscape</button>
         <button type="button" class="btn-secondary" id="clearPaintsBtn" style="flex:0 0 auto;">Clear all</button>
@@ -969,14 +969,17 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
 const paintRowsEl = document.getElementById('paintRows');
 
 const PALETTES = {
-  primary: {
-    label: 'Primary Triad + White/Black',
+  basic: {
+    label: 'Basic Palette',
     paints: [
-      { hex:'#F2C312', name:'Cadmium Yellow' },
-      { hex:'#C1502E', name:'Cadmium Red' },
-      { hex:'#2E4C9E', name:'Ultramarine Blue' },
       { hex:'#F5F1E6', name:'Titanium White' },
-      { hex:'#2B2622', name:'Ivory Black' }
+      { hex:'#F2C312', name:'Cadmium Yellow' },
+      { hex:'#C68A2E', name:'Yellow Ochre' },
+      { hex:'#C1502E', name:'Cadmium Red' },
+      { hex:'#BF6E4E', name:'Light Red' },
+      { hex:'#2A8FB0', name:'Cerulean Blue Hue' },
+      { hex:'#1F4FA3', name:'Cobalt Blue Hue' },
+      { hex:'#2E4C9E', name:'Ultramarine Blue' }
     ]
   },
   zorn: {
