@@ -90,18 +90,6 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 .chart-head .v{font-family:var(--font-display);font-size:13px;font-weight:700;}
 .chart-block canvas{display:block;width:100%;height:110px;border-radius:8px;background:var(--panel);border:1px solid var(--line);touch-action:none;}
 
-/* ---- laps ---- */
-.laps-block{display:none;margin:16px 0 4px;}
-.laps-block.show{display:block;}
-.laps-block .t{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
-.laps-table{width:100%;border-collapse:collapse;font-size:12px;}
-.laps-table th{text-align:left;color:var(--muted);font-weight:600;font-size:10.5px;text-transform:uppercase;padding:4px 6px;border-bottom:1px solid var(--line);}
-.laps-table td{padding:7px 6px;border-bottom:1px solid var(--line);}
-.laps-table tr{cursor:pointer;}
-.laps-table tr:active{background:var(--panel2);}
-.laps-table tr.active-lap{background:var(--panel2);}
-.laps-table td:first-child, .laps-table th:first-child{padding-left:8px;}
-
 .footer-actions{display:none;margin-top:22px;text-align:center;}
 .footer-actions.show{display:block;}
 </style>
@@ -176,13 +164,6 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
     <canvas id="chartCad"></canvas>
   </div>
 
-  <div class="laps-block" id="lapsBlock">
-    <div class="t">Laps</div>
-    <table class="laps-table"><thead><tr>
-      <th>#</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th><th>Gain</th>
-    </tr></thead><tbody id="lapsBody"></tbody></table>
-  </div>
-
   <div class="footer-actions" id="footerActions">
     <button class="pill-btn" id="loadAnotherBtn2">Load another file</button>
   </div>
@@ -216,7 +197,7 @@ const BASE_TYPES = {
   0x90:{size:8,invalid:null, read:(dv,o,le)=>Number(dv.getBigUint64(o,le))},
 };
 
-const MESG = { RECORD:20, LAP:19, SESSION:18 };
+const MESG = { RECORD:20, SESSION:18 };
 
 function parseFitFile(buf){
   const dv = new DataView(buf);
@@ -230,7 +211,7 @@ function parseFitFile(buf){
 
   const localDefs = {}; // localType -> {littleEndian, globalNum, fields:[{num,size,base}], devFields:[{num,size}]}
   let lastTimestamp = 0;
-  const records = [], laps = [], sessions = [];
+  const records = [], sessions = [];
 
   while (pos < end - 1) {
     const headerByte = dv.getUint8(pos); pos += 1;
@@ -301,11 +282,10 @@ function parseFitFile(buf){
     }
 
     if (def.globalNum === MESG.RECORD) records.push(msg);
-    else if (def.globalNum === MESG.LAP) laps.push(msg);
     else if (def.globalNum === MESG.SESSION) sessions.push(msg);
   }
 
-  return {records, laps, sessions};
+  return {records, sessions};
 }
 
 /* ============================== field helpers ============================== */
@@ -487,39 +467,6 @@ function buildActivity(parsed){
   const sAvgHr = v(sess,16,255), sMaxHr = v(sess,17,255);
   const sAvgCad = v(sess,18,255), sMaxCad = v(sess,19,255);
 
-  // laps — walk cumulative distance/time forward per lap rather than trusting each lap's
-  // absolute start_time/timestamp fields, which some exporters leave stuck at activity start
-  let cumDist = 0, cumTime = 0, cursorIdx = 0;
-  const lapRows = parsed.laps.map((l,i)=>{
-    const lDist = v(l,9,4294967295);
-    const lTimer = v(l,8,4294967295);
-    const lElapsed = v(l,7,4294967295);
-    const lAvgHr = v(l,15,255);
-    const lAscent = v(l,21,65535);
-    const durationS = lTimer!==null ? lTimer/1000 : (lElapsed!==null ? lElapsed/1000 : null);
-    const startIdx = cursorIdx;
-    let endIdx;
-    if (lDist!==null) {
-      cumDist += lDist/100;
-      endIdx = Math.max(startIdx, lowerBound(dist, cumDist));
-    } else if (durationS!==null) {
-      cumTime += durationS;
-      endIdx = Math.max(startIdx, lowerBound(t, t[0] + cumTime*1000));
-    } else {
-      endIdx = n-1;
-    }
-    endIdx = Math.min(endIdx, n-1);
-    cursorIdx = Math.min(endIdx+1, n-1);
-    return {
-      num: i+1,
-      distM: lDist!==null ? lDist/100 : (dist[endIdx]-dist[startIdx]),
-      timerS: durationS!==null ? durationS : (endIdx>startIdx ? (t[endIdx]-t[startIdx])/1000 : 0),
-      avgHr: lAvgHr,
-      ascent: lAscent,
-      startIdx, endIdx,
-    };
-  });
-
   return {
     n, t, dist, totalDist,
     hasPos, lat: pts.map(p=>p.lat), lon: pts.map(p=>p.lon),
@@ -535,14 +482,7 @@ function buildActivity(parsed){
     avgCad: sAvgCad!==null?sAvgCad:avgCad, maxCad: sMaxCad!==null?sMaxCad:maxCad,
     calories: sCalories,
     sport: sportEnum, startTime,
-    laps: lapRows,
   };
-}
-
-function lowerBound(arr, val){
-  let lo=0, hi=arr.length-1;
-  while (lo<hi){ const mid=(lo+hi)>>1; if (arr[mid]<val) lo=mid+1; else hi=mid; }
-  return lo;
 }
 
 /* ============================== formatting ============================== */
@@ -590,7 +530,6 @@ class SlippyMap {
     this.tileCache = new Map();
     this.route = []; // [{lat,lon}]
     this.marker = null;
-    this.highlightRange = null;
     this._bindEvents();
     this._raf = null;
   }
@@ -605,7 +544,6 @@ class SlippyMap {
   }
   setRoute(route){ this.route = route; }
   setMarker(pt){ this.marker = pt; this.scheduleDraw(); }
-  setHighlight(range){ this.highlightRange = range; this.scheduleDraw(); }
   fitToRoute(padding){
     padding = padding===undefined?36:padding;
     const valid = this.route.filter(p=>p.lat!==null);
@@ -671,11 +609,6 @@ class SlippyMap {
       ctx.strokeStyle='#E8A33D'; ctx.lineWidth=3.5;
       this._strokePath(ctx, valid, proj);
 
-      if (this.highlightRange){
-        const seg = valid.filter(p=>p.idx>=this.highlightRange[0] && p.idx<=this.highlightRange[1]);
-        if (seg.length>1){ ctx.strokeStyle='#4FB477'; ctx.lineWidth=5; this._strokePath(ctx, seg, proj); }
-      }
-
       const s = proj(valid[0]), e = proj(valid[valid.length-1]);
       this._dot(ctx, s, '#4FB477');
       this._dot(ctx, e, '#D9614F');
@@ -734,7 +667,7 @@ class RouteChart {
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
     this.color = opts.color; this.fill = opts.fill;
     this.onHover = opts.onHover;
-    this.xs = []; this.ys = []; this.lapBoundaries = []; this.highlightRange = null; this.activeIdx = null;
+    this.xs = []; this.ys = []; this.activeIdx = null;
     this._bindEvents();
   }
   resize(){
@@ -746,15 +679,14 @@ class RouteChart {
     this.ctx.setTransform(dpr,0,0,dpr,0,0);
     this.draw();
   }
-  setData(xs, ys, lapBoundaries){
-    this.xs = xs; this.ys = ys; this.lapBoundaries = lapBoundaries||[];
+  setData(xs, ys){
+    this.xs = xs; this.ys = ys;
     const valid = ys.filter(y=>y!==null && !isNaN(y));
     this.yMin = valid.length ? Math.min(...valid) : 0;
     this.yMax = valid.length ? Math.max(...valid) : 1;
     if (this.yMin===this.yMax){ this.yMin -= 1; this.yMax += 1; }
     this.draw();
   }
-  setHighlight(range){ this.highlightRange = range; this.draw(); }
   setActive(idx){ this.activeIdx = idx; this.draw(); }
   _px(i){ const xmax = this.xs[this.xs.length-1]||1; return (this.xs[i]/xmax) * (this.cssW-8) + 4; }
   _py(y){ const pad=8; return this.cssH-pad - (y-this.yMin)/(this.yMax-this.yMin) * (this.cssH-2*pad); }
@@ -763,12 +695,6 @@ class RouteChart {
     if (!w||!h) return;
     ctx.clearRect(0,0,w,h);
     if (!this.xs.length) return;
-    if (this.highlightRange){
-      const x0=this._px(this.highlightRange[0]), x1=this._px(this.highlightRange[1]);
-      ctx.fillStyle='rgba(79,180,119,0.15)'; ctx.fillRect(x0,0,x1-x0,h);
-    }
-    ctx.strokeStyle='rgba(139,163,150,0.25)'; ctx.lineWidth=1;
-    for (const b of this.lapBoundaries){ const x=this._px(b); ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
 
     ctx.beginPath();
     let started=false;
@@ -905,53 +831,32 @@ function renderActivity(){
     el('mapEmpty').classList.add('show');
   }
 
-  const lapBoundaries = a.laps.slice(0,-1).map(l=>a.dist[l.endIdx]);
-
   if (a.hasEle){
     el('chartEleBlock').classList.add('show');
     if (!chartEle) chartEle = new RouteChart(el('chartEle'), {color:'#E8A33D', fill:'rgba(232,163,61,0.12)', onHover:onChartHover});
     chartEle.resize();
-    chartEle.setData(a.dist, a.ele, lapBoundaries);
+    chartEle.setData(a.dist, a.ele);
   } else el('chartEleBlock').classList.remove('show');
 
   el('chartSpeedBlock').classList.add('show');
   if (!chartSpeed) chartSpeed = new RouteChart(el('chartSpeed'), {color:'#4FB477', fill:'rgba(79,180,119,0.12)', onHover:onChartHover});
   chartSpeed.resize();
-  chartSpeed.setData(a.dist, a.speed, lapBoundaries);
+  chartSpeed.setData(a.dist, a.speed);
 
   if (a.hasHr){
     el('chartHrBlock').classList.add('show');
     el('roHrWrap').style.display='';
     if (!chartHr) chartHr = new RouteChart(el('chartHr'), {color:'#D9614F', fill:'rgba(217,97,79,0.12)', onHover:onChartHover});
     chartHr.resize();
-    chartHr.setData(a.dist, a.hr, lapBoundaries);
+    chartHr.setData(a.dist, a.hr);
   } else { el('chartHrBlock').classList.remove('show'); el('roHrWrap').style.display='none'; }
 
   if (a.hasCad){
     el('chartCadBlock').classList.add('show');
     if (!chartCad) chartCad = new RouteChart(el('chartCad'), {color:'#8FA396', fill:'rgba(143,163,150,0.12)', onHover:onChartHover});
     chartCad.resize();
-    chartCad.setData(a.dist, a.cad, lapBoundaries);
+    chartCad.setData(a.dist, a.cad);
   } else el('chartCadBlock').classList.remove('show');
-
-  if (a.laps.length>1){
-    el('lapsBlock').classList.add('show');
-    el('lapsBody').innerHTML = a.laps.map(l=>{
-      const pace = l.timerS>0 ? l.distM/l.timerS : 0;
-      return `<tr data-lap="${l.num-1}"><td>${l.num}</td><td>${fmtDist(l.distM)}</td><td>${fmtDur(l.timerS)}</td><td>${fmtSpeedOrPace(pace, a.sport)}</td><td>${l.avgHr!==null?Math.round(l.avgHr):'—'}</td><td>${l.ascent!==null?fmtEle(l.ascent):'—'}</td></tr>`;
-    }).join('');
-    el('lapsBody').querySelectorAll('tr').forEach(row=>{
-      row.addEventListener('click', ()=>{
-        el('lapsBody').querySelectorAll('tr').forEach(r=>r.classList.remove('active-lap'));
-        row.classList.add('active-lap');
-        const lap = a.laps[+row.dataset.lap];
-        const range = [lap.startIdx, lap.endIdx];
-        [chartEle,chartSpeed,chartHr,chartCad].forEach(c=>c && c.setHighlight(range));
-        if (map){ map.setHighlight(range); }
-        onChartHover(lap.startIdx);
-      });
-    });
-  } else el('lapsBlock').classList.remove('show');
 
   onChartHover(0);
   window.addEventListener('resize', debouncedResize);
@@ -1002,7 +907,7 @@ function resetApp(){
   activity = null;
   fileInput.value = '';
   el('dropzone').style.display='';
-  ['activityBar','statsGrid','readout','footerActions','mapWrap','mapEmpty','chartEleBlock','chartSpeedBlock','chartHrBlock','chartCadBlock','lapsBlock']
+  ['activityBar','statsGrid','readout','footerActions','mapWrap','mapEmpty','chartEleBlock','chartSpeedBlock','chartHrBlock','chartCadBlock']
     .forEach(id=>el(id).classList.remove('show'));
   clearError();
 }
