@@ -62,9 +62,39 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 .stat-card .v small{font-size:11px;font-weight:600;color:var(--muted);}
 .stat-card .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
 
+/* ---- file list ---- */
+.file-list{display:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 10px 6px;margin:12px 0;}
+.file-list.show{display:block;}
+.file-list-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;padding:0 2px;}
+.file-list-head .t{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+.file-list-actions{display:flex;gap:6px;}
+.file-list-actions button{background:none;border:none;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;padding:2px 4px;font-family:var(--font-body);}
+.file-list-actions button:active{color:var(--text);}
+.file-row{display:flex;align-items:center;gap:9px;padding:7px 4px;border-radius:8px;cursor:pointer;touch-action:manipulation;}
+.file-row:active{background:var(--panel2);}
+.file-row.focused{background:var(--panel2);}
+.file-row input[type=checkbox]{width:17px;height:17px;flex:0 0 auto;accent-color:var(--accent);}
+.file-swatch{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+.file-info{flex:1;min-width:0;}
+.file-name{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.file-meta{font-size:10.5px;color:var(--muted);margin-top:1px;}
+.file-remove{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;flex:0 0 auto;padding:2px 4px;}
+.file-remove:active{color:var(--danger);}
+.file-add-row{padding:6px 4px 2px;}
+.file-add-row .pill-btn{width:100%;text-align:center;}
+
+/* ---- view / style switches ---- */
+.switch-row{display:none;gap:10px;flex-wrap:wrap;margin:10px 0 8px;}
+.switch-row.show{display:flex;}
+.seg-switch{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:20px;overflow:hidden;font-size:11.5px;font-weight:700;}
+.seg-switch button{background:none;border:none;color:var(--muted);padding:6px 11px;cursor:pointer;font-family:var(--font-body);font-weight:700;white-space:nowrap;}
+.seg-switch button.active{background:var(--accent);color:#241705;}
+.seg-switch button:disabled{opacity:0.35;cursor:not-allowed;}
+
 /* ---- map ---- */
 .map-wrap{display:none;position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);margin:6px 0 4px;background:#0A0F0C;}
 .map-wrap.show{display:block;}
+.map-wrap.hidden-view{display:none !important;}
 .map-wrap canvas{display:block;width:100%;touch-action:none;}
 .map-controls{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px;}
 .map-controls button{width:32px;height:32px;border-radius:8px;background:rgba(20,28,22,0.85);border:1px solid var(--line);color:var(--text);font-size:16px;cursor:pointer;font-family:var(--font-body);}
@@ -74,6 +104,12 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 .map-attrib{position:absolute;bottom:2px;right:6px;font-size:9.5px;color:rgba(234,241,234,0.55);background:rgba(10,15,12,0.5);padding:1px 5px;border-radius:4px;}
 .map-empty{display:none;padding:30px 14px;text-align:center;color:var(--muted);font-size:12.5px;background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:6px 0;}
 .map-empty.show{display:block;}
+
+/* ---- isometric ride-along ---- */
+.iso-wrap{display:none;position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);margin:6px 0 4px;background:#0A0F0C;}
+.iso-wrap.show{display:block;}
+.iso-wrap canvas{display:block;width:100%;touch-action:none;}
+.iso-hint{position:absolute;bottom:8px;left:8px;font-size:10px;color:rgba(234,241,234,0.5);background:rgba(10,15,12,0.5);padding:2px 6px;border-radius:5px;}
 
 /* ---- readout ---- */
 .readout{display:none;justify-content:space-between;gap:6px;margin:10px 0 2px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;}
@@ -98,15 +134,27 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 <div class="wrap">
   <a class="back-link" href="../../">&larr; App Shelf</a>
   <h1>Route Mapper</h1>
-  <p class="sub">Drop in a .fit file for an interactive map, elevation, pace and heart-rate breakdown of the route.</p>
+  <p class="sub">Drop in .fit file(s) to compare routes on a map or ride along in isometric, with heatmap colouring and elevation/pace/heart-rate charts.</p>
 
   <div class="dropzone" id="dropzone">
     <div class="ic">&#128506;</div>
-    <h3>Load a .fit file</h3>
-    <p>Tap to browse, or drag a file here. Nothing leaves your device — parsed entirely in the browser.</p>
-    <input type="file" id="fileInput" accept=".fit,application/octet-stream">
+    <h3>Load .fit file(s)</h3>
+    <p>Tap to browse, or drag files here. Nothing leaves your device — parsed entirely in the browser. Pick multiple to compare routes.</p>
+    <input type="file" id="fileInput" accept=".fit,application/octet-stream" multiple>
   </div>
   <div class="err-banner" id="errBanner"></div>
+
+  <div class="file-list" id="fileList">
+    <div class="file-list-head">
+      <span class="t" id="fileListCount">0 files</span>
+      <div class="file-list-actions">
+        <button id="showAllBtn">Show all</button>
+        <button id="hideAllBtn">Hide all</button>
+      </div>
+    </div>
+    <div id="fileRows"></div>
+    <div class="file-add-row"><button class="pill-btn" id="addMoreBtn">+ Add more files</button></div>
+  </div>
 
   <div class="activity-bar" id="activityBar">
     <div class="activity-name">
@@ -127,6 +175,26 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 
   <div class="stats-grid" id="statsGrid"></div>
 
+  <div class="switch-row" id="viewSwitchRow">
+    <div class="seg-switch" id="viewTabs">
+      <button data-view="map" class="active">Map</button>
+      <button data-view="iso">Ride-along</button>
+    </div>
+    <div class="seg-switch" id="mapStyleTabs">
+      <button data-style="dark" class="active">Dark</button>
+      <button data-style="topo">Topo</button>
+      <button data-style="standard">Standard</button>
+    </div>
+  </div>
+  <div class="switch-row" id="routeColorRow">
+    <div class="seg-switch" id="routeColorTabs">
+      <button data-metric="flat" class="active">Flat</button>
+      <button data-metric="speed">Speed</button>
+      <button data-metric="hr">Heart rate</button>
+      <button data-metric="ele">Elevation</button>
+    </div>
+  </div>
+
   <div class="map-wrap" id="mapWrap">
     <canvas id="mapCanvas"></canvas>
     <div class="map-fit"><button id="fitBtn">Fit route</button></div>
@@ -134,7 +202,11 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
       <button id="zoomInBtn">+</button>
       <button id="zoomOutBtn">&minus;</button>
     </div>
-    <div class="map-attrib">&copy; OpenStreetMap contributors</div>
+    <div class="map-attrib" id="mapAttrib">&copy; OpenStreetMap contributors</div>
+  </div>
+  <div class="iso-wrap" id="isoWrap">
+    <canvas id="isoCanvas"></canvas>
+    <div class="iso-hint">Chase camera — follows the focused activity's rider</div>
   </div>
   <div class="map-empty" id="mapEmpty">No GPS data in this file — showing charts only.</div>
 
@@ -522,13 +594,50 @@ function lat2y(lat,z){
 function x2lon(x,z){ return x/(Math.pow(2,z)*TILE)*360 - 180; }
 function y2lat(y,z){ const n = Math.PI - 2*Math.PI*y/(Math.pow(2,z)*TILE); return 180/Math.PI*Math.atan(Math.sinh(n)); }
 
+// Keyless raster tile sources only (no API key / signup), matching this app's
+// existing "no server, no accounts" constraint. "Dark" (CARTO Dark Matter) is
+// the closest free, reliable match to a grey/black minimal basemap; genuine
+// contour-shaded topo tiles are OpenTopoMap, offered as a separate style
+// rather than faked, since raster tiles from a third party can't be recoloured.
+const MAP_STYLES = {
+  dark:     { label:'Dark',     bg:'#0A0F0C', attrib:'© OpenStreetMap contributors, © CARTO',
+              url:(z,x,y)=>`https://basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png` },
+  topo:     { label:'Topo',     bg:'#1A2420', attrib:'© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)',
+              url:(z,x,y)=>`https://tile.opentopomap.org/${z}/${x}/${y}.png` },
+  standard: { label:'Standard', bg:'#0A0F0C', attrib:'© OpenStreetMap contributors',
+              url:(z,x,y)=>`https://tile.openstreetmap.org/${z}/${x}/${y}.png` },
+};
+
+// Classic thermal gradient (blue -> green -> yellow -> red) for route-by-metric colouring.
+function heatColor(t){
+  t = Math.max(0, Math.min(1, t));
+  const stops = [[0,[59,130,246]],[0.35,[16,185,129]],[0.65,[234,179,8]],[1,[220,38,38]]];
+  for (let i=0;i<stops.length-1;i++){
+    const [t0,c0]=stops[i], [t1,c1]=stops[i+1];
+    if (t<=t1){
+      const f=(t-t0)/(t1-t0||1);
+      return `rgb(${Math.round(c0[0]+(c1[0]-c0[0])*f)},${Math.round(c0[1]+(c1[1]-c0[1])*f)},${Math.round(c0[2]+(c1[2]-c0[2])*f)})`;
+    }
+  }
+  return 'rgb(220,38,38)';
+}
+function computeMetricColors(a, metric){
+  const values = metric==='speed' ? a.speed : metric==='hr' ? a.hr : metric==='ele' ? a.ele : null;
+  if (!values) return null;
+  const valid = values.filter(v=>v!==null && !isNaN(v));
+  if (!valid.length) return null;
+  const min = Math.min(...valid), max = Math.max(...valid), range = (max-min)||1;
+  return values.map(v => (v===null||isNaN(v)) ? null : heatColor((v-min)/range));
+}
+
 class SlippyMap {
   constructor(canvas){
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.z = 13; this.lon = 0; this.lat = 0;
+    this.styleKey = 'dark';
     this.tileCache = new Map();
-    this.route = []; // [{lat,lon}]
+    this.layers = []; // [{points:[{lat,lon,idx}], color, width, segmentColors, showEndpoints, opacity}]
     this.marker = null;
     this._bindEvents();
     this._raf = null;
@@ -542,11 +651,16 @@ class SlippyMap {
     this.ctx.setTransform(dpr,0,0,dpr,0,0);
     this.scheduleDraw();
   }
-  setRoute(route){ this.route = route; }
+  setStyle(key){
+    if (this.styleKey===key) return;
+    this.styleKey = key; this.tileCache.clear(); this.scheduleDraw();
+  }
+  setLayers(layers){ this.layers = layers||[]; this.scheduleDraw(); }
   setMarker(pt){ this.marker = pt; this.scheduleDraw(); }
   fitToRoute(padding){
     padding = padding===undefined?36:padding;
-    const valid = this.route.filter(p=>p.lat!==null);
+    const valid = [];
+    this.layers.forEach(l=>l.points.forEach(p=>{ if (p.lat!==null) valid.push(p); }));
     if (!valid.length) return;
     let minLat=90,maxLat=-90,minLon=180,maxLon=-180;
     for (const p of valid){ if(p.lat<minLat)minLat=p.lat; if(p.lat>maxLat)maxLat=p.lat; if(p.lon<minLon)minLon=p.lon; if(p.lon>maxLon)maxLon=p.lon; }
@@ -571,13 +685,13 @@ class SlippyMap {
   _tileImg(z,x,y){
     const nx = ((x % (1<<z)) + (1<<z)) % (1<<z);
     if (y<0 || y>=(1<<z)) return null;
-    const key = z+'/'+nx+'/'+y;
+    const key = this.styleKey+'/'+z+'/'+nx+'/'+y;
     let entry = this.tileCache.get(key);
     if (!entry){
       const img = new Image();
       entry = {img, loaded:false};
       img.onload = ()=>{ entry.loaded=true; this.scheduleDraw(); };
-      img.src = `https://tile.openstreetmap.org/${z}/${nx}/${y}.png`;
+      img.src = MAP_STYLES[this.styleKey].url(z, nx, y);
       this.tileCache.set(key, entry);
     }
     return entry;
@@ -585,7 +699,8 @@ class SlippyMap {
   draw(){
     const ctx = this.ctx, w=this.cssW, h=this.cssH;
     if (!w || !h) return;
-    ctx.fillStyle = '#0A0F0C'; ctx.fillRect(0,0,w,h);
+    const style = MAP_STYLES[this.styleKey] || MAP_STYLES.dark;
+    ctx.fillStyle = style.bg; ctx.fillRect(0,0,w,h);
     const z = this.z;
     const cx = lon2x(this.lon,z), cy = lat2y(this.lat,z);
     const originX = cx - w/2, originY = cy - h/2;
@@ -596,27 +711,44 @@ class SlippyMap {
         const entry = this._tileImg(z,tx,ty);
         const px = tx*TILE - originX, py = ty*TILE - originY;
         if (entry && entry.loaded) ctx.drawImage(entry.img, px, py, TILE, TILE);
-        else { ctx.fillStyle='#111813'; ctx.fillRect(px,py,TILE,TILE); }
+        else { ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(px,py,TILE,TILE); }
       }
     }
-    // route
-    const proj = (p)=>({x: lon2x(p.lon,z)-originX, y: lat2y(p.lat,z)-originY});
-    const valid = this.route.filter(p=>p.lat!==null);
-    if (valid.length>1){
-      ctx.lineJoin='round'; ctx.lineCap='round';
-      ctx.strokeStyle='rgba(14,21,18,0.55)'; ctx.lineWidth=6.5;
-      this._strokePath(ctx, valid, proj);
-      ctx.strokeStyle='#E8A33D'; ctx.lineWidth=3.5;
-      this._strokePath(ctx, valid, proj);
+    // dim the basemap slightly so route lines always read clearly on top of it
+    ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fillRect(0,0,w,h);
 
-      const s = proj(valid[0]), e = proj(valid[valid.length-1]);
-      this._dot(ctx, s, '#4FB477');
-      this._dot(ctx, e, '#D9614F');
-    }
+    const proj = (p)=>({x: lon2x(p.lon,z)-originX, y: lat2y(p.lat,z)-originY});
+
+    this.layers.forEach(layer=>{
+      const valid = layer.points.filter(p=>p.lat!==null);
+      if (valid.length<2) return;
+      ctx.save();
+      ctx.globalAlpha = layer.opacity==null ? 1 : layer.opacity;
+      ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=layer.width+3;
+      this._strokePath(ctx, valid, proj);
+      if (layer.segmentColors){
+        for (let i=0;i<valid.length-1;i++){
+          const c1=proj(valid[i]), c2=proj(valid[i+1]);
+          ctx.strokeStyle = layer.segmentColors[valid[i].idx] || layer.color;
+          ctx.lineWidth = layer.width;
+          ctx.beginPath(); ctx.moveTo(c1.x,c1.y); ctx.lineTo(c2.x,c2.y); ctx.stroke();
+        }
+      } else {
+        ctx.strokeStyle = layer.color; ctx.lineWidth = layer.width;
+        this._strokePath(ctx, valid, proj);
+      }
+      if (layer.showEndpoints){
+        const s = proj(valid[0]), e = proj(valid[valid.length-1]);
+        this._dot(ctx, s, '#4FB477');
+        this._dot(ctx, e, '#D9614F');
+      }
+      ctx.restore();
+    });
+
     if (this.marker && this.marker.lat!==null){
       const p = proj(this.marker);
-      ctx.beginPath(); ctx.arc(p.x,p.y,7,0,7); ctx.fillStyle='#fff'; ctx.fill();
-      ctx.beginPath(); ctx.arc(p.x,p.y,7,0,7); ctx.strokeStyle='#E8A33D'; ctx.lineWidth=3; ctx.stroke();
+      this._drawRider(ctx, p, this.marker.heading||0);
     }
   }
   _strokePath(ctx, pts, proj){
@@ -627,6 +759,18 @@ class SlippyMap {
   _dot(ctx, p, color){
     ctx.beginPath(); ctx.arc(p.x,p.y,6,0,2*Math.PI); ctx.fillStyle=color; ctx.fill();
     ctx.beginPath(); ctx.arc(p.x,p.y,6,0,2*Math.PI); ctx.strokeStyle='#0E1512'; ctx.lineWidth=2; ctx.stroke();
+  }
+  // The "user" marker: a small yellow arrow pointing the direction of travel,
+  // rather than a plain dot, so it reads as a rider/runner being tracked.
+  _drawRider(ctx, p, heading){
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.beginPath(); ctx.arc(0,0,12,0,2*Math.PI); ctx.fillStyle='rgba(242,201,76,0.28)'; ctx.fill();
+    ctx.rotate(heading);
+    ctx.beginPath(); ctx.moveTo(9,0); ctx.lineTo(-6,5.5); ctx.lineTo(-6,-5.5); ctx.closePath();
+    ctx.fillStyle='#F2C94C'; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle='#241705'; ctx.stroke();
+    ctx.restore();
   }
   panBy(dxPx, dyPx){
     const z=this.z;
@@ -739,14 +883,144 @@ class RouteChart {
   }
 }
 
+/* ============================== isometric ride-along ==============================
+   A chase-camera view: the route (and elevation, exaggerated) is projected into
+   local flat metres around a reference point, then into a simple 2:1 isometric
+   projection. The camera re-centres on the current scrub position every draw,
+   so the ground grid appears to slide past — the same index (onChartHover) that
+   drives the map marker and chart crosshairs drives this too. */
+
+class IsoView {
+  constructor(canvas){
+    this.canvas = canvas; this.ctx = canvas.getContext('2d');
+    this.points = null; this.idx = 0; this.totalDist = 0;
+  }
+  resize(){
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio||1, 2);
+    this.canvas.width = Math.round(rect.width*dpr);
+    this.canvas.height = Math.round(rect.height*dpr);
+    this.cssW = rect.width; this.cssH = rect.height;
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.draw();
+  }
+  setActivity(a){
+    if (!a || !a.hasPos){ this.points = null; this.draw(); return; }
+    let refLat=null, refLon=null;
+    for (let i=0;i<a.n;i++){ if (a.lat[i]!==null){ refLat=a.lat[i]; refLon=a.lon[i]; break; } }
+    if (refLat===null){ this.points = null; this.draw(); return; }
+    const mPerDegLat = 110540;
+    const mPerDegLon = 111320 * Math.cos(refLat*Math.PI/180);
+    const ZEXAG = 4; // real elevation change is subtle next to horizontal distance — exaggerate for a readable silhouette
+    this.points = new Array(a.n);
+    for (let i=0;i<a.n;i++){
+      if (a.lat[i]===null){ this.points[i] = null; continue; }
+      this.points[i] = {
+        x: (a.lon[i]-refLon)*mPerDegLon,
+        y: (a.lat[i]-refLat)*mPerDegLat,
+        z: (a.hasEle && a.ele[i]!==null ? a.ele[i] : 0) * ZEXAG,
+      };
+    }
+    this.totalDist = a.totalDist || 200;
+    this.idx = Math.min(this.idx, a.n-1);
+    this.draw();
+  }
+  setIndex(idx){ this.idx = idx; this.draw(); }
+  _iso(p, camX, camY, camZ){
+    // Camera-relative on all three axes — otherwise the rider's own elevation
+    // (exaggerated by ZEXAG) pushes it far off-screen instead of staying centred;
+    // nearby terrain should rise/fall relative to where the rider is right now.
+    const rx = p.x - camX, ry = p.y - camY, rz = p.z - camZ;
+    return { x: (rx-ry)*0.866, y: (rx+ry)*0.5 - rz };
+  }
+  draw(){
+    const ctx=this.ctx, w=this.cssW, h=this.cssH;
+    if (!w||!h) return;
+    ctx.fillStyle='#0A0F0C'; ctx.fillRect(0,0,w,h);
+    if (!this.points){
+      ctx.fillStyle='rgba(234,241,234,0.4)'; ctx.font='13px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('No GPS data for the ride-along view', w/2, h/2);
+      return;
+    }
+    const cur = this.points[Math.max(0,Math.min(this.points.length-1,this.idx))];
+    if (!cur) return;
+    const camX = cur.x, camY = cur.y, camZ = cur.z;
+    const viewRadius = Math.max(35, Math.min(160, this.totalDist/6));
+    const scale = Math.min(w,h) / (viewRadius*2.2);
+    const toScreen = (p)=>{ const iso=this._iso(p,camX,camY,camZ); return { x: w/2+iso.x*scale, y: h*0.62+iso.y*scale }; };
+
+    // Ground grid represents the plane at the rider's *current* elevation (z:camZ,
+    // so it always cancels to rz=0) rather than sea level — a fixed z:0 plane would
+    // shift the whole grid off-screen by a constant amount on any route that isn't
+    // literally at zero elevation, since the camera itself compensates by camZ.
+    const gridStep=20, gridExtent=Math.ceil(viewRadius/gridStep)+2;
+    const gox = Math.floor(camX/gridStep)*gridStep, goy = Math.floor(camY/gridStep)*gridStep;
+    ctx.strokeStyle='rgba(143,163,150,0.18)'; ctx.lineWidth=1;
+    for (let i=-gridExtent;i<=gridExtent;i++){
+      const wy = goy+i*gridStep;
+      let a1=toScreen({x:gox-gridExtent*gridStep,y:wy,z:camZ}), a2=toScreen({x:gox+gridExtent*gridStep,y:wy,z:camZ});
+      ctx.beginPath(); ctx.moveTo(a1.x,a1.y); ctx.lineTo(a2.x,a2.y); ctx.stroke();
+      const wx = gox+i*gridStep;
+      let b1=toScreen({x:wx,y:goy-gridExtent*gridStep,z:camZ}), b2=toScreen({x:wx,y:goy+gridExtent*gridStep,z:camZ});
+      ctx.beginPath(); ctx.moveTo(b1.x,b1.y); ctx.lineTo(b2.x,b2.y); ctx.stroke();
+    }
+
+    // full path, dim (context of what's ahead/behind)
+    ctx.beginPath(); let started=false;
+    this.points.forEach(p=>{
+      if (!p){ started=false; return; }
+      const s=toScreen(p);
+      if (!started){ ctx.moveTo(s.x,s.y); started=true; } else ctx.lineTo(s.x,s.y);
+    });
+    ctx.strokeStyle='rgba(234,241,234,0.28)'; ctx.lineWidth=3; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+
+    // travelled portion, yellow tracker
+    ctx.beginPath(); started=false;
+    for (let i=0;i<=this.idx;i++){
+      const p=this.points[i]; if (!p){ started=false; continue; }
+      const s=toScreen(p);
+      if (!started){ ctx.moveTo(s.x,s.y); started=true; } else ctx.lineTo(s.x,s.y);
+    }
+    ctx.strokeStyle='#F2C94C'; ctx.lineWidth=4; ctx.stroke();
+
+    // rider marker, facing direction of travel, with a ground shadow
+    const prev = this.points[Math.max(0,this.idx-1)] || cur;
+    const next = this.points[Math.min(this.points.length-1,this.idx+1)] || cur;
+    const s0=toScreen(prev), s1=toScreen(next);
+    const heading = Math.atan2(s1.y-s0.y, s1.x-s0.x);
+    const rp = toScreen(cur);
+    const groundP = toScreen({x:cur.x,y:cur.y,z:camZ});
+    ctx.beginPath(); ctx.ellipse(groundP.x,groundP.y,9,4,0,0,2*Math.PI); ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fill();
+    ctx.save();
+    ctx.translate(rp.x, rp.y);
+    ctx.beginPath(); ctx.arc(0,0,13,0,2*Math.PI); ctx.fillStyle='rgba(242,201,76,0.25)'; ctx.fill();
+    ctx.rotate(heading);
+    ctx.beginPath(); ctx.moveTo(11,0); ctx.lineTo(-7,6); ctx.lineTo(-7,-6); ctx.closePath();
+    ctx.fillStyle='#F2C94C'; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle='#241705'; ctx.stroke();
+    ctx.restore();
+  }
+}
+
 /* ============================== app wiring ============================== */
 
-let activity = null;
-let map, chartEle, chartSpeed, chartHr, chartCad;
+// Each loaded file becomes one entry: {id, fileName, data (buildActivity() result), color, visible}.
+// `focusedId` is the one entry driving stats/charts/readout/ride-along — the map can show any
+// combination of visible entries at once, with the focused one always drawn as the yellow tracker.
+let activities = [];
+let focusedId = null;
+let map, chartEle, chartSpeed, chartHr, chartCad, isoView;
 let playTimer = null;
+let mapStyleKey = 'dark';
+let routeMetric = 'flat';
+let currentView = 'map'; // 'map' | 'iso'
+
+const MULTI_PALETTE = ['#4FA6E8','#B478E8','#78E8AE','#E8776B','#8FA396','#E8C24F'];
 
 const el = id => document.getElementById(id);
 const dropzone = el('dropzone'), fileInput = el('fileInput'), errBanner = el('errBanner');
+
+function getFocused(){ return activities.find(a=>a.id===focusedId) || null; }
 
 function showError(msg){
   errBanner.textContent = msg;
@@ -756,41 +1030,172 @@ function clearError(){ errBanner.classList.remove('show'); errBanner.textContent
 
 ['dragenter','dragover'].forEach(evt=>dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
 ['dragleave','drop'].forEach(evt=>dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.remove('drag'); }));
-dropzone.addEventListener('drop', e=>{ const f=e.dataTransfer.files && e.dataTransfer.files[0]; if (f) loadFile(f); });
+dropzone.addEventListener('drop', e=>{ const files=e.dataTransfer.files; if (files && files.length) loadFiles(files); });
 dropzone.addEventListener('click', ()=>fileInput.click());
-fileInput.addEventListener('change', ()=>{ if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+fileInput.addEventListener('change', ()=>{ if (fileInput.files.length) loadFiles(fileInput.files); fileInput.value=''; });
+el('addMoreBtn').addEventListener('click', ()=>fileInput.click());
 
-function loadFile(file){
+function loadFiles(fileList){
   clearError();
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const parsed = parseFitFile(reader.result);
-      if (!parsed.records.length) throw new Error('No GPS/record data found in this .fit file.');
-      activity = buildActivity(parsed);
-      renderActivity();
-    } catch (err) {
-      console.error(err);
-      showError('Could not read this file: ' + err.message);
-    }
-  };
-  reader.onerror = () => showError('Could not read the file from disk.');
-  reader.readAsArrayBuffer(file);
+  Array.from(fileList).forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = parseFitFile(reader.result);
+        if (!parsed.records.length) throw new Error('No GPS/record data found in this .fit file.');
+        addActivity(file.name, buildActivity(parsed));
+      } catch (err) {
+        console.error(err);
+        showError(`Could not read "${file.name}": ` + err.message);
+      }
+    };
+    reader.onerror = () => showError(`Could not read "${file.name}" from disk.`);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function addActivity(fileName, data){
+  const id = 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+  const color = MULTI_PALETTE[activities.length % MULTI_PALETTE.length];
+  activities.push({ id, fileName, data, color, visible:true });
+  focusedId = id;
+  renderAll();
+}
+
+function removeActivity(id){
+  activities = activities.filter(a=>a.id!==id);
+  if (focusedId===id) focusedId = activities.length ? activities[activities.length-1].id : null;
+  if (!activities.length){ resetApp(); return; }
+  renderAll();
 }
 
 function statCard(label, value, sub){
   return `<div class="stat-card"><div class="v">${value}${sub?` <small>${sub}</small>`:''}</div><div class="l">${label}</div></div>`;
 }
 
-function renderActivity(){
-  const a = activity;
-  el('dropzone').style.display='none';
+/* ---------------- file list ---------------- */
 
-  el('activityBar').classList.add('show');
-  el('statsGrid').classList.add('show');
-  el('readout').classList.add('show');
-  el('footerActions').classList.add('show');
+function renderFileList(){
+  const has = activities.length>0;
+  el('fileList').classList.toggle('show', has);
+  if (!has) return;
+  el('fileListCount').textContent = activities.length + (activities.length===1?' file':' files');
+  el('fileRows').innerHTML = activities.map(act=>{
+    const a = act.data;
+    const icon = SPORT_ICON[a.sport] || '\u{1F4CD}';
+    const sportName = SPORT_NAMES[a.sport] || 'Activity';
+    const when = new Date(a.startTime).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    const focused = act.id===focusedId;
+    return `
+      <div class="file-row ${focused?'focused':''}" data-id="${act.id}">
+        <input type="checkbox" data-action="toggle" ${act.visible?'checked':''} aria-label="Show ${act.fileName} on map">
+        <span class="file-swatch" style="background:${focused?'#F2C94C':act.color}"></span>
+        <div class="file-info" data-action="focus">
+          <div class="file-name">${icon} ${act.fileName}</div>
+          <div class="file-meta">${sportName} · ${fmtDist(a.totalDist)} · ${when}</div>
+        </div>
+        <button class="file-remove" data-action="remove" type="button" aria-label="Remove ${act.fileName}">&times;</button>
+      </div>
+    `;
+  }).join('');
+}
 
+el('fileRows').addEventListener('click', e=>{
+  const row = e.target.closest('.file-row'); if (!row) return;
+  const id = row.dataset.id;
+  const actionEl = e.target.closest('[data-action]');
+  const action = actionEl ? actionEl.dataset.action : 'focus';
+  if (action==='remove'){ removeActivity(id); return; }
+  if (action==='toggle'){
+    const act = activities.find(a=>a.id===id);
+    if (act){ act.visible = actionEl.checked; renderAll(); }
+    return;
+  }
+  focusedId = id;
+  renderAll();
+});
+el('showAllBtn').addEventListener('click', ()=>{ activities.forEach(a=>a.visible=true); renderAll(); });
+el('hideAllBtn').addEventListener('click', ()=>{ activities.forEach(a=>a.visible=false); renderAll(); });
+
+/* ---------------- map layers / style / route colour ---------------- */
+
+function buildMapLayers(){
+  return activities.filter(act=>act.visible && act.data.hasPos).map(act=>{
+    const a = act.data;
+    const isFocused = act.id===focusedId;
+    const points = a.lat.map((lat,i)=>({lat, lon:a.lon[i], idx:i}));
+    return {
+      points,
+      color: isFocused ? '#F2C94C' : act.color,
+      width: isFocused ? 4 : 2.5,
+      segmentColors: (isFocused && routeMetric!=='flat') ? computeMetricColors(a, routeMetric) : null,
+      showEndpoints: isFocused,
+      opacity: isFocused ? 1 : 0.55,
+    };
+  });
+}
+
+function renderMap(fit){
+  const focused = getFocused();
+  const hasPos = !!(focused && focused.data.hasPos);
+  el('mapEmpty').classList.toggle('show', !hasPos);
+  if (!hasPos) return;
+  if (!map) map = new SlippyMap(el('mapCanvas'));
+  map.setStyle(mapStyleKey);
+  el('mapAttrib').textContent = MAP_STYLES[mapStyleKey].attrib;
+  map.resize();
+  map.setLayers(buildMapLayers());
+  if (fit) map.fitToRoute();
+}
+
+el('mapStyleTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  mapStyleKey = btn.dataset.style;
+  el('mapStyleTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+  renderMap(false);
+});
+
+function updateRouteColorAvailability(a){
+  const buttons = el('routeColorTabs').querySelectorAll('button');
+  buttons.forEach(b=>{
+    const m = b.dataset.metric;
+    const avail = m==='hr' ? a.hasHr : m==='ele' ? a.hasEle : true;
+    b.disabled = !avail;
+    if (!avail && routeMetric===m) routeMetric = 'flat';
+  });
+  buttons.forEach(b=>b.classList.toggle('active', b.dataset.metric===routeMetric));
+}
+el('routeColorTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn || btn.disabled) return;
+  routeMetric = btn.dataset.metric;
+  el('routeColorTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+  renderMap(false);
+});
+
+/* ---------------- view mode (map vs. isometric ride-along) ---------------- */
+
+el('viewTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  currentView = btn.dataset.view;
+  el('viewTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+  applyViewMode();
+});
+
+function applyViewMode(){
+  const focused = getFocused();
+  const hasPos = !!(focused && focused.data.hasPos);
+  const showMap = hasPos && currentView==='map';
+  const showIso = hasPos && currentView==='iso';
+  el('mapWrap').classList.toggle('show', showMap);
+  el('isoWrap').classList.toggle('show', showIso);
+  el('mapEmpty').classList.toggle('show', !hasPos);
+  if (showMap && map) map.resize();
+  if (showIso && isoView) isoView.resize();
+}
+
+/* ---------------- stats / charts / readout for the focused activity ---------------- */
+
+function renderStatsAndCharts(a){
   el('activityIcon').textContent = SPORT_ICON[a.sport] || '\u{1F4CD}';
   el('activityTitle').textContent = SPORT_NAMES[a.sport] || 'Activity';
   const d = new Date(a.startTime);
@@ -816,20 +1221,6 @@ function renderActivity(){
   if (a.hasCad) cards += statCard('Avg cadence', Math.round(a.avgCad), 'rpm');
   if (a.calories!==null) cards += statCard('Calories', a.calories, 'kcal');
   el('statsGrid').innerHTML = cards;
-
-  // map
-  if (a.hasPos) {
-    el('mapWrap').classList.add('show');
-    el('mapEmpty').classList.remove('show');
-    if (!map) map = new SlippyMap(el('mapCanvas'));
-    map.resize();
-    const route = a.lat.map((lat,i)=>({lat, lon:a.lon[i], idx:i}));
-    map.setRoute(route);
-    map.fitToRoute();
-  } else {
-    el('mapWrap').classList.remove('show');
-    el('mapEmpty').classList.add('show');
-  }
 
   if (a.hasEle){
     el('chartEleBlock').classList.add('show');
@@ -857,17 +1248,52 @@ function renderActivity(){
     chartCad.resize();
     chartCad.setData(a.dist, a.cad);
   } else el('chartCadBlock').classList.remove('show');
+}
+
+function renderAll(){
+  renderFileList();
+  const focused = getFocused();
+  if (!focused){ resetApp(); return; }
+
+  el('dropzone').style.display = 'none';
+  el('activityBar').classList.add('show');
+  el('statsGrid').classList.add('show');
+  el('readout').classList.add('show');
+  el('footerActions').classList.add('show');
+  el('viewSwitchRow').classList.add('show');
+  el('routeColorRow').classList.add('show');
+
+  // Apply the map/iso .show class BEFORE resize() runs on either canvas —
+  // resizing while display:none measures a 0x0 box and permanently zeroes it.
+  applyViewMode();
+  renderStatsAndCharts(focused.data);
+  updateRouteColorAvailability(focused.data);
+  renderMap(true);
+  if (!isoView) isoView = new IsoView(el('isoCanvas'));
+  isoView.setActivity(focused.data);
 
   onChartHover(0);
   window.addEventListener('resize', debouncedResize);
 }
 
+function computeHeading(a, idx){
+  if (!map) return 0;
+  const i0 = Math.max(0, idx-1), i1 = Math.min(a.n-1, idx+1);
+  if (a.lat[i0]===null || a.lat[i1]===null) return 0;
+  const z = map.z;
+  const p0 = {x:lon2x(a.lon[i0],z), y:lat2y(a.lat[i0],z)};
+  const p1 = {x:lon2x(a.lon[i1],z), y:lat2y(a.lat[i1],z)};
+  return Math.atan2(p1.y-p0.y, p1.x-p0.x);
+}
+
 function onChartHover(idx){
-  const a = activity;
-  if (!a) return;
+  const focused = getFocused();
+  if (!focused) return;
+  const a = focused.data;
   idx = Math.max(0, Math.min(a.n-1, idx));
   [chartEle,chartSpeed,chartHr,chartCad].forEach(c=>c && c.setActive(idx));
-  if (map && a.hasPos) map.setMarker({lat:a.lat[idx], lon:a.lon[idx]});
+  if (map && a.hasPos) map.setMarker({lat:a.lat[idx], lon:a.lon[idx], heading:computeHeading(a, idx)});
+  if (isoView) isoView.setIndex(idx);
 
   el('roDist').textContent = fmtDist(a.dist[idx]);
   el('roTime').textContent = fmtDur((a.t[idx]-a.t[0])/1000);
@@ -875,7 +1301,6 @@ function onChartHover(idx){
   el('roSpeed').textContent = fmtSpeedOrPace(a.speed[idx], a.sport);
   el('roHr').textContent = (a.hasHr && a.hr[idx]!==null) ? Math.round(a.hr[idx]) : '—';
 
-  const paceMode = PACE_SPORTS.has(a.sport);
   el('chartEleV').textContent = a.hasEle ? fmtEle(a.ele[idx]) : '';
   el('chartSpeedV').textContent = fmtSpeedOrPace(a.speed[idx], a.sport);
   el('chartHrV').textContent = (a.hasHr && a.hr[idx]!==null) ? Math.round(a.hr[idx])+' bpm' : '';
@@ -886,7 +1311,10 @@ let resizeTimer=null;
 function debouncedResize(){
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(()=>{
-    if (map) map.resize();
+    // Only resize whichever view is actually visible — resizing a display:none
+    // canvas measures a 0x0 box and zeroes it until the next full re-render.
+    if (map && currentView==='map') map.resize();
+    if (isoView && currentView==='iso') isoView.resize();
     [chartEle,chartSpeed,chartHr,chartCad].forEach(c=>c && c.resize());
   }, 150);
 }
@@ -899,15 +1327,16 @@ el('unitToggle').addEventListener('click', e=>{
   const btn = e.target.closest('button'); if (!btn) return;
   unit = btn.dataset.unit;
   el('unitToggle').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
-  if (activity) renderActivity();
+  if (activities.length) renderAll();
 });
 
 function resetApp(){
   clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶';
-  activity = null;
+  activities = []; focusedId = null;
   fileInput.value = '';
   el('dropzone').style.display='';
-  ['activityBar','statsGrid','readout','footerActions','mapWrap','mapEmpty','chartEleBlock','chartSpeedBlock','chartHrBlock','chartCadBlock']
+  el('fileList').classList.remove('show');
+  ['activityBar','statsGrid','readout','footerActions','mapWrap','isoWrap','mapEmpty','chartEleBlock','chartSpeedBlock','chartHrBlock','chartCadBlock','viewSwitchRow','routeColorRow']
     .forEach(id=>el(id).classList.remove('show'));
   clearError();
 }
@@ -915,13 +1344,16 @@ el('loadAnotherBtn').addEventListener('click', resetApp);
 el('loadAnotherBtn2').addEventListener('click', resetApp);
 
 el('playBtn').addEventListener('click', ()=>{
-  if (!activity) return;
+  if (!getFocused()) return;
   if (playTimer){ clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; return; }
   el('playBtn').textContent='⏸';
   let idx = 0;
   playTimer = setInterval(()=>{
-    idx += Math.max(1, Math.round(activity.n/300));
-    if (idx>=activity.n){ idx=activity.n-1; clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; }
+    const focused = getFocused();
+    if (!focused){ clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; return; }
+    const a = focused.data;
+    idx += Math.max(1, Math.round(a.n/300));
+    if (idx>=a.n){ idx=a.n-1; clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; }
     onChartHover(idx);
   }, 60);
 });
