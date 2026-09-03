@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Route Mapper">
+<title>Route Mapper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0E1512; --panel:#162019; --panel2:#1C2820; --line:#2B3A30;
+  --text:#EAF1EA; --muted:#8FA396; --accent:#E8A33D; --accent2:#4FB477; --danger:#D9614F;
+  --font-display:'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --font-body:'Manrope', system-ui, -apple-system, sans-serif;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);}
+body{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);min-height:100vh;}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px 40px;}
+a{color:inherit;}
+.back-link{display:inline-block;margin:18px 0 6px;color:var(--muted);font-size:13px;text-decoration:none;}
+.back-link:active{opacity:0.6;}
+h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4px;letter-spacing:0.01em;}
+.sub{color:var(--muted);font-size:13px;margin:0 0 18px;}
+
+/* ---- drop zone ---- */
+.dropzone{
+  border:1.5px dashed var(--line);border-radius:14px;background:var(--panel);
+  padding:36px 18px;text-align:center;cursor:pointer;transition:border-color .15s ease, background .15s ease;
+}
+.dropzone.drag{border-color:var(--accent);background:var(--panel2);}
+.dropzone .ic{font-size:30px;line-height:1;margin-bottom:10px;}
+.dropzone h3{font-family:var(--font-display);font-size:17px;margin:0 0 6px;}
+.dropzone p{color:var(--muted);font-size:12.5px;margin:0;}
+.dropzone input{display:none;}
+.err-banner{background:#3A2320;border:1px solid var(--danger);color:#F3C6BE;border-radius:10px;padding:12px 14px;font-size:13px;margin-top:12px;display:none;}
+.err-banner.show{display:block;}
+
+/* ---- top bar (after load) ---- */
+.activity-bar{display:none;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 4px;flex-wrap:wrap;}
+.activity-bar.show{display:flex;}
+.activity-name{display:flex;align-items:center;gap:10px;}
+.activity-name .ic{font-size:24px;}
+.activity-name .meta h2{font-family:var(--font-display);font-size:16px;margin:0;font-weight:600;}
+.activity-name .meta .when{color:var(--muted);font-size:12px;margin-top:1px;}
+.bar-actions{display:flex;gap:8px;align-items:center;}
+.pill-btn{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:20px;padding:6px 12px;font-size:12px;font-family:var(--font-body);font-weight:600;cursor:pointer;touch-action:manipulation;}
+.pill-btn:active{background:var(--panel2);}
+.unit-toggle{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:20px;overflow:hidden;font-size:12px;font-weight:700;}
+.unit-toggle button{background:none;border:none;color:var(--muted);padding:6px 11px;cursor:pointer;font-family:var(--font-body);font-weight:700;}
+.unit-toggle button.active{background:var(--accent);color:#241705;}
+
+/* ---- stats grid ---- */
+.stats-grid{display:none;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0;}
+.stats-grid.show{display:grid;}
+.stat-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 10px 9px;}
+.stat-card .v{font-family:var(--font-display);font-size:18px;font-weight:700;}
+.stat-card .v small{font-size:11px;font-weight:600;color:var(--muted);}
+.stat-card .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;}
+
+/* ---- map ---- */
+.map-wrap{display:none;position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);margin:6px 0 4px;background:#0A0F0C;}
+.map-wrap.show{display:block;}
+.map-wrap canvas{display:block;width:100%;touch-action:none;}
+.map-controls{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px;}
+.map-controls button{width:32px;height:32px;border-radius:8px;background:rgba(20,28,22,0.85);border:1px solid var(--line);color:var(--text);font-size:16px;cursor:pointer;font-family:var(--font-body);}
+.map-controls button:active{background:var(--panel2);}
+.map-fit{position:absolute;top:8px;left:8px;}
+.map-fit button{background:rgba(20,28,22,0.85);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;}
+.map-attrib{position:absolute;bottom:2px;right:6px;font-size:9.5px;color:rgba(234,241,234,0.55);background:rgba(10,15,12,0.5);padding:1px 5px;border-radius:4px;}
+.map-empty{display:none;padding:30px 14px;text-align:center;color:var(--muted);font-size:12.5px;background:var(--panel);border:1px solid var(--line);border-radius:14px;margin:6px 0;}
+.map-empty.show{display:block;}
+
+/* ---- readout ---- */
+.readout{display:none;justify-content:space-between;gap:6px;margin:10px 0 2px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;}
+.readout.show{display:flex;}
+.readout .ritem{font-size:11.5px;color:var(--muted);}
+.readout .ritem b{color:var(--text);font-family:var(--font-display);font-size:13px;font-weight:700;display:block;}
+.play-btn{background:var(--accent);border:none;color:#241705;border-radius:20px;width:30px;height:30px;font-size:13px;cursor:pointer;flex:0 0 auto;}
+
+/* ---- charts ---- */
+.chart-block{display:none;margin:14px 0;}
+.chart-block.show{display:block;}
+.chart-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
+.chart-head .t{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+.chart-head .v{font-family:var(--font-display);font-size:13px;font-weight:700;}
+.chart-block canvas{display:block;width:100%;height:110px;border-radius:8px;background:var(--panel);border:1px solid var(--line);touch-action:none;}
+
+/* ---- laps ---- */
+.laps-block{display:none;margin:16px 0 4px;}
+.laps-block.show{display:block;}
+.laps-block .t{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;}
+.laps-table{width:100%;border-collapse:collapse;font-size:12px;}
+.laps-table th{text-align:left;color:var(--muted);font-weight:600;font-size:10.5px;text-transform:uppercase;padding:4px 6px;border-bottom:1px solid var(--line);}
+.laps-table td{padding:7px 6px;border-bottom:1px solid var(--line);}
+.laps-table tr{cursor:pointer;}
+.laps-table tr:active{background:var(--panel2);}
+.laps-table tr.active-lap{background:var(--panel2);}
+.laps-table td:first-child, .laps-table th:first-child{padding-left:8px;}
+
+.footer-actions{display:none;margin-top:22px;text-align:center;}
+.footer-actions.show{display:block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back-link" href="../../">&larr; App Shelf</a>
+  <h1>Route Mapper</h1>
+  <p class="sub">Drop in a .fit file for an interactive map, elevation, pace and heart-rate breakdown of the route.</p>
+
+  <div class="dropzone" id="dropzone">
+    <div class="ic">&#128506;</div>
+    <h3>Load a .fit file</h3>
+    <p>Tap to browse, or drag a file here. Nothing leaves your device — parsed entirely in the browser.</p>
+    <input type="file" id="fileInput" accept=".fit,application/octet-stream">
+  </div>
+  <div class="err-banner" id="errBanner"></div>
+
+  <div class="activity-bar" id="activityBar">
+    <div class="activity-name">
+      <div class="ic" id="activityIcon">&#127939;</div>
+      <div class="meta">
+        <h2 id="activityTitle">Activity</h2>
+        <div class="when" id="activityWhen"></div>
+      </div>
+    </div>
+    <div class="bar-actions">
+      <div class="unit-toggle" id="unitToggle">
+        <button data-unit="metric" class="active">KM</button>
+        <button data-unit="imperial">MI</button>
+      </div>
+      <button class="pill-btn" id="loadAnotherBtn">New file</button>
+    </div>
+  </div>
+
+  <div class="stats-grid" id="statsGrid"></div>
+
+  <div class="map-wrap" id="mapWrap">
+    <canvas id="mapCanvas"></canvas>
+    <div class="map-fit"><button id="fitBtn">Fit route</button></div>
+    <div class="map-controls">
+      <button id="zoomInBtn">+</button>
+      <button id="zoomOutBtn">&minus;</button>
+    </div>
+    <div class="map-attrib">&copy; OpenStreetMap contributors</div>
+  </div>
+  <div class="map-empty" id="mapEmpty">No GPS data in this file — showing charts only.</div>
+
+  <div class="readout" id="readout">
+    <button class="play-btn" id="playBtn">&#9654;</button>
+    <div class="ritem">Distance<b id="roDist">&mdash;</b></div>
+    <div class="ritem">Time<b id="roTime">&mdash;</b></div>
+    <div class="ritem">Elev<b id="roEle">&mdash;</b></div>
+    <div class="ritem"><span id="roSpeedLabel">Pace</span><b id="roSpeed">&mdash;</b></div>
+    <div class="ritem" id="roHrWrap">HR<b id="roHr">&mdash;</b></div>
+  </div>
+
+  <div class="chart-block" id="chartEleBlock">
+    <div class="chart-head"><span class="t">Elevation</span><span class="v" id="chartEleV"></span></div>
+    <canvas id="chartEle"></canvas>
+  </div>
+  <div class="chart-block" id="chartSpeedBlock">
+    <div class="chart-head"><span class="t" id="chartSpeedT">Pace</span><span class="v" id="chartSpeedV"></span></div>
+    <canvas id="chartSpeed"></canvas>
+  </div>
+  <div class="chart-block" id="chartHrBlock">
+    <div class="chart-head"><span class="t">Heart rate</span><span class="v" id="chartHrV"></span></div>
+    <canvas id="chartHr"></canvas>
+  </div>
+  <div class="chart-block" id="chartCadBlock">
+    <div class="chart-head"><span class="t">Cadence</span><span class="v" id="chartCadV"></span></div>
+    <canvas id="chartCad"></canvas>
+  </div>
+
+  <div class="laps-block" id="lapsBlock">
+    <div class="t">Laps</div>
+    <table class="laps-table"><thead><tr>
+      <th>#</th><th>Dist</th><th>Time</th><th>Pace</th><th>HR</th><th>Gain</th>
+    </tr></thead><tbody id="lapsBody"></tbody></table>
+  </div>
+
+  <div class="footer-actions" id="footerActions">
+    <button class="pill-btn" id="loadAnotherBtn2">Load another file</button>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================== FIT binary parsing ============================== */
+
+const FIT_EPOCH = 631065600; // seconds between 1970-01-01 and the FIT epoch (1989-12-31T00:00:00Z)
+
+const BASE_TYPES = {
+  0x00:{size:1,invalid:0xFF, read:(dv,o)=>dv.getUint8(o)},
+  0x01:{size:1,invalid:0x7F, read:(dv,o)=>dv.getInt8(o)},
+  0x02:{size:1,invalid:0xFF, read:(dv,o)=>dv.getUint8(o)},
+  0x83:{size:2,invalid:0x7FFF, read:(dv,o,le)=>dv.getInt16(o,le)},
+  0x84:{size:2,invalid:0xFFFF, read:(dv,o,le)=>dv.getUint16(o,le)},
+  0x85:{size:4,invalid:0x7FFFFFFF, read:(dv,o,le)=>dv.getInt32(o,le)},
+  0x86:{size:4,invalid:0xFFFFFFFF, read:(dv,o,le)=>dv.getUint32(o,le)},
+  0x07:{size:1,string:true},
+  0x88:{size:4,invalid:null, read:(dv,o,le)=>dv.getFloat32(o,le)},
+  0x89:{size:8,invalid:null, read:(dv,o,le)=>dv.getFloat64(o,le)},
+  0x0A:{size:1,invalid:0x00, read:(dv,o)=>dv.getUint8(o)},
+  0x8B:{size:2,invalid:0x0000, read:(dv,o,le)=>dv.getUint16(o,le)},
+  0x8C:{size:4,invalid:0x00000000, read:(dv,o,le)=>dv.getUint32(o,le)},
+  0x0D:{size:1,invalid:0xFF, read:(dv,o)=>dv.getUint8(o)},
+  0x8E:{size:8,invalid:null, read:(dv,o,le)=>Number(dv.getBigInt64(o,le))},
+  0x8F:{size:8,invalid:null, read:(dv,o,le)=>Number(dv.getBigUint64(o,le))},
+  0x90:{size:8,invalid:null, read:(dv,o,le)=>Number(dv.getBigUint64(o,le))},
+};
+
+const MESG = { RECORD:20, LAP:19, SESSION:18 };
+
+function parseFitFile(buf){
+  const dv = new DataView(buf);
+  if (buf.byteLength < 14) throw new Error('File is too small to be a .fit file.');
+  const headerSize = dv.getUint8(0);
+  const magic = String.fromCharCode(dv.getUint8(8),dv.getUint8(9),dv.getUint8(10),dv.getUint8(11));
+  if (magic !== '.FIT') throw new Error('Not a recognised .fit file (missing ".FIT" marker).');
+  const dataSize = dv.getUint32(4, true);
+  let pos = headerSize;
+  const end = Math.min(headerSize + dataSize, buf.byteLength);
+
+  const localDefs = {}; // localType -> {littleEndian, globalNum, fields:[{num,size,base}], devFields:[{num,size}]}
+  let lastTimestamp = 0;
+  const records = [], laps = [], sessions = [];
+
+  while (pos < end - 1) {
+    const headerByte = dv.getUint8(pos); pos += 1;
+    const compressed = !!(headerByte & 0x80);
+    let localType, timeOffset = null;
+    if (compressed) {
+      localType = (headerByte >> 5) & 0x03;
+      timeOffset = headerByte & 0x1F;
+    } else {
+      const isDef = !!(headerByte & 0x40);
+      localType = headerByte & 0x0F;
+      if (isDef) {
+        pos += 1; // reserved
+        const arch = dv.getUint8(pos); pos += 1;
+        const le = arch === 0;
+        const globalNum = dv.getUint16(pos, le); pos += 2;
+        const numFields = dv.getUint8(pos); pos += 1;
+        const fields = [];
+        for (let i=0;i<numFields;i++){
+          fields.push({num:dv.getUint8(pos), size:dv.getUint8(pos+1), base:dv.getUint8(pos+2)});
+          pos += 3;
+        }
+        let devFields = [];
+        if (headerByte & 0x20) {
+          const numDev = dv.getUint8(pos); pos += 1;
+          for (let i=0;i<numDev;i++){
+            devFields.push({num:dv.getUint8(pos), size:dv.getUint8(pos+1)});
+            pos += 3;
+          }
+        }
+        localDefs[localType] = {le, globalNum, fields, devFields};
+        continue;
+      }
+    }
+
+    const def = localDefs[localType];
+    if (!def) break; // desynced stream — stop rather than reading garbage
+
+    const msg = {};
+    for (const f of def.fields) {
+      const info = BASE_TYPES[f.base];
+      if (!info) { pos += f.size; continue; }
+      if (info.string) {
+        let s = '';
+        for (let i=0;i<f.size;i++){ const c = dv.getUint8(pos+i); if (c===0) break; s += String.fromCharCode(c); }
+        pos += f.size;
+        msg[f.num] = s;
+        continue;
+      }
+      const count = Math.max(1, Math.floor(f.size / info.size));
+      if (count === 1) {
+        msg[f.num] = info.read(dv, pos, def.le);
+      } else {
+        msg[f.num] = info.read(dv, pos, def.le); // just take the first element of array fields
+      }
+      pos += f.size;
+    }
+    for (const df of def.devFields) pos += df.size;
+
+    if (compressed) {
+      const base = lastTimestamp - (lastTimestamp % 32);
+      let ts = base + timeOffset;
+      if (ts < lastTimestamp) ts += 32;
+      lastTimestamp = ts;
+      msg[253] = ts;
+    } else if (typeof msg[253] === 'number') {
+      lastTimestamp = msg[253];
+    }
+
+    if (def.globalNum === MESG.RECORD) records.push(msg);
+    else if (def.globalNum === MESG.LAP) laps.push(msg);
+    else if (def.globalNum === MESG.SESSION) sessions.push(msg);
+  }
+
+  return {records, laps, sessions};
+}
+
+/* ============================== field helpers ============================== */
+
+const SEMI = 180 / 2147483648; // semicircles -> degrees
+
+function v(msg, field, invalid){ const x = msg[field]; return (x === undefined || x === invalid) ? null : x; }
+
+function recordToPoint(r){
+  const rawT = v(r,253,4294967295);
+  if (rawT === null) return null;
+  const latRaw = v(r,0,2147483647), lonRaw = v(r,1,2147483647);
+  const eleEnh = v(r,78,4294967295), eleStd = v(r,2,65535);
+  const spdEnh = v(r,73,4294967295), spdStd = v(r,6,65535);
+  const dist = v(r,5,4294967295);
+  let hr = v(r,3,255); if (hr === 0) hr = null;
+  let cad = v(r,4,255);
+  const power = v(r,7,65535);
+  return {
+    t: (rawT + FIT_EPOCH) * 1000,
+    lat: latRaw===null ? null : latRaw*SEMI,
+    lon: lonRaw===null ? null : lonRaw*SEMI,
+    ele: eleEnh!==null ? (eleEnh/5 - 500) : (eleStd!==null ? (eleStd/5 - 500) : null),
+    speed: spdEnh!==null ? spdEnh/1000 : (spdStd!==null ? spdStd/1000 : null),
+    dist: dist!==null ? dist/100 : null,
+    hr, cad, power,
+  };
+}
+
+const SPORT_NAMES = {0:'Activity',1:'Run',2:'Ride',5:'Swim',6:'Basketball',7:'Soccer',8:'Tennis',9:'Training',
+  10:'Walk',11:'XC Ski',12:'Alpine Ski',13:'Snowboard',14:'Row',15:'Mountaineering',16:'Hike',17:'Multisport',
+  18:'Paddle',19:'Flying',20:'E-Bike',21:'Motorcycling',22:'Boating',23:'Driving',24:'Golf',26:'Horse Riding',
+  29:'Inline Skate',30:'Climb',31:'Sailing',32:'Ice Skate',34:'Snowshoe',36:'SUP',37:'Surf',40:'Kayak',
+  42:'Windsurf',43:'Kitesurf',53:'Dive',62:'HIIT',65:'Racket Sport',76:'Pickleball',84:'Padel'};
+const SPORT_ICON = {1:'\u{1F3C3}',2:'\u{1F6B4}',5:'\u{1F3CA}',10:'\u{1F6B6}',14:'\u{1F6A3}',16:'\u{1F97E}',
+  18:'\u{1F6F6}',30:'\u{1F9D7}',32:'⛸',36:'\u{1F3C4}',40:'\u{1F6F6}',31:'⛵'};
+const PACE_SPORTS = new Set([1,10,16,34]);
+
+/* ============================== build activity model ============================== */
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000, toRad=Math.PI/180;
+  const dLat=(lat2-lat1)*toRad, dLon=(lon2-lon1)*toRad;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLon/2)**2;
+  return R * 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function movingAvg(arr, win){
+  const out = new Array(arr.length).fill(null);
+  const half = Math.floor(win/2);
+  for (let i=0;i<arr.length;i++){
+    if (arr[i]===null) continue;
+    let sum=0,n=0;
+    for (let j=Math.max(0,i-half); j<=Math.min(arr.length-1,i+half); j++){
+      if (arr[j]!==null){ sum+=arr[j]; n++; }
+    }
+    out[i] = n ? sum/n : null;
+  }
+  return out;
+}
+
+function fillGaps(arr){
+  const out = arr.slice();
+  let lastVal = null, lastIdx = -1;
+  for (let i=0;i<out.length;i++){
+    if (out[i]!==null){
+      if (lastIdx>=0 && lastIdx<i-1){
+        for (let k=lastIdx+1;k<i;k++){
+          const f = (k-lastIdx)/(i-lastIdx);
+          out[k] = lastVal + (out[i]-lastVal)*f;
+        }
+      }
+      lastVal = out[i]; lastIdx = i;
+    }
+  }
+  for (let i=0;i<out.length;i++) if (out[i]===null && lastVal!==null) out[i]=lastVal;
+  return out;
+}
+
+function buildActivity(parsed){
+  const pts = parsed.records.map(recordToPoint).filter(Boolean).sort((a,b)=>a.t-b.t);
+  if (!pts.length) throw new Error('No timestamped records found in this file.');
+
+  const n = pts.length;
+  const t = pts.map(p=>p.t);
+  const hasPos = pts.some(p=>p.lat!==null && p.lon!==null);
+
+  // cumulative distance: prefer device field, else derive via haversine over valid fixes
+  let dist = new Array(n).fill(null);
+  const deviceDistCount = pts.filter(p=>p.dist!==null).length;
+  if (deviceDistCount > n*0.5) {
+    dist = pts.map(p=>p.dist);
+    dist = fillGaps(dist);
+    if (dist[0]===null) dist[0]=0;
+  } else if (hasPos) {
+    let acc = 0, prev = null;
+    for (let i=0;i<n;i++){
+      const p = pts[i];
+      if (p.lat!==null && p.lon!==null){
+        if (prev) acc += haversine(prev.lat,prev.lon,p.lat,p.lon);
+        prev = p;
+      }
+      dist[i] = acc;
+    }
+  } else {
+    dist.fill(0);
+  }
+
+  const totalDist = dist[n-1] || 0;
+
+  // elevation
+  const eleRaw = pts.map(p=>p.ele);
+  const hasEle = eleRaw.some(x=>x!==null);
+  const eleFilled = hasEle ? fillGaps(eleRaw) : null;
+  const eleSmooth = hasEle ? movingAvg(eleFilled, 9) : null;
+
+  let gain=0, loss=0;
+  if (hasEle){
+    let running = 0;
+    for (let i=1;i<n;i++){
+      const d = eleSmooth[i]-eleSmooth[i-1];
+      running += d;
+      if (running >= 1.0){ gain += running; running = 0; }
+      else if (running <= -1.0){ loss += -running; running = 0; }
+    }
+  }
+
+  // speed
+  const speedRaw = pts.map(p=>p.speed);
+  const hasSpeedField = speedRaw.some(x=>x!==null);
+  let speed;
+  if (hasSpeedField) {
+    speed = fillGaps(speedRaw);
+  } else {
+    speed = new Array(n).fill(0);
+    const WIN = 8000;
+    let j = 0;
+    for (let i=0;i<n;i++){
+      while (j<i && t[i]-t[j] > WIN) j++;
+      const dt = (t[i]-t[j])/1000;
+      speed[i] = dt>0 ? (dist[i]-dist[j])/dt : 0;
+    }
+  }
+  const speedSmooth = movingAvg(speed, 5);
+
+  // hr / cadence
+  const hrRaw = pts.map(p=>p.hr);
+  const hasHr = hrRaw.some(x=>x!==null);
+  const cadRaw = pts.map(p=>p.cad);
+  const hasCad = cadRaw.some(x=>x!==null && x>0);
+
+  // moving/elapsed time
+  const elapsedS = (t[n-1]-t[0])/1000;
+  const GAP_CAP = 6;
+  let movingS = 0;
+  for (let i=1;i<n;i++) movingS += Math.min((t[i]-t[i-1])/1000, GAP_CAP);
+
+  const avgSpeed = movingS>0 ? totalDist/movingS : 0;
+  let maxSpeed = 0;
+  for (const s of speed) if (s!==null && s>maxSpeed && s<50) maxSpeed = s; // 50 m/s = 180km/h sanity cap
+  let avgHr=null, maxHr=null;
+  if (hasHr){
+    const vals = hrRaw.filter(x=>x!==null);
+    avgHr = vals.reduce((a,b)=>a+b,0)/vals.length;
+    maxHr = Math.max(...vals);
+  }
+  let avgCad=null, maxCad=null;
+  if (hasCad){
+    const vals = cadRaw.filter(x=>x!==null && x>0);
+    if (vals.length){ avgCad = vals.reduce((a,b)=>a+b,0)/vals.length; maxCad = Math.max(...vals); }
+  }
+
+  // session summary overrides (device-computed, generally most trustworthy when present)
+  const sess = parsed.sessions[0] || {};
+  const sportEnum = v(sess,5,255);
+  const startTime = t[0]; // record timestamps are reliable; some exporters leave session/lap start_time stuck at file-create time
+  const sCalories = v(sess,11,65535);
+  const sAscent = v(sess,22,65535), sDescent = v(sess,23,65535);
+  const sAvgHr = v(sess,16,255), sMaxHr = v(sess,17,255);
+  const sAvgCad = v(sess,18,255), sMaxCad = v(sess,19,255);
+
+  // laps — walk cumulative distance/time forward per lap rather than trusting each lap's
+  // absolute start_time/timestamp fields, which some exporters leave stuck at activity start
+  let cumDist = 0, cumTime = 0, cursorIdx = 0;
+  const lapRows = parsed.laps.map((l,i)=>{
+    const lDist = v(l,9,4294967295);
+    const lTimer = v(l,8,4294967295);
+    const lElapsed = v(l,7,4294967295);
+    const lAvgHr = v(l,15,255);
+    const lAscent = v(l,21,65535);
+    const durationS = lTimer!==null ? lTimer/1000 : (lElapsed!==null ? lElapsed/1000 : null);
+    const startIdx = cursorIdx;
+    let endIdx;
+    if (lDist!==null) {
+      cumDist += lDist/100;
+      endIdx = Math.max(startIdx, lowerBound(dist, cumDist));
+    } else if (durationS!==null) {
+      cumTime += durationS;
+      endIdx = Math.max(startIdx, lowerBound(t, t[0] + cumTime*1000));
+    } else {
+      endIdx = n-1;
+    }
+    endIdx = Math.min(endIdx, n-1);
+    cursorIdx = Math.min(endIdx+1, n-1);
+    return {
+      num: i+1,
+      distM: lDist!==null ? lDist/100 : (dist[endIdx]-dist[startIdx]),
+      timerS: durationS!==null ? durationS : (endIdx>startIdx ? (t[endIdx]-t[startIdx])/1000 : 0),
+      avgHr: lAvgHr,
+      ascent: lAscent,
+      startIdx, endIdx,
+    };
+  });
+
+  return {
+    n, t, dist, totalDist,
+    hasPos, lat: pts.map(p=>p.lat), lon: pts.map(p=>p.lon),
+    hasEle, ele: eleSmooth,
+    speed: speedSmooth,
+    hasHr, hr: hrRaw,
+    hasCad, cad: cadRaw,
+    elapsedS, movingS,
+    avgSpeed, maxSpeed,
+    gain, loss,
+    ascentOverride: sAscent, descentOverride: sDescent,
+    avgHr: sAvgHr!==null?sAvgHr:avgHr, maxHr: sMaxHr!==null?sMaxHr:maxHr,
+    avgCad: sAvgCad!==null?sAvgCad:avgCad, maxCad: sMaxCad!==null?sMaxCad:maxCad,
+    calories: sCalories,
+    sport: sportEnum, startTime,
+    laps: lapRows,
+  };
+}
+
+function lowerBound(arr, val){
+  let lo=0, hi=arr.length-1;
+  while (lo<hi){ const mid=(lo+hi)>>1; if (arr[mid]<val) lo=mid+1; else hi=mid; }
+  return lo;
+}
+
+/* ============================== formatting ============================== */
+
+let unit = 'metric';
+
+function fmtDist(m){
+  if (unit==='metric'){ const km=m/1000; return (km<10?km.toFixed(2):km.toFixed(1))+' km'; }
+  const mi=m/1609.344; return (mi<10?mi.toFixed(2):mi.toFixed(1))+' mi';
+}
+function fmtDur(s){
+  s = Math.round(s);
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  if (h>0) return h+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+  return m+':'+String(sec).padStart(2,'0');
+}
+function fmtEle(m){ if (m===null) return '—'; return unit==='metric' ? Math.round(m)+' m' : Math.round(m*3.28084)+' ft'; }
+function fmtSpeedOrPace(mps, sportEnum){
+  if (mps===null || mps<=0.05) return '—';
+  if (PACE_SPORTS.has(sportEnum)) {
+    const secPerUnit = unit==='metric' ? 1000/mps : 1609.344/mps;
+    const mm = Math.floor(secPerUnit/60), ss = Math.round(secPerUnit%60);
+    return mm+':'+String(ss).padStart(2,'0')+(unit==='metric'?' /km':' /mi');
+  }
+  const kmh = unit==='metric' ? mps*3.6 : mps*2.23694;
+  return kmh.toFixed(1)+(unit==='metric'?' km/h':' mph');
+}
+
+/* ============================== slippy map ============================== */
+
+const TILE=256, MIN_Z=2, MAX_Z=18;
+function lon2x(lon,z){ return (lon+180)/360 * Math.pow(2,z) * TILE; }
+function lat2y(lat,z){
+  const r = lat*Math.PI/180;
+  return (1 - Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2 * Math.pow(2,z) * TILE;
+}
+function x2lon(x,z){ return x/(Math.pow(2,z)*TILE)*360 - 180; }
+function y2lat(y,z){ const n = Math.PI - 2*Math.PI*y/(Math.pow(2,z)*TILE); return 180/Math.PI*Math.atan(Math.sinh(n)); }
+
+class SlippyMap {
+  constructor(canvas){
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.z = 13; this.lon = 0; this.lat = 0;
+    this.tileCache = new Map();
+    this.route = []; // [{lat,lon}]
+    this.marker = null;
+    this.highlightRange = null;
+    this._bindEvents();
+    this._raf = null;
+  }
+  resize(){
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio||1, 2);
+    this.canvas.width = Math.round(rect.width*dpr);
+    this.canvas.height = Math.round(rect.height*dpr);
+    this.cssW = rect.width; this.cssH = rect.height;
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.scheduleDraw();
+  }
+  setRoute(route){ this.route = route; }
+  setMarker(pt){ this.marker = pt; this.scheduleDraw(); }
+  setHighlight(range){ this.highlightRange = range; this.scheduleDraw(); }
+  fitToRoute(padding){
+    padding = padding===undefined?36:padding;
+    const valid = this.route.filter(p=>p.lat!==null);
+    if (!valid.length) return;
+    let minLat=90,maxLat=-90,minLon=180,maxLon=-180;
+    for (const p of valid){ if(p.lat<minLat)minLat=p.lat; if(p.lat>maxLat)maxLat=p.lat; if(p.lon<minLon)minLon=p.lon; if(p.lon>maxLon)maxLon=p.lon; }
+    if (minLat===maxLat && minLon===maxLon){ this.lat=minLat; this.lon=minLon; this.z=15; this.scheduleDraw(); return; }
+    let z = MAX_Z;
+    for (; z>=MIN_Z; z--){
+      const pw = lon2x(maxLon,z)-lon2x(minLon,z);
+      const ph = lat2y(minLat,z)-lat2y(maxLat,z);
+      if (pw <= this.cssW-2*padding && ph <= this.cssH-2*padding) break;
+    }
+    this.z = Math.max(MIN_Z, z);
+    const cy = (lat2y(minLat,this.z)+lat2y(maxLat,this.z))/2;
+    const cx = (lon2x(minLon,this.z)+lon2x(maxLon,this.z))/2;
+    this.lat = y2lat(cy, this.z);
+    this.lon = x2lon(cx, this.z);
+    this.scheduleDraw();
+  }
+  scheduleDraw(){
+    if (this._raf) return;
+    this._raf = requestAnimationFrame(()=>{ this._raf=null; this.draw(); });
+  }
+  _tileImg(z,x,y){
+    const nx = ((x % (1<<z)) + (1<<z)) % (1<<z);
+    if (y<0 || y>=(1<<z)) return null;
+    const key = z+'/'+nx+'/'+y;
+    let entry = this.tileCache.get(key);
+    if (!entry){
+      const img = new Image();
+      entry = {img, loaded:false};
+      img.onload = ()=>{ entry.loaded=true; this.scheduleDraw(); };
+      img.src = `https://tile.openstreetmap.org/${z}/${nx}/${y}.png`;
+      this.tileCache.set(key, entry);
+    }
+    return entry;
+  }
+  draw(){
+    const ctx = this.ctx, w=this.cssW, h=this.cssH;
+    if (!w || !h) return;
+    ctx.fillStyle = '#0A0F0C'; ctx.fillRect(0,0,w,h);
+    const z = this.z;
+    const cx = lon2x(this.lon,z), cy = lat2y(this.lat,z);
+    const originX = cx - w/2, originY = cy - h/2;
+    const x0 = Math.floor(originX/TILE)-1, x1 = Math.floor((originX+w)/TILE)+1;
+    const y0 = Math.floor(originY/TILE)-1, y1 = Math.floor((originY+h)/TILE)+1;
+    for (let ty=y0; ty<=y1; ty++){
+      for (let tx=x0; tx<=x1; tx++){
+        const entry = this._tileImg(z,tx,ty);
+        const px = tx*TILE - originX, py = ty*TILE - originY;
+        if (entry && entry.loaded) ctx.drawImage(entry.img, px, py, TILE, TILE);
+        else { ctx.fillStyle='#111813'; ctx.fillRect(px,py,TILE,TILE); }
+      }
+    }
+    // route
+    const proj = (p)=>({x: lon2x(p.lon,z)-originX, y: lat2y(p.lat,z)-originY});
+    const valid = this.route.filter(p=>p.lat!==null);
+    if (valid.length>1){
+      ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.strokeStyle='rgba(14,21,18,0.55)'; ctx.lineWidth=6.5;
+      this._strokePath(ctx, valid, proj);
+      ctx.strokeStyle='#E8A33D'; ctx.lineWidth=3.5;
+      this._strokePath(ctx, valid, proj);
+
+      if (this.highlightRange){
+        const seg = valid.filter(p=>p.idx>=this.highlightRange[0] && p.idx<=this.highlightRange[1]);
+        if (seg.length>1){ ctx.strokeStyle='#4FB477'; ctx.lineWidth=5; this._strokePath(ctx, seg, proj); }
+      }
+
+      const s = proj(valid[0]), e = proj(valid[valid.length-1]);
+      this._dot(ctx, s, '#4FB477');
+      this._dot(ctx, e, '#D9614F');
+    }
+    if (this.marker && this.marker.lat!==null){
+      const p = proj(this.marker);
+      ctx.beginPath(); ctx.arc(p.x,p.y,7,0,7); ctx.fillStyle='#fff'; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x,p.y,7,0,7); ctx.strokeStyle='#E8A33D'; ctx.lineWidth=3; ctx.stroke();
+    }
+  }
+  _strokePath(ctx, pts, proj){
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const c=proj(p); if(i===0) ctx.moveTo(c.x,c.y); else ctx.lineTo(c.x,c.y); });
+    ctx.stroke();
+  }
+  _dot(ctx, p, color){
+    ctx.beginPath(); ctx.arc(p.x,p.y,6,0,2*Math.PI); ctx.fillStyle=color; ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x,p.y,6,0,2*Math.PI); ctx.strokeStyle='#0E1512'; ctx.lineWidth=2; ctx.stroke();
+  }
+  panBy(dxPx, dyPx){
+    const z=this.z;
+    const cx = lon2x(this.lon,z)-dxPx, cy = lat2y(this.lat,z)-dyPx;
+    this.lon = x2lon(cx,z); this.lat = y2lat(cy,z);
+    this.scheduleDraw();
+  }
+  zoomAt(cssX, cssY, delta){
+    const z0=this.z;
+    let z1 = Math.max(MIN_Z, Math.min(MAX_Z, z0+delta));
+    if (z1===z0) return;
+    const w=this.cssW,h=this.cssH;
+    const originX = lon2x(this.lon,z0)-w/2, originY = lat2y(this.lat,z0)-h/2;
+    const worldX = originX+cssX, worldY = originY+cssY;
+    const lon = x2lon(worldX,z0), lat = y2lat(worldY,z0);
+    this.z = z1;
+    const nOriginX = lon2x(lon,z1)-cssX, nOriginY = lat2y(lat,z1)-cssY;
+    this.lon = x2lon(nOriginX+w/2, z1);
+    this.lat = y2lat(nOriginY+h/2, z1);
+    this.scheduleDraw();
+  }
+  _bindEvents(){
+    const c = this.canvas;
+    let dragging=false, lastX=0, lastY=0;
+    c.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; c.setPointerCapture(e.pointerId); });
+    c.addEventListener('pointermove', e=>{ if(!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; this.panBy(dx,dy); });
+    c.addEventListener('pointerup', e=>{ dragging=false; });
+    c.addEventListener('pointercancel', ()=>{ dragging=false; });
+    c.addEventListener('wheel', e=>{ e.preventDefault(); const rect=c.getBoundingClientRect(); this.zoomAt(e.clientX-rect.left, e.clientY-rect.top, e.deltaY<0?1:-1); }, {passive:false});
+    c.addEventListener('dblclick', e=>{ const rect=c.getBoundingClientRect(); this.zoomAt(e.clientX-rect.left, e.clientY-rect.top, 1); });
+  }
+}
+
+/* ============================== line chart ============================== */
+
+class RouteChart {
+  constructor(canvas, opts){
+    this.canvas = canvas; this.ctx = canvas.getContext('2d');
+    this.color = opts.color; this.fill = opts.fill;
+    this.onHover = opts.onHover;
+    this.xs = []; this.ys = []; this.lapBoundaries = []; this.highlightRange = null; this.activeIdx = null;
+    this._bindEvents();
+  }
+  resize(){
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio||1, 2);
+    this.canvas.width = Math.round(rect.width*dpr);
+    this.canvas.height = Math.round(rect.height*dpr);
+    this.cssW = rect.width; this.cssH = rect.height;
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.draw();
+  }
+  setData(xs, ys, lapBoundaries){
+    this.xs = xs; this.ys = ys; this.lapBoundaries = lapBoundaries||[];
+    const valid = ys.filter(y=>y!==null && !isNaN(y));
+    this.yMin = valid.length ? Math.min(...valid) : 0;
+    this.yMax = valid.length ? Math.max(...valid) : 1;
+    if (this.yMin===this.yMax){ this.yMin -= 1; this.yMax += 1; }
+    this.draw();
+  }
+  setHighlight(range){ this.highlightRange = range; this.draw(); }
+  setActive(idx){ this.activeIdx = idx; this.draw(); }
+  _px(i){ const xmax = this.xs[this.xs.length-1]||1; return (this.xs[i]/xmax) * (this.cssW-8) + 4; }
+  _py(y){ const pad=8; return this.cssH-pad - (y-this.yMin)/(this.yMax-this.yMin) * (this.cssH-2*pad); }
+  draw(){
+    const ctx=this.ctx, w=this.cssW, h=this.cssH;
+    if (!w||!h) return;
+    ctx.clearRect(0,0,w,h);
+    if (!this.xs.length) return;
+    if (this.highlightRange){
+      const x0=this._px(this.highlightRange[0]), x1=this._px(this.highlightRange[1]);
+      ctx.fillStyle='rgba(79,180,119,0.15)'; ctx.fillRect(x0,0,x1-x0,h);
+    }
+    ctx.strokeStyle='rgba(139,163,150,0.25)'; ctx.lineWidth=1;
+    for (const b of this.lapBoundaries){ const x=this._px(b); ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+
+    ctx.beginPath();
+    let started=false;
+    for (let i=0;i<this.xs.length;i++){
+      if (this.ys[i]===null || isNaN(this.ys[i])) { started=false; continue; }
+      const x=this._px(i), y=this._py(this.ys[i]);
+      if (!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+    }
+    if (this.fill){
+      ctx.lineTo(this._px(this.xs.length-1), h); ctx.lineTo(this._px(0), h); ctx.closePath();
+      ctx.fillStyle = this.fill; ctx.fill();
+      ctx.beginPath(); started=false;
+      for (let i=0;i<this.xs.length;i++){
+        if (this.ys[i]===null || isNaN(this.ys[i])) { started=false; continue; }
+        const x=this._px(i), y=this._py(this.ys[i]);
+        if (!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+      }
+    }
+    ctx.strokeStyle=this.color; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+
+    if (this.activeIdx!==null && this.ys[this.activeIdx]!==null){
+      const x=this._px(this.activeIdx), y=this._py(this.ys[this.activeIdx]);
+      ctx.strokeStyle='rgba(234,241,234,0.35)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x,y,4,0,2*Math.PI); ctx.fillStyle='#fff'; ctx.fill();
+    }
+  }
+  _idxAt(cssX){
+    if (!this.xs.length) return 0;
+    const xmax = this.xs[this.xs.length-1]||1;
+    const frac = (cssX-4)/(this.cssW-8);
+    const target = Math.max(0,Math.min(xmax, frac*xmax));
+    let lo=0, hi=this.xs.length-1;
+    while (lo<hi){ const mid=(lo+hi)>>1; if (this.xs[mid]<target) lo=mid+1; else hi=mid; }
+    return lo;
+  }
+  _bindEvents(){
+    const c=this.canvas;
+    const handle=(clientX)=>{ const rect=c.getBoundingClientRect(); const idx=this._idxAt(clientX-rect.left); if(this.onHover) this.onHover(idx); };
+    c.addEventListener('pointerdown', e=>{ c.setPointerCapture(e.pointerId); handle(e.clientX); });
+    c.addEventListener('pointermove', e=>{ if(e.buttons!==1 && e.pointerType==='mouse') { /* hover without drag still ok on mouse */ } handle(e.clientX); });
+  }
+}
+
+/* ============================== app wiring ============================== */
+
+let activity = null;
+let map, chartEle, chartSpeed, chartHr, chartCad;
+let playTimer = null;
+
+const el = id => document.getElementById(id);
+const dropzone = el('dropzone'), fileInput = el('fileInput'), errBanner = el('errBanner');
+
+function showError(msg){
+  errBanner.textContent = msg;
+  errBanner.classList.add('show');
+}
+function clearError(){ errBanner.classList.remove('show'); errBanner.textContent=''; }
+
+['dragenter','dragover'].forEach(evt=>dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
+['dragleave','drop'].forEach(evt=>dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.remove('drag'); }));
+dropzone.addEventListener('drop', e=>{ const f=e.dataTransfer.files && e.dataTransfer.files[0]; if (f) loadFile(f); });
+dropzone.addEventListener('click', ()=>fileInput.click());
+fileInput.addEventListener('change', ()=>{ if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+function loadFile(file){
+  clearError();
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = parseFitFile(reader.result);
+      if (!parsed.records.length) throw new Error('No GPS/record data found in this .fit file.');
+      activity = buildActivity(parsed);
+      renderActivity();
+    } catch (err) {
+      console.error(err);
+      showError('Could not read this file: ' + err.message);
+    }
+  };
+  reader.onerror = () => showError('Could not read the file from disk.');
+  reader.readAsArrayBuffer(file);
+}
+
+function statCard(label, value, sub){
+  return `<div class="stat-card"><div class="v">${value}${sub?` <small>${sub}</small>`:''}</div><div class="l">${label}</div></div>`;
+}
+
+function renderActivity(){
+  const a = activity;
+  el('dropzone').style.display='none';
+
+  el('activityBar').classList.add('show');
+  el('statsGrid').classList.add('show');
+  el('readout').classList.add('show');
+  el('footerActions').classList.add('show');
+
+  el('activityIcon').textContent = SPORT_ICON[a.sport] || '\u{1F4CD}';
+  el('activityTitle').textContent = SPORT_NAMES[a.sport] || 'Activity';
+  const d = new Date(a.startTime);
+  el('activityWhen').textContent = d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'}) + ' · ' + d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+
+  const paceMode = PACE_SPORTS.has(a.sport);
+  el('chartSpeedT').textContent = paceMode ? 'Pace' : 'Speed';
+  el('roSpeedLabel').textContent = paceMode ? 'Pace' : 'Speed';
+
+  const gain = a.ascentOverride!==null ? a.ascentOverride : a.gain;
+  const loss = a.descentOverride!==null ? a.descentOverride : a.loss;
+
+  let cards = '';
+  cards += statCard('Distance', fmtDist(a.totalDist));
+  cards += statCard('Moving time', fmtDur(a.movingS));
+  cards += statCard('Elapsed', fmtDur(a.elapsedS));
+  if (a.hasEle) cards += statCard('Elev gain', fmtEle(gain));
+  if (a.hasEle) cards += statCard('Elev loss', fmtEle(loss));
+  cards += statCard('Avg ' + (paceMode?'pace':'speed'), fmtSpeedOrPace(a.avgSpeed, a.sport));
+  cards += statCard('Max ' + (paceMode?'pace':'speed'), fmtSpeedOrPace(a.maxSpeed, a.sport));
+  if (a.hasHr) cards += statCard('Avg HR', Math.round(a.avgHr), 'bpm');
+  if (a.hasHr) cards += statCard('Max HR', Math.round(a.maxHr), 'bpm');
+  if (a.hasCad) cards += statCard('Avg cadence', Math.round(a.avgCad), 'rpm');
+  if (a.calories!==null) cards += statCard('Calories', a.calories, 'kcal');
+  el('statsGrid').innerHTML = cards;
+
+  // map
+  if (a.hasPos) {
+    el('mapWrap').classList.add('show');
+    el('mapEmpty').classList.remove('show');
+    if (!map) map = new SlippyMap(el('mapCanvas'));
+    map.resize();
+    const route = a.lat.map((lat,i)=>({lat, lon:a.lon[i], idx:i}));
+    map.setRoute(route);
+    map.fitToRoute();
+  } else {
+    el('mapWrap').classList.remove('show');
+    el('mapEmpty').classList.add('show');
+  }
+
+  const lapBoundaries = a.laps.slice(0,-1).map(l=>a.dist[l.endIdx]);
+
+  if (a.hasEle){
+    el('chartEleBlock').classList.add('show');
+    if (!chartEle) chartEle = new RouteChart(el('chartEle'), {color:'#E8A33D', fill:'rgba(232,163,61,0.12)', onHover:onChartHover});
+    chartEle.resize();
+    chartEle.setData(a.dist, a.ele, lapBoundaries);
+  } else el('chartEleBlock').classList.remove('show');
+
+  el('chartSpeedBlock').classList.add('show');
+  if (!chartSpeed) chartSpeed = new RouteChart(el('chartSpeed'), {color:'#4FB477', fill:'rgba(79,180,119,0.12)', onHover:onChartHover});
+  chartSpeed.resize();
+  chartSpeed.setData(a.dist, a.speed, lapBoundaries);
+
+  if (a.hasHr){
+    el('chartHrBlock').classList.add('show');
+    el('roHrWrap').style.display='';
+    if (!chartHr) chartHr = new RouteChart(el('chartHr'), {color:'#D9614F', fill:'rgba(217,97,79,0.12)', onHover:onChartHover});
+    chartHr.resize();
+    chartHr.setData(a.dist, a.hr, lapBoundaries);
+  } else { el('chartHrBlock').classList.remove('show'); el('roHrWrap').style.display='none'; }
+
+  if (a.hasCad){
+    el('chartCadBlock').classList.add('show');
+    if (!chartCad) chartCad = new RouteChart(el('chartCad'), {color:'#8FA396', fill:'rgba(143,163,150,0.12)', onHover:onChartHover});
+    chartCad.resize();
+    chartCad.setData(a.dist, a.cad, lapBoundaries);
+  } else el('chartCadBlock').classList.remove('show');
+
+  if (a.laps.length>1){
+    el('lapsBlock').classList.add('show');
+    el('lapsBody').innerHTML = a.laps.map(l=>{
+      const pace = l.timerS>0 ? l.distM/l.timerS : 0;
+      return `<tr data-lap="${l.num-1}"><td>${l.num}</td><td>${fmtDist(l.distM)}</td><td>${fmtDur(l.timerS)}</td><td>${fmtSpeedOrPace(pace, a.sport)}</td><td>${l.avgHr!==null?Math.round(l.avgHr):'—'}</td><td>${l.ascent!==null?fmtEle(l.ascent):'—'}</td></tr>`;
+    }).join('');
+    el('lapsBody').querySelectorAll('tr').forEach(row=>{
+      row.addEventListener('click', ()=>{
+        el('lapsBody').querySelectorAll('tr').forEach(r=>r.classList.remove('active-lap'));
+        row.classList.add('active-lap');
+        const lap = a.laps[+row.dataset.lap];
+        const range = [lap.startIdx, lap.endIdx];
+        [chartEle,chartSpeed,chartHr,chartCad].forEach(c=>c && c.setHighlight(range));
+        if (map){ map.setHighlight(range); }
+        onChartHover(lap.startIdx);
+      });
+    });
+  } else el('lapsBlock').classList.remove('show');
+
+  onChartHover(0);
+  window.addEventListener('resize', debouncedResize);
+}
+
+function onChartHover(idx){
+  const a = activity;
+  if (!a) return;
+  idx = Math.max(0, Math.min(a.n-1, idx));
+  [chartEle,chartSpeed,chartHr,chartCad].forEach(c=>c && c.setActive(idx));
+  if (map && a.hasPos) map.setMarker({lat:a.lat[idx], lon:a.lon[idx]});
+
+  el('roDist').textContent = fmtDist(a.dist[idx]);
+  el('roTime').textContent = fmtDur((a.t[idx]-a.t[0])/1000);
+  el('roEle').textContent = a.hasEle ? fmtEle(a.ele[idx]) : '—';
+  el('roSpeed').textContent = fmtSpeedOrPace(a.speed[idx], a.sport);
+  el('roHr').textContent = (a.hasHr && a.hr[idx]!==null) ? Math.round(a.hr[idx]) : '—';
+
+  const paceMode = PACE_SPORTS.has(a.sport);
+  el('chartEleV').textContent = a.hasEle ? fmtEle(a.ele[idx]) : '';
+  el('chartSpeedV').textContent = fmtSpeedOrPace(a.speed[idx], a.sport);
+  el('chartHrV').textContent = (a.hasHr && a.hr[idx]!==null) ? Math.round(a.hr[idx])+' bpm' : '';
+  el('chartCadV').textContent = (a.hasCad && a.cad[idx]) ? Math.round(a.cad[idx])+' rpm' : '';
+}
+
+let resizeTimer=null;
+function debouncedResize(){
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=>{
+    if (map) map.resize();
+    [chartEle,chartSpeed,chartHr,chartCad].forEach(c=>c && c.resize());
+  }, 150);
+}
+
+el('fitBtn').addEventListener('click', ()=>{ if (map) map.fitToRoute(); });
+el('zoomInBtn').addEventListener('click', ()=>{ if (map) map.zoomAt(map.cssW/2, map.cssH/2, 1); });
+el('zoomOutBtn').addEventListener('click', ()=>{ if (map) map.zoomAt(map.cssW/2, map.cssH/2, -1); });
+
+el('unitToggle').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  unit = btn.dataset.unit;
+  el('unitToggle').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+  if (activity) renderActivity();
+});
+
+function resetApp(){
+  clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶';
+  activity = null;
+  fileInput.value = '';
+  el('dropzone').style.display='';
+  ['activityBar','statsGrid','readout','footerActions','mapWrap','mapEmpty','chartEleBlock','chartSpeedBlock','chartHrBlock','chartCadBlock','lapsBlock']
+    .forEach(id=>el(id).classList.remove('show'));
+  clearError();
+}
+el('loadAnotherBtn').addEventListener('click', resetApp);
+el('loadAnotherBtn2').addEventListener('click', resetApp);
+
+el('playBtn').addEventListener('click', ()=>{
+  if (!activity) return;
+  if (playTimer){ clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; return; }
+  el('playBtn').textContent='⏸';
+  let idx = 0;
+  playTimer = setInterval(()=>{
+    idx += Math.max(1, Math.round(activity.n/300));
+    if (idx>=activity.n){ idx=activity.n-1; clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; }
+    onChartHover(idx);
+  }, 60);
+});
+
+})();
+</script>
+</body>
+</html>
