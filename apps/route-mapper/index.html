@@ -595,13 +595,15 @@ function x2lon(x,z){ return x/(Math.pow(2,z)*TILE)*360 - 180; }
 function y2lat(y,z){ const n = Math.PI - 2*Math.PI*y/(Math.pow(2,z)*TILE); return 180/Math.PI*Math.atan(Math.sinh(n)); }
 
 // Keyless raster tile sources only (no API key / signup), matching this app's
-// existing "no server, no accounts" constraint. "Dark" (CARTO Dark Matter) is
-// the closest free, reliable match to a grey/black minimal basemap; genuine
-// contour-shaded topo tiles are OpenTopoMap, offered as a separate style
-// rather than faked, since raster tiles from a third party can't be recoloured.
+// existing "no server, no accounts" constraint. "Dark" is Esri's World Dark
+// Gray Base — a genuinely free, no-key basemap served straight off Esri's
+// public ArcGIS Online tile endpoint (note its tile scheme is {z}/{y}/{x},
+// row before column, unlike the other two). Genuine contour-shaded topo
+// tiles are OpenTopoMap, offered as a separate style rather than faked,
+// since raster tiles from a third party can't be recoloured.
 const MAP_STYLES = {
-  dark:     { label:'Dark',     bg:'#0A0F0C', attrib:'© OpenStreetMap contributors, © CARTO',
-              url:(z,x,y)=>`https://basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png` },
+  dark:     { label:'Dark',     bg:'#0B0D10', attrib:'© Esri, HERE, Garmin, © OpenStreetMap contributors',
+              url:(z,x,y)=>`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}` },
   topo:     { label:'Topo',     bg:'#1A2420', attrib:'© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)',
               url:(z,x,y)=>`https://tile.opentopomap.org/${z}/${x}/${y}.png` },
   standard: { label:'Standard', bg:'#0A0F0C', attrib:'© OpenStreetMap contributors',
@@ -884,16 +886,32 @@ class RouteChart {
 }
 
 /* ============================== isometric ride-along ==============================
-   A chase-camera view: the route (and elevation, exaggerated) is projected into
-   local flat metres around a reference point, then into a simple 2:1 isometric
-   projection. The camera re-centres on the current scrub position every draw,
-   so the ground grid appears to slide past — the same index (onChartHover) that
-   drives the map marker and chart crosshairs drives this too. */
+   A chase camera that follows *behind* the rider: the route (and elevation,
+   exaggerated) is projected into local flat metres around a reference point,
+   rotated so the current direction of travel always points the same way on
+   screen (a fixed diagonal — the classic isometric "forward"), then folded
+   into a 2:1 isometric projection. Both the camera's position and its heading
+   are smoothed frame-by-frame (a running requestAnimationFrame loop, not a
+   one-shot redraw per scrub step) so scrubbing or noisy GPS points don't snap
+   the view around — it eases toward wherever the scrubber currently is. */
+
+function lerpAngle(a, b, t){
+  let d = (b - a) % (2*Math.PI);
+  if (d > Math.PI) d -= 2*Math.PI;
+  if (d < -Math.PI) d += 2*Math.PI;
+  return a + d*t;
+}
 
 class IsoView {
   constructor(canvas){
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
     this.points = null; this.idx = 0; this.totalDist = 0;
+    this.camPos = null; this.camHeading = 0;
+    this._running = false; this._raf = null;
+    // "Forward" in this projection is a fixed diagonal (rotating the world by
+    // heading before projecting is what puts the camera "behind" the rider) —
+    // the marker always points this same way rather than being rotated per-frame.
+    this._forwardAngle = Math.atan2(-0.5, 0.866);
   }
   resize(){
     const rect = this.canvas.getBoundingClientRect();
@@ -905,6 +923,7 @@ class IsoView {
     this.draw();
   }
   setActivity(a){
+    this.stop();
     if (!a || !a.hasPos){ this.points = null; this.draw(); return; }
     let refLat=null, refLon=null;
     for (let i=0;i<a.n;i++){ if (a.lat[i]!==null){ refLat=a.lat[i]; refLon=a.lon[i]; break; } }
@@ -923,15 +942,64 @@ class IsoView {
     }
     this.totalDist = a.totalDist || 200;
     this.idx = Math.min(this.idx, a.n-1);
+    const first = this.points.find(Boolean);
+    this.camPos = first ? {x:first.x, y:first.y, z:first.z} : null;
+    this.camHeading = this._headingAt(this.idx);
     this.draw();
   }
-  setIndex(idx){ this.idx = idx; this.draw(); }
-  _iso(p, camX, camY, camZ){
-    // Camera-relative on all three axes — otherwise the rider's own elevation
-    // (exaggerated by ZEXAG) pushes it far off-screen instead of staying centred;
-    // nearby terrain should rise/fall relative to where the rider is right now.
-    const rx = p.x - camX, ry = p.y - camY, rz = p.z - camZ;
-    return { x: (rx-ry)*0.866, y: (rx+ry)*0.5 - rz };
+  setIndex(idx){
+    this.idx = idx;
+    if (this._running) return; // the running loop already redraws every frame
+    this.draw();
+  }
+  // Direction of travel averaged over a window of points, not just immediate
+  // neighbours — raw consecutive GPS fixes are noisy enough to make a per-point
+  // heading visibly twitch even when smoothed afterwards.
+  _headingAt(idx){
+    const pts = this.points;
+    if (!pts) return this.camHeading || 0;
+    const w = 4;
+    const i0 = Math.max(0, idx-w), i1 = Math.min(pts.length-1, idx+w);
+    const p0 = pts[i0], p1 = pts[i1];
+    if (!p0 || !p1) return this.camHeading || 0;
+    const dx = p1.x-p0.x, dy = p1.y-p0.y;
+    if (Math.abs(dx)<1e-6 && Math.abs(dy)<1e-6) return this.camHeading || 0;
+    return Math.atan2(dy, dx);
+  }
+  start(){
+    this._running = true;
+    if (this._raf) return;
+    const step = () => {
+      if (!this._running){ this._raf = null; return; }
+      this._tick();
+      this.draw();
+      this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+  stop(){
+    this._running = false;
+    if (this._raf){ cancelAnimationFrame(this._raf); this._raf = null; }
+  }
+  _tick(){
+    if (!this.points || !this.camPos) return;
+    const target = this.points[Math.max(0,Math.min(this.points.length-1,this.idx))];
+    if (!target) return;
+    const targetHeading = this._headingAt(this.idx);
+    const POS_SMOOTH = 0.12, HEAD_SMOOTH = 0.10;
+    this.camPos.x += (target.x-this.camPos.x)*POS_SMOOTH;
+    this.camPos.y += (target.y-this.camPos.y)*POS_SMOOTH;
+    this.camPos.z += (target.z-this.camPos.z)*POS_SMOOTH;
+    this.camHeading = lerpAngle(this.camHeading, targetHeading, HEAD_SMOOTH);
+  }
+  // World-rotate by -heading before the isometric fold, so the direction of
+  // travel always maps to the same screen diagonal — a camera parked behind
+  // the rider looking forward, rather than a fixed-angle view that just pans.
+  _iso(p, camX, camY, camZ, heading){
+    const dx = p.x-camX, dy = p.y-camY, dz = p.z-camZ;
+    const cos = Math.cos(-heading), sin = Math.sin(-heading);
+    const rx = dx*cos - dy*sin, ry = dx*sin + dy*cos;
+    return { x: (rx-ry)*0.866, y: -(rx+ry)*0.5 - dz };
   }
   draw(){
     const ctx=this.ctx, w=this.cssW, h=this.cssH;
@@ -942,17 +1010,15 @@ class IsoView {
       ctx.fillText('No GPS data for the ride-along view', w/2, h/2);
       return;
     }
-    const cur = this.points[Math.max(0,Math.min(this.points.length-1,this.idx))];
-    if (!cur) return;
-    const camX = cur.x, camY = cur.y, camZ = cur.z;
+    if (!this.camPos) return;
+    const camX = this.camPos.x, camY = this.camPos.y, camZ = this.camPos.z, heading = this.camHeading;
     const viewRadius = Math.max(35, Math.min(160, this.totalDist/6));
     const scale = Math.min(w,h) / (viewRadius*2.2);
-    const toScreen = (p)=>{ const iso=this._iso(p,camX,camY,camZ); return { x: w/2+iso.x*scale, y: h*0.62+iso.y*scale }; };
+    const toScreen = (p)=>{ const iso=this._iso(p,camX,camY,camZ,heading); return { x: w/2+iso.x*scale, y: h*0.62+iso.y*scale }; };
 
-    // Ground grid represents the plane at the rider's *current* elevation (z:camZ,
-    // so it always cancels to rz=0) rather than sea level — a fixed z:0 plane would
-    // shift the whole grid off-screen by a constant amount on any route that isn't
-    // literally at zero elevation, since the camera itself compensates by camZ.
+    // Ground grid sits at the rider's current elevation (not sea level), so it
+    // reads as a stable local plane sliding underneath rather than jumping
+    // with every hill — the camera already compensates by camZ.
     const gridStep=20, gridExtent=Math.ceil(viewRadius/gridStep)+2;
     const gox = Math.floor(camX/gridStep)*gridStep, goy = Math.floor(camY/gridStep)*gridStep;
     ctx.strokeStyle='rgba(143,163,150,0.18)'; ctx.lineWidth=1;
@@ -983,18 +1049,15 @@ class IsoView {
     }
     ctx.strokeStyle='#F2C94C'; ctx.lineWidth=4; ctx.stroke();
 
-    // rider marker, facing direction of travel, with a ground shadow
-    const prev = this.points[Math.max(0,this.idx-1)] || cur;
-    const next = this.points[Math.min(this.points.length-1,this.idx+1)] || cur;
-    const s0=toScreen(prev), s1=toScreen(next);
-    const heading = Math.atan2(s1.y-s0.y, s1.x-s0.x);
-    const rp = toScreen(cur);
-    const groundP = toScreen({x:cur.x,y:cur.y,z:camZ});
-    ctx.beginPath(); ctx.ellipse(groundP.x,groundP.y,9,4,0,0,2*Math.PI); ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fill();
+    // rider marker, always facing the fixed "forward" screen direction (the
+    // world rotation above is what makes that read as behind-the-rider),
+    // with a simple ground shadow at the same smoothed camera position.
+    const rp = toScreen({x:camX, y:camY, z:camZ});
+    ctx.beginPath(); ctx.ellipse(rp.x,rp.y+3,9,4,0,0,2*Math.PI); ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fill();
     ctx.save();
     ctx.translate(rp.x, rp.y);
     ctx.beginPath(); ctx.arc(0,0,13,0,2*Math.PI); ctx.fillStyle='rgba(242,201,76,0.25)'; ctx.fill();
-    ctx.rotate(heading);
+    ctx.rotate(this._forwardAngle);
     ctx.beginPath(); ctx.moveTo(11,0); ctx.lineTo(-7,6); ctx.lineTo(-7,-6); ctx.closePath();
     ctx.fillStyle='#F2C94C'; ctx.fill();
     ctx.lineWidth=2; ctx.strokeStyle='#241705'; ctx.stroke();
@@ -1191,6 +1254,7 @@ function applyViewMode(){
   el('mapEmpty').classList.toggle('show', !hasPos);
   if (showMap && map) map.resize();
   if (showIso && isoView) isoView.resize();
+  if (isoView){ if (showIso) isoView.start(); else isoView.stop(); }
 }
 
 /* ---------------- stats / charts / readout for the focused activity ---------------- */
@@ -1332,6 +1396,7 @@ el('unitToggle').addEventListener('click', e=>{
 
 function resetApp(){
   clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶';
+  if (isoView) isoView.stop();
   activities = []; focusedId = null;
   fileInput.value = '';
   el('dropzone').style.display='';
