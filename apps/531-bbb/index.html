@@ -185,6 +185,7 @@
   .set-row .target{font-size:12px;color:var(--muted);margin-top:2px;}
   .set-row .plate-line{font-size:11.5px;color:var(--steel);margin-top:6px;font-weight:600;}
   .set-row .last-time{font-size:11px;color:var(--muted);margin-top:3px;font-style:italic;}
+  .set-row .pr-target{font-size:11.5px;color:var(--good);margin-top:4px;font-weight:600;}
   .plate-line{font-size:11.5px;color:var(--steel);margin-top:8px;font-weight:600;}
   .last-time{font-size:11px;color:var(--muted);margin-top:4px;font-style:italic;}
   .set-row input.reps{
@@ -360,6 +361,15 @@
   function epley(weight, reps){
     if (!reps || reps <= 0) return null;
     return weight * (1 + reps/30);
+  }
+
+  // Smallest whole rep count at `weight` whose estimated 1RM (Epley) beats
+  // the lift's current best from logged AMRAP sets — i.e. what you'd need
+  // to hit today for a new PR, not just match one.
+  function repsNeededForPr(weight, bestE1rm){
+    if (!weight || weight <= 0 || bestE1rm == null) return null;
+    if (weight >= bestE1rm) return 1; // one rep here already tops the old best
+    return Math.max(1, Math.floor(30 * (bestE1rm / weight - 1)) + 1);
   }
 
   function hasTMs(){
@@ -858,6 +868,7 @@
               <span class="unit">${settings.unit}</span>
             </div>
             <div class="target">Target: ${s.repsLabel} reps</div>
+            ${s.amrap ? prTargetLine(lift, sw.main[i]) : ''}
             <div class="plate-line">${plateLine} per side</div>
             ${ltLine ? `<div class="last-time">${ltLine}</div>` : ''}
           </div>
@@ -1028,6 +1039,21 @@
       })
       .filter(Boolean)
       .sort((a,b) => a.date.localeCompare(b.date));
+  }
+
+  function bestE1rmForLift(lift){
+    const series = e1rmSeries(lift);
+    return series.length ? Math.max(...series.map(p => p.v)) : null;
+  }
+
+  function prTargetLine(lift, weight){
+    const best = bestE1rmForLift(lift);
+    if (best == null){
+      return `<div class="pr-target">First logged AMRAP for ${LIFT_LABEL[lift]} — this sets your baseline est. 1RM.</div>`;
+    }
+    const reps = repsNeededForPr(weight, best);
+    if (reps == null) return '';
+    return `<div class="pr-target">Hit ${reps}+ reps for a new est. 1RM PR (current best ${fmtW(best)})</div>`;
   }
 
   function buildSparkline(points, color){
