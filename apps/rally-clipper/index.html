@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Rally Clipper">
-<title>Rally Clipper</title>
+<meta name="apple-mobile-web-app-title" content="Tennis Analysis">
+<title>Tennis Analysis</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700&display=swap');
   :root{
@@ -98,6 +98,50 @@
 
   .note{font-size:12px; color:var(--muted); line-height:1.6; margin-top:12px; border-top:1px solid rgba(244,241,232,0.12); padding-top:12px;}
   .hidden{display:none !important;}
+
+  .tool-tabs{display:flex; gap:8px; justify-content:center; margin-top:16px;}
+  .tool-tab-btn{
+    width:auto; background:transparent; border:1px solid rgba(244,241,232,0.2); color:var(--muted);
+    padding:9px 14px; font-family:'Archivo', sans-serif; font-weight:700; font-size:13px; border-radius:999px;
+  }
+  .tool-tab-btn.active{background:var(--ball); color:var(--ink); border-color:var(--ball);}
+  .tool-panel{display:none;}
+  .tool-panel.active{display:block;}
+
+  .chip-row{display:flex; flex-wrap:wrap; gap:8px;}
+  .chip-btn{
+    width:auto; background:var(--court-dark); border:1px solid rgba(244,241,232,0.2); color:var(--line);
+    padding:9px 13px; font-family:'Archivo', sans-serif; font-weight:600; font-size:13px; border-radius:999px;
+  }
+  .chip-btn.active{background:var(--ball); color:var(--ink); border-color:var(--ball);}
+
+  .clip-filename{font-size:12px; color:var(--muted); margin-top:8px; word-break:break-all;}
+
+  .lib-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(136px,1fr)); gap:10px; margin-top:12px;}
+  .lib-card{
+    background:var(--court-dark); border:1px solid rgba(244,241,232,0.12); border-radius:10px;
+    overflow:hidden; cursor:pointer; touch-action:manipulation;
+  }
+  .lib-thumb{width:100%; aspect-ratio:16/9; background:#0E1815 center/cover no-repeat; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:11px;}
+  .lib-info{padding:8px 10px 10px;}
+  .lib-cat{font-size:12px; font-weight:700; color:var(--ball);}
+  .lib-sub{font-size:11.5px; color:var(--muted); margin-top:1px;}
+  .lib-name{font-size:10.5px; color:var(--muted); margin-top:5px; word-break:break-all; line-height:1.4;}
+  .lib-badge{font-size:9.5px; color:var(--muted); border:1px solid rgba(244,241,232,0.2); border-radius:5px; padding:1px 5px; display:inline-block; margin-top:5px;}
+  .lib-delete{
+    width:auto; position:absolute; top:0; right:0; margin:6px; padding:4px 8px; font-size:11px; border-radius:6px;
+    background:rgba(22,33,29,0.75); color:var(--line); border:1px solid rgba(244,241,232,0.25);
+  }
+  .lib-card-wrap{position:relative;}
+
+  .player-overlay{
+    position:fixed; inset:0; background:rgba(10,16,14,0.92); z-index:50;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .player-box{background:var(--court); border-radius:14px; padding:16px; width:100%; max-width:480px;}
+  .player-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; font-weight:700;}
+  .player-head #playerCloseBtn{width:auto; padding:6px 12px;}
+  #playerVideo{width:100%; border-radius:10px; background:#000; display:block;}
 </style>
 </head>
 <body>
@@ -105,10 +149,15 @@
   <a class="back-link" href="../../"><span class="back-arrow">‹</span>Shelf</a>
   <header>
     <div class="eyebrow">Tennis</div>
-    <h1>Rally Clipper</h1>
-    <div class="sub">Upload a match video. It scans for motion and racket-hit sounds to guess where the actual rallies are, then cuts and exports just those parts.</div>
+    <h1>Tennis Analysis</h1>
+    <div class="sub">Find the rallies in a match video, or build a tagged library of your own serve/forehand/backhand clips.</div>
+    <nav class="tool-tabs">
+      <button type="button" class="tool-tab-btn active" data-tool-tab="finder">Shot Finder</button>
+      <button type="button" class="tool-tab-btn" data-tool-tab="library">Shot Library</button>
+    </nav>
   </header>
 
+  <section class="tool-panel active" id="panel-finder">
   <div class="card" id="uploadCard">
     <h2>1. Upload video</h2>
     <div class="dropzone" id="dropzone">
@@ -183,6 +232,58 @@
     <div class="progress-track hidden" id="exportProgressTrack"><div class="progress-fill" id="exportProgressFill"></div></div>
     <video id="outputVideo" class="hidden" controls playsinline></video>
     <button class="secondary hidden" id="downloadBtn" style="margin-top:10px;">Download video</button>
+  </div>
+  </section>
+
+  <section class="tool-panel" id="panel-library">
+    <div class="card">
+      <h2>Add a clip</h2>
+      <div class="note" style="margin:0 0 12px; padding:0; border:none;">Pick a video from your phone or computer and tag it by shot type. On a browser that supports it (desktop Chrome/Edge), the clip stays where it is and this just remembers a reference, re-asking permission to open it when needed. On others (including iOS Safari) there's no way to keep that link, so you'll be asked to re-pick the same file when you want to play it back.</div>
+      <button class="primary" id="addClipBtn">+ Add a clip</button>
+      <input type="file" id="pendingFileInput" accept="video/*" style="display:none;">
+      <div class="status-line" id="libraryStatus"></div>
+    </div>
+
+    <div class="card hidden" id="tagFormCard">
+      <h2>Tag this clip</h2>
+      <video id="tagPreviewVideo" controls playsinline muted></video>
+      <div class="clip-filename" id="tagFileName"></div>
+      <div class="field-row" style="margin-top:14px;">
+        <label style="margin-bottom:8px;">Shot type</label>
+        <div class="chip-row" id="categoryChips"></div>
+      </div>
+      <div class="field-row hidden" id="subcategoryRow">
+        <label style="margin-bottom:8px;">Type</label>
+        <div class="chip-row" id="subcategoryChips"></div>
+      </div>
+      <div class="field-row">
+        <label style="margin-bottom:8px;">Note (optional)</label>
+        <input type="text" id="tagNote" placeholder="e.g. down the line, off a short ball" style="width:100%; background:var(--court-dark); border:1px solid rgba(244,241,232,0.15); border-radius:8px; color:var(--line); font-size:15px; padding:10px;">
+      </div>
+      <button class="primary" id="saveClipBtn" disabled>Save to library</button>
+      <button class="secondary" id="cancelTagBtn" style="margin-top:10px;">Cancel</button>
+    </div>
+
+    <div class="card">
+      <h2>Library</h2>
+      <div class="chip-row" id="libraryFilterChips"></div>
+      <div class="lib-grid" id="libraryGrid"></div>
+      <div class="status-line" id="libraryEmptyStatus">No clips saved yet — add one above.</div>
+    </div>
+  </section>
+</div>
+
+<div class="player-overlay hidden" id="playerOverlay">
+  <div class="player-box">
+    <div class="player-head">
+      <div id="playerTitle"></div>
+      <button type="button" class="small secondary" id="playerCloseBtn">✕</button>
+    </div>
+    <video id="playerVideo" controls playsinline autoplay></video>
+    <div class="status-line" id="playerStatus"></div>
+    <div class="hidden" id="relinkRow">
+      <button class="primary" id="relinkBtn">Re-select file</button>
+    </div>
   </div>
 </div>
 
@@ -791,6 +892,387 @@
     a.download = 'rally-clips.mp4';
     a.click();
   });
+})();
+
+/* ============================================================
+   TOOL TAB SWITCHING
+   ============================================================ */
+document.querySelectorAll('.tool-tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tool-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tool-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.toolTab).classList.add('active');
+  });
+});
+
+/* ============================================================
+   SHOT LIBRARY
+   ============================================================
+   Saved clips are references, not copies. Where the File System Access
+   API is available (desktop Chrome/Edge) a picked file's FileSystemFileHandle
+   is stored directly in IndexedDB (structured clone supports this) and
+   re-opened later via handle.requestPermission() — the browser re-prompts
+   for access rather than us re-importing the video. iOS Safari (and any
+   browser without that API) has no way to keep a working link to a file
+   outside the page at all, so those entries store only filename/size/date
+   metadata and the user is asked to re-pick the same file to play it back.
+   Either way, the video's bytes are never duplicated into app storage. */
+(function(){
+  "use strict";
+
+  const SHOT_CATEGORIES = {
+    serve:    { label:'Serve',    subcategories:['Flat','Slice','Kick','Underarm'] },
+    forehand: { label:'Forehand', subcategories:['Topspin','Slice','Flat','Volley','Drop shot','Lob'] },
+    backhand: { label:'Backhand', subcategories:['Topspin','Slice','Flat','Volley','Drop shot','Lob'] },
+    overhead: { label:'Overhead', subcategories:['Flat','Slice'] }
+  };
+  const supportsFileHandle = 'showOpenFilePicker' in window;
+
+  /* ---------------- IndexedDB (video handles/metadata only — no video bytes) ---------------- */
+  const DB_NAME = 'tennis-analysis', DB_VERSION = 1, STORE = 'clips';
+  function openDb(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE, { keyPath:'id' });
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function dbPut(entry){
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).put(entry);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function dbGetAll(){
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+    });
+  }
+  async function dbDelete(id){
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).delete(id);
+      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  const addClipBtn = document.getElementById('addClipBtn');
+  const pendingFileInput = document.getElementById('pendingFileInput');
+  const libraryStatus = document.getElementById('libraryStatus');
+  const tagFormCard = document.getElementById('tagFormCard');
+  const tagPreviewVideo = document.getElementById('tagPreviewVideo');
+  const tagFileName = document.getElementById('tagFileName');
+  const categoryChips = document.getElementById('categoryChips');
+  const subcategoryRow = document.getElementById('subcategoryRow');
+  const subcategoryChips = document.getElementById('subcategoryChips');
+  const tagNote = document.getElementById('tagNote');
+  const saveClipBtn = document.getElementById('saveClipBtn');
+  const cancelTagBtn = document.getElementById('cancelTagBtn');
+  const libraryFilterChips = document.getElementById('libraryFilterChips');
+  const libraryGrid = document.getElementById('libraryGrid');
+  const libraryEmptyStatus = document.getElementById('libraryEmptyStatus');
+  const playerOverlay = document.getElementById('playerOverlay');
+  const playerTitle = document.getElementById('playerTitle');
+  const playerVideo = document.getElementById('playerVideo');
+  const playerStatus = document.getElementById('playerStatus');
+  const playerCloseBtn = document.getElementById('playerCloseBtn');
+  const relinkRow = document.getElementById('relinkRow');
+  const relinkBtn = document.getElementById('relinkBtn');
+
+  let library = [];
+  let libraryFilter = 'all';
+  let pendingFile = null, pendingHandle = null, pendingCategory = null, pendingSubcategory = null;
+  let playerObjectUrl = null;
+  let relinkTarget = null;
+
+  function fmtDate(ts){
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' });
+  }
+
+  /* ---------------- add + tag flow ---------------- */
+  addClipBtn.addEventListener('click', async () => {
+    if (supportsFileHandle){
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          types: [{ description:'Video', accept:{ 'video/*':['.mp4','.mov','.m4v','.webm'] } }]
+        });
+        const file = await handle.getFile();
+        openTagForm(file, handle);
+        return;
+      } catch(e){
+        if (e.name === 'AbortError') return;
+        // fall through to the plain input on anything unexpected
+      }
+    }
+    pendingFileInput.click();
+  });
+  pendingFileInput.addEventListener('change', () => {
+    if (pendingFileInput.files[0]) openTagForm(pendingFileInput.files[0], null);
+    pendingFileInput.value = '';
+  });
+
+  function openTagForm(file, handle){
+    pendingFile = file; pendingHandle = handle;
+    pendingCategory = null; pendingSubcategory = null;
+    tagPreviewVideo.src = URL.createObjectURL(file);
+    tagFileName.textContent = file.name;
+    tagNote.value = '';
+    renderCategoryChips();
+    subcategoryRow.classList.add('hidden');
+    subcategoryChips.innerHTML = '';
+    saveClipBtn.disabled = true;
+    tagFormCard.classList.remove('hidden');
+    libraryStatus.textContent = '';
+    tagFormCard.scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  function closeTagForm(){
+    tagFormCard.classList.add('hidden');
+    if (tagPreviewVideo.src) URL.revokeObjectURL(tagPreviewVideo.src);
+    tagPreviewVideo.removeAttribute('src');
+    pendingFile = null; pendingHandle = null;
+  }
+  cancelTagBtn.addEventListener('click', closeTagForm);
+
+  function renderCategoryChips(){
+    categoryChips.innerHTML = '';
+    Object.keys(SHOT_CATEGORIES).forEach(key => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip-btn' + (pendingCategory === key ? ' active' : '');
+      btn.textContent = SHOT_CATEGORIES[key].label;
+      btn.addEventListener('click', () => {
+        pendingCategory = key; pendingSubcategory = null;
+        renderCategoryChips(); renderSubcategoryChips();
+        saveClipBtn.disabled = true;
+      });
+      categoryChips.appendChild(btn);
+    });
+  }
+
+  function renderSubcategoryChips(){
+    subcategoryChips.innerHTML = '';
+    if (!pendingCategory){ subcategoryRow.classList.add('hidden'); return; }
+    subcategoryRow.classList.remove('hidden');
+    SHOT_CATEGORIES[pendingCategory].subcategories.forEach(sub => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip-btn' + (pendingSubcategory === sub ? ' active' : '');
+      btn.textContent = sub;
+      btn.addEventListener('click', () => {
+        pendingSubcategory = sub;
+        renderSubcategoryChips();
+        saveClipBtn.disabled = false;
+      });
+      subcategoryChips.appendChild(btn);
+    });
+  }
+
+  function captureThumbnail(video){
+    return new Promise(resolve => {
+      const w = 160;
+      let settled = false;
+      const done = (val) => { if (settled) return; settled = true; resolve(val); };
+      const grab = () => {
+        try {
+          const h = Math.max(1, Math.round(w * ((video.videoHeight / video.videoWidth) || 0.5625)));
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+          done(canvas.toDataURL('image/jpeg', 0.6));
+        } catch(e){ done(null); }
+      };
+      if (video.readyState >= 2) grab();
+      else {
+        // A file that fails to decode (unsupported codec, or just not a real
+        // video) never fires loadeddata — fall back to no thumbnail rather
+        // than hanging the save indefinitely.
+        video.addEventListener('loadeddata', grab, { once:true });
+        video.addEventListener('error', () => done(null), { once:true });
+        setTimeout(() => done(null), 2000);
+      }
+    });
+  }
+
+  saveClipBtn.addEventListener('click', async () => {
+    if (!pendingFile || !pendingCategory || !pendingSubcategory) return;
+    saveClipBtn.disabled = true;
+    saveClipBtn.textContent = 'Saving…';
+    const thumbnail = await captureThumbnail(tagPreviewVideo);
+    const entry = {
+      id: 'clip_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      category: pendingCategory,
+      subcategory: pendingSubcategory,
+      note: tagNote.value.trim(),
+      addedAt: Date.now(),
+      fileName: pendingFile.name,
+      fileSize: pendingFile.size,
+      fileLastModified: pendingFile.lastModified,
+      thumbnail,
+      kind: pendingHandle ? 'handle' : 'meta'
+    };
+    if (pendingHandle) entry.handle = pendingHandle;
+    try {
+      await dbPut(entry);
+      library.unshift(entry);
+      renderLibrary();
+      libraryStatus.textContent = 'Saved to library.';
+      closeTagForm();
+    } catch(e){
+      console.error(e);
+      libraryStatus.textContent = 'Could not save that clip — try again.';
+    }
+    saveClipBtn.disabled = false;
+    saveClipBtn.textContent = 'Save to library';
+  });
+
+  /* ---------------- library rendering ---------------- */
+  function renderFilterChips(){
+    libraryFilterChips.innerHTML = '';
+    const opts = [['all', 'All']].concat(Object.keys(SHOT_CATEGORIES).map(k => [k, SHOT_CATEGORIES[k].label]));
+    opts.forEach(([key, label]) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip-btn' + (libraryFilter === key ? ' active' : '');
+      btn.textContent = label;
+      btn.addEventListener('click', () => { libraryFilter = key; renderLibrary(); });
+      libraryFilterChips.appendChild(btn);
+    });
+  }
+
+  function renderLibrary(){
+    renderFilterChips();
+    const shown = libraryFilter === 'all' ? library : library.filter(c => c.category === libraryFilter);
+    libraryGrid.innerHTML = '';
+    libraryEmptyStatus.classList.toggle('hidden', library.length > 0);
+    shown.slice().sort((a,b) => b.addedAt - a.addedAt).forEach(entry => {
+      const wrap = document.createElement('div');
+      wrap.className = 'lib-card-wrap';
+      const card = document.createElement('div');
+      card.className = 'lib-card';
+      const catLabel = SHOT_CATEGORIES[entry.category] ? SHOT_CATEGORIES[entry.category].label : entry.category;
+      card.innerHTML = `
+        <div class="lib-thumb" style="${entry.thumbnail ? `background-image:url('${entry.thumbnail}')` : ''}">${entry.thumbnail ? '' : '▶'}</div>
+        <div class="lib-info">
+          <div class="lib-cat">${catLabel}</div>
+          <div class="lib-sub">${entry.subcategory}</div>
+          <div class="lib-name">${entry.fileName}</div>
+          <div class="lib-badge">${entry.kind === 'handle' ? 'Linked' : fmtDate(entry.addedAt)}</div>
+        </div>
+      `;
+      card.addEventListener('click', () => playEntry(entry));
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'lib-delete';
+      del.textContent = '✕';
+      del.title = 'Remove from library';
+      del.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await dbDelete(entry.id);
+        library = library.filter(c => c.id !== entry.id);
+        renderLibrary();
+      });
+      wrap.appendChild(card);
+      wrap.appendChild(del);
+      libraryGrid.appendChild(wrap);
+    });
+  }
+
+  /* ---------------- playback + relink ---------------- */
+  function showPlayer(file, entry, warning){
+    if (playerObjectUrl) URL.revokeObjectURL(playerObjectUrl);
+    playerObjectUrl = URL.createObjectURL(file);
+    playerVideo.src = playerObjectUrl;
+    const catLabel = SHOT_CATEGORIES[entry.category] ? SHOT_CATEGORIES[entry.category].label : entry.category;
+    playerTitle.textContent = `${catLabel} — ${entry.subcategory}`;
+    playerStatus.textContent = warning || '';
+    relinkRow.classList.add('hidden');
+    relinkTarget = null;
+    playerOverlay.classList.remove('hidden');
+  }
+
+  function showRelinkPrompt(entry, message){
+    if (playerObjectUrl){ URL.revokeObjectURL(playerObjectUrl); playerObjectUrl = null; }
+    playerVideo.removeAttribute('src');
+    const catLabel = SHOT_CATEGORIES[entry.category] ? SHOT_CATEGORIES[entry.category].label : entry.category;
+    playerTitle.textContent = `${catLabel} — ${entry.subcategory}`;
+    playerStatus.textContent = message;
+    relinkTarget = entry;
+    relinkRow.classList.remove('hidden');
+    playerOverlay.classList.remove('hidden');
+  }
+
+  async function playEntry(entry){
+    if (entry.kind === 'handle' && entry.handle){
+      try {
+        let perm = await entry.handle.queryPermission({ mode:'read' });
+        if (perm !== 'granted') perm = await entry.handle.requestPermission({ mode:'read' });
+        if (perm !== 'granted') throw new Error('permission not granted');
+        const file = await entry.handle.getFile();
+        showPlayer(file, entry);
+        return;
+      } catch(e){
+        console.error(e);
+        showRelinkPrompt(entry, "Couldn't open the saved file — it may have moved or access was denied. Re-select it below.");
+        return;
+      }
+    }
+    showRelinkPrompt(entry, `This browser can't keep a link to your files — re-select "${entry.fileName}" to play it.`);
+  }
+
+  function pickViaInput(){
+    return new Promise(resolve => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = 'video/*';
+      input.addEventListener('change', () => resolve(input.files[0] || null), { once:true });
+      input.click();
+    });
+  }
+
+  relinkBtn.addEventListener('click', async () => {
+    const entry = relinkTarget;
+    if (!entry) return;
+    let file = null, handle = null;
+    if (supportsFileHandle){
+      try {
+        const [h] = await window.showOpenFilePicker({
+          types: [{ description:'Video', accept:{ 'video/*':['.mp4','.mov','.m4v','.webm'] } }]
+        });
+        handle = h; file = await handle.getFile();
+      } catch(e){ if (e.name === 'AbortError') return; }
+    }
+    if (!file) file = await pickViaInput();
+    if (!file) return;
+    const looksSame = file.name === entry.fileName && file.size === entry.fileSize;
+    entry.fileName = file.name; entry.fileSize = file.size; entry.fileLastModified = file.lastModified;
+    if (handle){ entry.handle = handle; entry.kind = 'handle'; }
+    try { await dbPut(entry); } catch(e){ console.error(e); }
+    renderLibrary();
+    showPlayer(file, entry, looksSame ? null : "Heads up — that file's name/size doesn't match what was saved.");
+  });
+
+  playerCloseBtn.addEventListener('click', () => {
+    playerOverlay.classList.add('hidden');
+    playerVideo.pause();
+    playerVideo.removeAttribute('src');
+    if (playerObjectUrl){ URL.revokeObjectURL(playerObjectUrl); playerObjectUrl = null; }
+  });
+
+  /* ---------------- init ---------------- */
+  (async function init(){
+    try { library = await dbGetAll(); } catch(e){ console.error(e); library = []; }
+    renderLibrary();
+  })();
 })();
 </script>
 </body>
