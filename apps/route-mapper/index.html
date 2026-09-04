@@ -1058,9 +1058,21 @@ class IsoView {
     this._running = false;
     if (this._raf){ cancelAnimationFrame(this._raf); this._raf = null; }
   }
+  // idx may be fractional (mid-playback, between two GPS fixes) — interpolate
+  // between the bracketing points rather than snapping to whichever is nearest.
+  _pointAt(idx){
+    const n = this.points.length;
+    const lo = Math.max(0, Math.min(n-1, Math.floor(idx)));
+    const hi = Math.max(0, Math.min(n-1, Math.ceil(idx)));
+    const p0 = this.points[lo], p1 = this.points[hi];
+    if (!p0 || !p1) return p0 || p1 || null;
+    if (lo===hi) return p0;
+    const frac = idx-lo;
+    return { x:p0.x+(p1.x-p0.x)*frac, y:p0.y+(p1.y-p0.y)*frac, z:p0.z+(p1.z-p0.z)*frac };
+  }
   _tick(now){
     if (!this.points || !this.camPos) return;
-    const target = this.points[Math.max(0,Math.min(this.points.length-1,this.idx))];
+    const target = this._pointAt(this.idx);
     if (!target) return;
     // Time-constant based easing (not a fixed per-tick fraction) so smoothing
     // stays consistent regardless of actual frame rate.
@@ -1479,14 +1491,29 @@ function renderAll(fit=false){
   window.addEventListener('resize', debouncedResize);
 }
 
-function onChartHover(idx){
+function onChartHover(idx, targetT){
   const focused = getFocused();
   if (!focused) return;
   const a = focused.data;
   idx = Math.max(0, Math.min(a.n-1, idx));
   [chartEle,chartSpeed,chartHr,chartCad].forEach(c=>c && c.setActive(idx));
-  if (map && a.hasPos) map.setMarker({lat:a.lat[idx], lon:a.lon[idx], idx});
-  if (isoView) isoView.setIndex(idx);
+
+  // During playback (targetT given), findIdxForTime lands on the fix at/after
+  // targetT — interpolate back from the previous fix instead of snapping straight
+  // to it, so movement reads smoothly even when fixes are a second or more apart.
+  let markerIdx = idx, mLat = a.lat[idx], mLon = a.lon[idx];
+  if (targetT!=null){
+    const lo = Math.max(0, idx-1);
+    if (lo < idx && a.lat[lo]!==null && a.lat[idx]!==null){
+      const t0=a.t[lo], t1=a.t[idx];
+      const frac = t1>t0 ? Math.max(0, Math.min(1, (targetT-t0)/(t1-t0))) : 1;
+      mLat = a.lat[lo] + (a.lat[idx]-a.lat[lo])*frac;
+      mLon = a.lon[lo] + (a.lon[idx]-a.lon[lo])*frac;
+      markerIdx = lo + frac;
+    }
+  }
+  if (map && a.hasPos) map.setMarker({lat:mLat, lon:mLon, idx:markerIdx});
+  if (isoView) isoView.setIndex(markerIdx);
 
   el('roDist').textContent = fmtDist(a.dist[idx]);
   el('roTime').textContent = fmtDur((a.t[idx]-a.t[0])/1000);
@@ -1566,13 +1593,14 @@ el('playBtn').addEventListener('click', ()=>{
     if (lastNow==null) lastNow = now;
     activityMs += (now-lastNow) * playSpeed;
     lastNow = now;
-    const idx = findIdxForTime(a.t, a.t[0] + activityMs);
+    const targetT = a.t[0] + activityMs;
+    const idx = findIdxForTime(a.t, targetT);
     if (idx >= a.n-1){
       onChartHover(a.n-1);
       playTimer=null; el('playBtn').textContent='▶';
       return;
     }
-    onChartHover(idx);
+    onChartHover(idx, targetT);
     playTimer = requestAnimationFrame(step);
   };
   playTimer = requestAnimationFrame(step);
