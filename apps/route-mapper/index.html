@@ -235,6 +235,8 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
       <button data-speed="1" class="active">1&times;</button>
       <button data-speed="2">2&times;</button>
       <button data-speed="4">4&times;</button>
+      <button data-speed="8">8&times;</button>
+      <button data-speed="16">16&times;</button>
     </div>
     <div class="ritem">Distance<b id="roDist">&mdash;</b></div>
     <div class="ritem">Time<b id="roTime">&mdash;</b></div>
@@ -610,6 +612,10 @@ function fmtSpeedOrPace(mps, sportEnum){
 /* ============================== slippy map ============================== */
 
 const TILE=256, MIN_Z=2, MAX_Z=21;
+// The basemaps' own tile servers don't have imagery at the very top zoom levels —
+// for the last couple of levels, fall back to the nearest zoomed-out tile that IS
+// loaded (cropped + scaled up) instead of leaving a blank placeholder rect.
+const OVERZOOM_LEVELS = 2;
 function lon2x(lon,z){ return (lon+180)/360 * Math.pow(2,z) * TILE; }
 function lat2y(lat,z){
   const r = lat*Math.PI/180;
@@ -727,6 +733,24 @@ class SlippyMap {
     }
     return entry;
   }
+  // Walk up to `maxSteps` parent zoom levels looking for an already-loaded tile,
+  // returning the sub-rectangle of it that covers (z,x,y) so it can be scaled up
+  // to fill the target tile instead of showing nothing.
+  _ancestorTile(z, x, y, maxSteps){
+    for (let step=1; step<=maxSteps; step++){
+      const az = z - step;
+      if (az < MIN_Z) break;
+      const scale = 1<<step;
+      const ax = Math.floor(x/scale), ay = Math.floor(y/scale);
+      const entry = this._tileImg(az, ax, ay);
+      if (entry && entry.loaded){
+        const sSize = TILE/scale;
+        const sx = (x - ax*scale) * sSize, sy = (y - ay*scale) * sSize;
+        return {img: entry.img, sx, sy, sw:sSize, sh:sSize};
+      }
+    }
+    return null;
+  }
   draw(){
     const ctx = this.ctx, w=this.cssW, h=this.cssH;
     if (!w || !h) return;
@@ -741,8 +765,15 @@ class SlippyMap {
       for (let tx=x0; tx<=x1; tx++){
         const entry = this._tileImg(z,tx,ty);
         const px = tx*TILE - originX, py = ty*TILE - originY;
-        if (entry && entry.loaded) ctx.drawImage(entry.img, px, py, TILE, TILE);
-        else { ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(px,py,TILE,TILE); }
+        if (entry && entry.loaded){
+          ctx.drawImage(entry.img, px, py, TILE, TILE);
+        } else if (z > MAX_Z - OVERZOOM_LEVELS){
+          const fb = this._ancestorTile(z, tx, ty, OVERZOOM_LEVELS);
+          if (fb) ctx.drawImage(fb.img, fb.sx, fb.sy, fb.sw, fb.sh, px, py, TILE, TILE);
+          else { ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(px,py,TILE,TILE); }
+        } else {
+          ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(px,py,TILE,TILE);
+        }
       }
     }
     // dim the basemap slightly so route lines always read clearly on top of it
@@ -1200,7 +1231,7 @@ function addActivity(fileName, data){
   const color = MULTI_PALETTE[activities.length % MULTI_PALETTE.length];
   activities.push({ id, fileName, data, color, visible:true });
   focusedId = id;
-  renderAll();
+  renderAll(true);
 }
 
 function removeActivity(id){
@@ -1303,16 +1334,20 @@ function renderMap(fit){
   const hasPos = !!(focused && focused.data.hasPos);
   el('mapEmpty').classList.toggle('show', !hasPos);
   if (!hasPos) return;
+  const isNewMap = !map;
   if (!map){
     map = new SlippyMap(el('mapCanvas'));
-    // Tapping a route line on the map selects that run, same as tapping its file-list row.
-    map.onSelect = (id) => { focusedId = id; renderAll(); };
+    // Tapping a route line on the map selects that run, same as tapping its file-list row —
+    // just switching which run is focused, so it shouldn't reset the current pan/zoom.
+    map.onSelect = (id) => { focusedId = id; renderAll(false); };
   }
   map.setStyle(mapStyleKey);
   el('mapAttrib').textContent = MAP_STYLES[mapStyleKey].attrib;
   map.resize();
   map.setLayers(buildMapLayers());
-  if (fit) map.fitToRoute();
+  // Always fit when the map is first created (nothing to preserve yet); otherwise
+  // only fit when the caller explicitly asks for it (e.g. a newly loaded file).
+  if (fit || isNewMap) map.fitToRoute();
 }
 
 el('mapStyleTabs').addEventListener('click', e=>{
@@ -1418,7 +1453,7 @@ function renderStatsAndCharts(a){
   } else el('chartCadBlock').classList.remove('show');
 }
 
-function renderAll(){
+function renderAll(fit=false){
   renderFileList();
   const focused = getFocused();
   if (!focused){ resetApp(); return; }
@@ -1436,7 +1471,7 @@ function renderAll(){
   applyViewMode();
   renderStatsAndCharts(focused.data);
   updateRouteColorAvailability(focused.data);
-  renderMap(true);
+  renderMap(fit);
   if (!isoView) isoView = new IsoView(el('isoCanvas'));
   isoView.setActivity(focused.data);
 
