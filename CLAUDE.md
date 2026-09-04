@@ -15,7 +15,7 @@ Static single-page app shelf (e.g. GitHub Pages). No `package.json`, no build/li
 Each app is **one self-contained `index.html`** (inline `<style>`+`<script>`, no external JS/npm). Only external resources: Google Fonts `<link>`s; `rally-clipper` also lazy-loads ffmpeg.wasm + an optional ML model; `scoreboard` fetches live JSON directly from ESPN's public (unofficial, keyless) scoreboard endpoints; `route-mapper` draws raster tiles fetched live from a keyless, attributed provider (Esri World Dark Gray) — these are the only apps that talk to a live external service rather than working purely on local/user-supplied data.
 
 ## Git
-Personal site, no PRs/review, no branches — commit and push straight to `main`.
+Personal site, no PRs/review. Never use branches — always commit and push straight to `main`.
 
 ## Model
 Use `opusplan` for this repo.
