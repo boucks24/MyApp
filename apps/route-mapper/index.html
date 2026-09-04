@@ -104,7 +104,6 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 /* ---- map ---- */
 .map-wrap{display:none;position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);margin:6px 0 4px;background:#0A0F0C;}
 .map-wrap.show{display:block;}
-.map-wrap.hidden-view{display:none !important;}
 .map-wrap canvas{display:block;width:100%;touch-action:none;}
 .map-controls{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px;}
 .map-controls button{width:32px;height:32px;border-radius:8px;background:rgba(20,28,22,0.85);border:1px solid var(--line);color:var(--text);font-size:16px;cursor:pointer;font-family:var(--font-body);}
@@ -231,12 +230,10 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
   <div class="readout" id="readout">
     <button class="play-btn" id="playBtn">&#9654;</button>
     <div class="seg-switch compact" id="speedTabs">
-      <button data-speed="0.5">0.5&times;</button>
       <button data-speed="1" class="active">1&times;</button>
-      <button data-speed="2">2&times;</button>
       <button data-speed="4">4&times;</button>
-      <button data-speed="8">8&times;</button>
       <button data-speed="16">16&times;</button>
+      <button data-speed="32">32&times;</button>
     </div>
     <div class="ritem">Distance<b id="roDist">&mdash;</b></div>
     <div class="ritem">Time<b id="roTime">&mdash;</b></div>
@@ -1094,16 +1091,33 @@ class IsoView {
   }
   _bindEvents(){
     const c = this.canvas;
-    let dragging=false, lastX=0;
-    c.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; c.setPointerCapture(e.pointerId); });
+    let dragging=false, lastX=0, pointerId=null;
+    // While a pointer holds capture on this canvas, browsers retarget its click
+    // too — so if a drag never cleanly ends (finger lifted off-screen, the tab
+    // switched away mid-gesture, etc.) taps on OTHER controls like the Map tab
+    // can silently do nothing until this canvas gets a pointerup. The window-level
+    // listeners below are a safety net so a stuck drag can't swallow clicks
+    // elsewhere — this is the likely cause of "click Map and it doesn't open"
+    // after dragging/playing the ride-along view.
+    const endDrag = ()=>{
+      if (!dragging) return;
+      dragging = false;
+      if (pointerId!=null){ try{ c.releasePointerCapture(pointerId); }catch(e){} }
+      pointerId = null;
+    };
+    this._endDrag = endDrag; // callable externally when the view switches away from ride-along
+    c.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; pointerId=e.pointerId; c.setPointerCapture(e.pointerId); });
     c.addEventListener('pointermove', e=>{
       if (!dragging) return;
       const dx = e.clientX-lastX; lastX = e.clientX;
       this.rotation += dx * 0.012;
       if (!this._running) this.draw();
     });
-    c.addEventListener('pointerup', ()=>{ dragging=false; });
-    c.addEventListener('pointercancel', ()=>{ dragging=false; });
+    c.addEventListener('pointerup', endDrag);
+    c.addEventListener('pointercancel', endDrag);
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+    window.addEventListener('blur', endDrag);
   }
   draw(){
     const ctx=this.ctx, w=this.cssW, h=this.cssH;
@@ -1405,7 +1419,10 @@ function applyViewMode(){
   el('mapEmpty').classList.toggle('show', !hasPos);
   if (showMap && map) map.resize();
   if (showIso && isoView) isoView.resize();
-  if (isoView){ if (showIso) isoView.start(); else isoView.stop(); }
+  if (isoView){
+    if (showIso) isoView.start();
+    else { isoView.stop(); if (isoView._endDrag) isoView._endDrag(); }
+  }
 }
 
 /* ---------------- stats / charts / readout for the focused activity ---------------- */
@@ -1439,27 +1456,27 @@ function renderStatsAndCharts(a){
 
   if (a.hasEle){
     el('chartEleBlock').classList.add('show');
-    if (!chartEle) chartEle = new RouteChart(el('chartEle'), {color:'#E8A33D', fill:'rgba(232,163,61,0.12)', onHover:onChartHover});
+    if (!chartEle) chartEle = new RouteChart(el('chartEle'), {color:'#E8A33D', fill:'rgba(232,163,61,0.12)', onHover:seekToIdx});
     chartEle.resize();
     chartEle.setData(a.dist, a.ele);
   } else el('chartEleBlock').classList.remove('show');
 
   el('chartSpeedBlock').classList.add('show');
-  if (!chartSpeed) chartSpeed = new RouteChart(el('chartSpeed'), {color:'#4FB477', fill:'rgba(79,180,119,0.12)', onHover:onChartHover});
+  if (!chartSpeed) chartSpeed = new RouteChart(el('chartSpeed'), {color:'#4FB477', fill:'rgba(79,180,119,0.12)', onHover:seekToIdx});
   chartSpeed.resize();
   chartSpeed.setData(a.dist, a.speed);
 
   if (a.hasHr){
     el('chartHrBlock').classList.add('show');
     el('roHrWrap').style.display='';
-    if (!chartHr) chartHr = new RouteChart(el('chartHr'), {color:'#D9614F', fill:'rgba(217,97,79,0.12)', onHover:onChartHover});
+    if (!chartHr) chartHr = new RouteChart(el('chartHr'), {color:'#D9614F', fill:'rgba(217,97,79,0.12)', onHover:seekToIdx});
     chartHr.resize();
     chartHr.setData(a.dist, a.hr);
   } else { el('chartHrBlock').classList.remove('show'); el('roHrWrap').style.display='none'; }
 
   if (a.hasCad){
     el('chartCadBlock').classList.add('show');
-    if (!chartCad) chartCad = new RouteChart(el('chartCad'), {color:'#8FA396', fill:'rgba(143,163,150,0.12)', onHover:onChartHover});
+    if (!chartCad) chartCad = new RouteChart(el('chartCad'), {color:'#8FA396', fill:'rgba(143,163,150,0.12)', onHover:seekToIdx});
     chartCad.resize();
     chartCad.setData(a.dist, a.cad);
   } else el('chartCadBlock').classList.remove('show');
@@ -1487,6 +1504,7 @@ function renderAll(fit=false){
   if (!isoView) isoView = new IsoView(el('isoCanvas'));
   isoView.setActivity(focused.data);
 
+  playElapsedMs = 0; playLastFrameTime = null;
   onChartHover(0);
   window.addEventListener('resize', debouncedResize);
 }
@@ -1552,6 +1570,7 @@ el('unitToggle').addEventListener('click', e=>{
 
 function resetApp(){
   cancelAnimationFrame(playTimer); playTimer=null; el('playBtn').textContent='▶';
+  playElapsedMs = 0; playLastFrameTime = null;
   if (isoView) isoView.stop();
   activities = []; focusedId = null;
   fileListExpanded = false; filePage = 0;
@@ -1578,22 +1597,44 @@ function findIdxForTime(t, targetT){
   return lo;
 }
 
+// playElapsedMs is ms into the focused activity's own recorded timeline — shared
+// between the play loop and manual seeks (chart click/drag) so clicking a chart
+// WHILE playing rebases where playback continues from, instead of the next
+// animation frame snapping the marker straight back to the old computed position.
+let playElapsedMs = 0;
+let playLastFrameTime = null;
+
+function seekToActivityMs(ms){
+  const focused = getFocused();
+  if (!focused) return;
+  const a = focused.data;
+  playElapsedMs = Math.max(0, Math.min(a.t[a.n-1]-a.t[0], ms));
+  playLastFrameTime = null; // don't let the next play frame count the seek itself as elapsed time
+  const targetT = a.t[0] + playElapsedMs;
+  onChartHover(findIdxForTime(a.t, targetT), targetT);
+}
+function seekToIdx(idx){
+  const focused = getFocused();
+  if (!focused) return;
+  const a = focused.data;
+  seekToActivityMs(a.t[Math.max(0,Math.min(a.n-1,idx))] - a.t[0]);
+}
+
 el('playBtn').addEventListener('click', ()=>{
   if (!getFocused()) return;
   if (playTimer){ cancelAnimationFrame(playTimer); playTimer=null; el('playBtn').textContent='▶'; return; }
   el('playBtn').textContent='⏸';
   // 1x tracks real elapsed time against the activity's own recorded timestamps —
   // wall-clock seconds advance activity-timeline ms 1:1, scaled by playSpeed.
-  let activityMs = 0;
-  let lastNow = null;
+  playLastFrameTime = null;
   const step = (now) => {
     const focused = getFocused();
     if (!focused){ playTimer=null; el('playBtn').textContent='▶'; return; }
     const a = focused.data;
-    if (lastNow==null) lastNow = now;
-    activityMs += (now-lastNow) * playSpeed;
-    lastNow = now;
-    const targetT = a.t[0] + activityMs;
+    if (playLastFrameTime==null) playLastFrameTime = now;
+    playElapsedMs += (now-playLastFrameTime) * playSpeed;
+    playLastFrameTime = now;
+    const targetT = a.t[0] + playElapsedMs;
     const idx = findIdxForTime(a.t, targetT);
     if (idx >= a.n-1){
       onChartHover(a.n-1);
