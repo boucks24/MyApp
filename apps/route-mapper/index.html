@@ -224,7 +224,7 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
   </div>
   <div class="iso-wrap" id="isoWrap">
     <canvas id="isoCanvas"></canvas>
-    <div class="iso-hint">Chase camera — follows the focused activity's rider</div>
+    <div class="iso-hint">Drag to rotate — follows the focused activity's marker</div>
   </div>
   <div class="map-empty" id="mapEmpty">No GPS data in this file — showing charts only.</div>
 
@@ -609,7 +609,7 @@ function fmtSpeedOrPace(mps, sportEnum){
 
 /* ============================== slippy map ============================== */
 
-const TILE=256, MIN_Z=2, MAX_Z=18;
+const TILE=256, MIN_Z=2, MAX_Z=21;
 function lon2x(lon,z){ return (lon+180)/360 * Math.pow(2,z) * TILE; }
 function lat2y(lat,z){
   const r = lat*Math.PI/180;
@@ -955,28 +955,23 @@ class RouteChart {
 }
 
 /* ============================== isometric ride-along ==============================
-   A chase camera that follows *behind* the rider: the route (and elevation,
-   exaggerated) is projected into local flat metres around a reference point,
-   rotated so the current direction of travel always points the same way on
-   screen (a fixed diagonal — the classic isometric "forward"), then folded
-   into a 2:1 isometric projection. Both the camera's position and its heading
-   are smoothed frame-by-frame (a running requestAnimationFrame loop, not a
+   A fixed-angle isometric camera that follows the rider's position (and
+   elevation, exaggerated) — the route is projected into local flat metres
+   around a reference point, then folded into a 2:1 isometric projection at a
+   user-controlled rotation (drag left/right to orbit around the marker; it
+   doesn't auto-rotate to face the direction of travel). Camera position is
+   smoothed frame-by-frame (a running requestAnimationFrame loop, not a
    one-shot redraw per scrub step) so scrubbing or noisy GPS points don't snap
    the view around — it eases toward wherever the scrubber currently is. */
-
-function lerpAngle(a, b, t){
-  let d = (b - a) % (2*Math.PI);
-  if (d > Math.PI) d -= 2*Math.PI;
-  if (d < -Math.PI) d += 2*Math.PI;
-  return a + d*t;
-}
 
 class IsoView {
   constructor(canvas){
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
     this.points = null; this.idx = 0; this.totalDist = 0;
-    this.camPos = null; this.camHeading = 0;
+    this.camPos = null;
+    this.rotation = -Math.PI/4; // user-controlled orbit angle around the marker; drag to change
     this._running = false; this._raf = null; this._lastTime = null;
+    this._bindEvents();
   }
   resize(){
     const rect = this.canvas.getBoundingClientRect();
@@ -1009,27 +1004,12 @@ class IsoView {
     this.idx = Math.min(this.idx, a.n-1);
     const first = this.points.find(Boolean);
     this.camPos = first ? {x:first.x, y:first.y, z:first.z} : null;
-    this.camHeading = this._headingAt(this.idx);
     this.draw();
   }
   setIndex(idx){
     this.idx = idx;
     if (this._running) return; // the running loop already redraws every frame
     this.draw();
-  }
-  // Direction of travel averaged over a window of points, not just immediate
-  // neighbours — raw consecutive GPS fixes are noisy enough to make a per-point
-  // heading visibly twitch even when smoothed afterwards.
-  _headingAt(idx){
-    const pts = this.points;
-    if (!pts) return this.camHeading || 0;
-    const w = 4;
-    const i0 = Math.max(0, idx-w), i1 = Math.min(pts.length-1, idx+w);
-    const p0 = pts[i0], p1 = pts[i1];
-    if (!p0 || !p1) return this.camHeading || 0;
-    const dx = p1.x-p0.x, dy = p1.y-p0.y;
-    if (Math.abs(dx)<1e-6 && Math.abs(dy)<1e-6) return this.camHeading || 0;
-    return Math.atan2(dy, dx);
   }
   start(){
     this._running = true;
@@ -1051,27 +1031,36 @@ class IsoView {
     if (!this.points || !this.camPos) return;
     const target = this.points[Math.max(0,Math.min(this.points.length-1,this.idx))];
     if (!target) return;
-    const targetHeading = this._headingAt(this.idx);
     // Time-constant based easing (not a fixed per-tick fraction) so smoothing
-    // stays consistent regardless of actual frame rate; heading eases slower
-    // than position so the camera doesn't visibly whip on sharp turns.
+    // stays consistent regardless of actual frame rate.
     const dt = (this._lastTime!=null && now!=null) ? Math.min(100, now-this._lastTime) : 16.7;
     this._lastTime = now;
     const posFactor = 1 - Math.exp(-dt/220);
-    const headFactor = 1 - Math.exp(-dt/320);
     this.camPos.x += (target.x-this.camPos.x)*posFactor;
     this.camPos.y += (target.y-this.camPos.y)*posFactor;
     this.camPos.z += (target.z-this.camPos.z)*posFactor;
-    this.camHeading = lerpAngle(this.camHeading, targetHeading, headFactor);
   }
-  // World-rotate by -heading before the isometric fold, so the direction of
-  // travel always maps to the same screen diagonal — a camera parked behind
-  // the rider looking forward, rather than a fixed-angle view that just pans.
-  _iso(p, camX, camY, camZ, heading){
+  // Rotate the world by the user-controlled orbit angle before the isometric
+  // fold — a fixed camera angle by default, but "fixed" means "doesn't
+  // auto-follow heading", not "can't be turned": dragging changes `rotation`.
+  _iso(p, camX, camY, camZ){
     const dx = p.x-camX, dy = p.y-camY, dz = p.z-camZ;
-    const cos = Math.cos(-heading), sin = Math.sin(-heading);
+    const cos = Math.cos(this.rotation), sin = Math.sin(this.rotation);
     const rx = dx*cos - dy*sin, ry = dx*sin + dy*cos;
     return { x: (rx-ry)*0.866, y: -(rx+ry)*0.5 - dz };
+  }
+  _bindEvents(){
+    const c = this.canvas;
+    let dragging=false, lastX=0;
+    c.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; c.setPointerCapture(e.pointerId); });
+    c.addEventListener('pointermove', e=>{
+      if (!dragging) return;
+      const dx = e.clientX-lastX; lastX = e.clientX;
+      this.rotation += dx * 0.012;
+      if (!this._running) this.draw();
+    });
+    c.addEventListener('pointerup', ()=>{ dragging=false; });
+    c.addEventListener('pointercancel', ()=>{ dragging=false; });
   }
   draw(){
     const ctx=this.ctx, w=this.cssW, h=this.cssH;
@@ -1083,10 +1072,10 @@ class IsoView {
       return;
     }
     if (!this.camPos) return;
-    const camX = this.camPos.x, camY = this.camPos.y, camZ = this.camPos.z, heading = this.camHeading;
+    const camX = this.camPos.x, camY = this.camPos.y, camZ = this.camPos.z;
     const viewRadius = Math.max(35, Math.min(160, this.totalDist/6));
     const scale = Math.min(w,h) / (viewRadius*2.2);
-    const toScreen = (p)=>{ const iso=this._iso(p,camX,camY,camZ,heading); return { x: w/2+iso.x*scale, y: h*0.62+iso.y*scale }; };
+    const toScreen = (p)=>{ const iso=this._iso(p,camX,camY,camZ); return { x: w/2+iso.x*scale, y: h*0.62+iso.y*scale }; };
 
     // Ground grid sits at the rider's current elevation (not sea level), so it
     // reads as a stable local plane sliding underneath rather than jumping
@@ -1500,7 +1489,7 @@ el('unitToggle').addEventListener('click', e=>{
 });
 
 function resetApp(){
-  clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶';
+  cancelAnimationFrame(playTimer); playTimer=null; el('playBtn').textContent='▶';
   if (isoView) isoView.stop();
   activities = []; focusedId = null;
   fileListExpanded = false; filePage = 0;
@@ -1520,19 +1509,38 @@ el('speedTabs').addEventListener('click', e=>{
   el('speedTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
 });
 
+// Binary search for the first index whose timestamp is >= targetT (t is sorted ascending).
+function findIdxForTime(t, targetT){
+  let lo=0, hi=t.length-1;
+  while (lo<hi){ const mid=(lo+hi)>>1; if (t[mid]<targetT) lo=mid+1; else hi=mid; }
+  return lo;
+}
+
 el('playBtn').addEventListener('click', ()=>{
   if (!getFocused()) return;
-  if (playTimer){ clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; return; }
+  if (playTimer){ cancelAnimationFrame(playTimer); playTimer=null; el('playBtn').textContent='▶'; return; }
   el('playBtn').textContent='⏸';
-  let idx = 0;
-  playTimer = setInterval(()=>{
+  // 1x tracks real elapsed time against the activity's own recorded timestamps —
+  // wall-clock seconds advance activity-timeline ms 1:1, scaled by playSpeed.
+  let activityMs = 0;
+  let lastNow = null;
+  const step = (now) => {
     const focused = getFocused();
-    if (!focused){ clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; return; }
+    if (!focused){ playTimer=null; el('playBtn').textContent='▶'; return; }
     const a = focused.data;
-    idx += Math.max(1, Math.round(a.n/300 * playSpeed));
-    if (idx>=a.n){ idx=a.n-1; clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; }
+    if (lastNow==null) lastNow = now;
+    activityMs += (now-lastNow) * playSpeed;
+    lastNow = now;
+    const idx = findIdxForTime(a.t, a.t[0] + activityMs);
+    if (idx >= a.n-1){
+      onChartHover(a.n-1);
+      playTimer=null; el('playBtn').textContent='▶';
+      return;
+    }
     onChartHover(idx);
-  }, 60);
+    playTimer = requestAnimationFrame(step);
+  };
+  playTimer = requestAnimationFrame(step);
 });
 
 })();
