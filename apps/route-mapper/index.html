@@ -180,11 +180,6 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
       <button data-view="map" class="active">Map</button>
       <button data-view="iso">Ride-along</button>
     </div>
-    <div class="seg-switch" id="mapStyleTabs">
-      <button data-style="dark" class="active">Dark</button>
-      <button data-style="topo">Topo</button>
-      <button data-style="standard">Standard</button>
-    </div>
   </div>
   <div class="switch-row" id="routeColorRow">
     <div class="seg-switch" id="routeColorTabs">
@@ -594,20 +589,13 @@ function lat2y(lat,z){
 function x2lon(x,z){ return x/(Math.pow(2,z)*TILE)*360 - 180; }
 function y2lat(y,z){ const n = Math.PI - 2*Math.PI*y/(Math.pow(2,z)*TILE); return 180/Math.PI*Math.atan(Math.sinh(n)); }
 
-// Keyless raster tile sources only (no API key / signup), matching this app's
-// existing "no server, no accounts" constraint. "Dark" is Esri's World Dark
-// Gray Base — a genuinely free, no-key basemap served straight off Esri's
-// public ArcGIS Online tile endpoint (note its tile scheme is {z}/{y}/{x},
-// row before column, unlike the other two). Genuine contour-shaded topo
-// tiles are OpenTopoMap, offered as a separate style rather than faked,
-// since raster tiles from a third party can't be recoloured.
+// Keyless raster tile source only (no API key / signup), matching this app's
+// existing "no server, no accounts" constraint. Esri's World Dark Gray Base —
+// a genuinely free, no-key basemap served straight off Esri's public ArcGIS
+// Online tile endpoint (note its tile scheme is {z}/{y}/{x}, row before column).
 const MAP_STYLES = {
-  dark:     { label:'Dark',     bg:'#0B0D10', attrib:'© Esri, HERE, Garmin, © OpenStreetMap contributors',
-              url:(z,x,y)=>`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}` },
-  topo:     { label:'Topo',     bg:'#1A2420', attrib:'© OpenStreetMap contributors, SRTM | © OpenTopoMap (CC-BY-SA)',
-              url:(z,x,y)=>`https://tile.opentopomap.org/${z}/${x}/${y}.png` },
-  standard: { label:'Standard', bg:'#0A0F0C', attrib:'© OpenStreetMap contributors',
-              url:(z,x,y)=>`https://tile.openstreetmap.org/${z}/${x}/${y}.png` },
+  dark: { label:'Dark', bg:'#0B0D10', attrib:'© Esri, HERE, Garmin, © OpenStreetMap contributors',
+          url:(z,x,y)=>`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}` },
 };
 
 // Classic thermal gradient (blue -> green -> yellow -> red) for route-by-metric colouring.
@@ -1086,10 +1074,12 @@ const dropzone = el('dropzone'), fileInput = el('fileInput'), errBanner = el('er
 function getFocused(){ return activities.find(a=>a.id===focusedId) || null; }
 
 function showError(msg){
-  errBanner.textContent = msg;
+  const line = document.createElement('div');
+  line.textContent = msg;
+  errBanner.appendChild(line);
   errBanner.classList.add('show');
 }
-function clearError(){ errBanner.classList.remove('show'); errBanner.textContent=''; }
+function clearError(){ errBanner.classList.remove('show'); errBanner.innerHTML=''; }
 
 ['dragenter','dragover'].forEach(evt=>dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
 ['dragleave','drop'].forEach(evt=>dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.remove('drag'); }));
@@ -1105,14 +1095,14 @@ function loadFiles(fileList){
     reader.onload = () => {
       try {
         const parsed = parseFitFile(reader.result);
-        if (!parsed.records.length) throw new Error('No GPS/record data found in this .fit file.');
+        if (!parsed.records.length) throw new Error('no GPS/record data found');
         addActivity(file.name, buildActivity(parsed));
       } catch (err) {
         console.error(err);
-        showError(`Could not read "${file.name}": ` + err.message);
+        showError(`Skipped "${file.name}": ` + err.message);
       }
     };
-    reader.onerror = () => showError(`Could not read "${file.name}" from disk.`);
+    reader.onerror = () => showError(`Skipped "${file.name}": could not read from disk.`);
     reader.readAsArrayBuffer(file);
   });
 }
@@ -1210,13 +1200,6 @@ function renderMap(fit){
   map.setLayers(buildMapLayers());
   if (fit) map.fitToRoute();
 }
-
-el('mapStyleTabs').addEventListener('click', e=>{
-  const btn = e.target.closest('button'); if (!btn) return;
-  mapStyleKey = btn.dataset.style;
-  el('mapStyleTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
-  renderMap(false);
-});
 
 function updateRouteColorAvailability(a){
   const buttons = el('routeColorTabs').querySelectorAll('button');
