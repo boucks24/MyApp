@@ -65,11 +65,15 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 /* ---- file list ---- */
 .file-list{display:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 10px 6px;margin:12px 0;}
 .file-list.show{display:block;}
-.file-list-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;padding:0 2px;}
-.file-list-head .t{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+.file-list-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 2px;}
+.file-list-toggle{display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text);font-family:var(--font-body);cursor:pointer;padding:4px 2px;}
+.file-list-toggle .t{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+.file-list-toggle .ic{font-size:10px;color:var(--muted);}
 .file-list-actions{display:flex;gap:6px;}
 .file-list-actions button{background:none;border:none;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;padding:2px 4px;font-family:var(--font-body);}
 .file-list-actions button:active{color:var(--text);}
+.file-list-body{display:none;margin-top:6px;}
+.file-list-body.expanded{display:block;}
 .file-row{display:flex;align-items:center;gap:9px;padding:7px 4px;border-radius:8px;cursor:pointer;touch-action:manipulation;}
 .file-row:active{background:var(--panel2);}
 .file-row.focused{background:var(--panel2);}
@@ -80,6 +84,10 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 .file-meta{font-size:10.5px;color:var(--muted);margin-top:1px;}
 .file-remove{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;flex:0 0 auto;padding:2px 4px;}
 .file-remove:active{color:var(--danger);}
+.file-pagination{display:none;align-items:center;justify-content:center;gap:12px;padding:8px 4px 4px;}
+.file-pagination button{background:none;border:1px solid var(--line);color:var(--text);border-radius:14px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font-body);}
+.file-pagination button:disabled{opacity:0.3;cursor:not-allowed;}
+.file-pagination span{font-size:11px;color:var(--muted);}
 .file-add-row{padding:6px 4px 2px;}
 .file-add-row .pill-btn{width:100%;text-align:center;}
 
@@ -90,6 +98,8 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 .seg-switch button{background:none;border:none;color:var(--muted);padding:6px 11px;cursor:pointer;font-family:var(--font-body);font-weight:700;white-space:nowrap;}
 .seg-switch button.active{background:var(--accent);color:#241705;}
 .seg-switch button:disabled{opacity:0.35;cursor:not-allowed;}
+.seg-switch.compact{font-size:10.5px;}
+.seg-switch.compact button{padding:5px 8px;}
 
 /* ---- map ---- */
 .map-wrap{display:none;position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);margin:6px 0 4px;background:#0A0F0C;}
@@ -146,14 +156,23 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 
   <div class="file-list" id="fileList">
     <div class="file-list-head">
-      <span class="t" id="fileListCount">0 files</span>
+      <button class="file-list-toggle" id="fileListToggle" type="button">
+        <span class="t" id="fileListCount">0 files</span><span class="ic" id="fileListToggleIcon">&#9662;</span>
+      </button>
       <div class="file-list-actions">
         <button id="showAllBtn">Show all</button>
         <button id="hideAllBtn">Hide all</button>
       </div>
     </div>
-    <div id="fileRows"></div>
-    <div class="file-add-row"><button class="pill-btn" id="addMoreBtn">+ Add more files</button></div>
+    <div class="file-list-body" id="fileListBody">
+      <div id="fileRows"></div>
+      <div class="file-pagination" id="filePagination">
+        <button id="filePrevBtn" type="button">&lsaquo; Prev</button>
+        <span id="filePageInfo"></span>
+        <button id="fileNextBtn" type="button">Next &rsaquo;</button>
+      </div>
+      <div class="file-add-row"><button class="pill-btn" id="addMoreBtn">+ Add more files</button></div>
+    </div>
   </div>
 
   <div class="activity-bar" id="activityBar">
@@ -179,6 +198,10 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
     <div class="seg-switch" id="viewTabs">
       <button data-view="map" class="active">Map</button>
       <button data-view="iso">Ride-along</button>
+    </div>
+    <div class="seg-switch" id="mapStyleTabs">
+      <button data-style="dark" class="active">Dark</button>
+      <button data-style="satellite">Satellite</button>
     </div>
   </div>
   <div class="switch-row" id="routeColorRow">
@@ -207,6 +230,12 @@ h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:4px 0 4
 
   <div class="readout" id="readout">
     <button class="play-btn" id="playBtn">&#9654;</button>
+    <div class="seg-switch compact" id="speedTabs">
+      <button data-speed="0.5">0.5&times;</button>
+      <button data-speed="1" class="active">1&times;</button>
+      <button data-speed="2">2&times;</button>
+      <button data-speed="4">4&times;</button>
+    </div>
     <div class="ritem">Distance<b id="roDist">&mdash;</b></div>
     <div class="ritem">Time<b id="roTime">&mdash;</b></div>
     <div class="ritem">Elev<b id="roEle">&mdash;</b></div>
@@ -589,13 +618,16 @@ function lat2y(lat,z){
 function x2lon(x,z){ return x/(Math.pow(2,z)*TILE)*360 - 180; }
 function y2lat(y,z){ const n = Math.PI - 2*Math.PI*y/(Math.pow(2,z)*TILE); return 180/Math.PI*Math.atan(Math.sinh(n)); }
 
-// Keyless raster tile source only (no API key / signup), matching this app's
-// existing "no server, no accounts" constraint. Esri's World Dark Gray Base —
-// a genuinely free, no-key basemap served straight off Esri's public ArcGIS
-// Online tile endpoint (note its tile scheme is {z}/{y}/{x}, row before column).
+// Keyless raster tile sources only (no API key / signup), matching this app's
+// existing "no server, no accounts" constraint. Both are served straight off
+// Esri's public ArcGIS Online tile endpoints (note their tile scheme is
+// {z}/{y}/{x}, row before column) — "Satellite" is aerial/satellite imagery
+// for a Google-Earth-style detailed look, "Dark" the minimal grey/black map.
 const MAP_STYLES = {
   dark: { label:'Dark', bg:'#0B0D10', attrib:'© Esri, HERE, Garmin, © OpenStreetMap contributors',
           url:(z,x,y)=>`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}` },
+  satellite: { label:'Satellite', bg:'#0B0D10', attrib:'© Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+          url:(z,x,y)=>`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}` },
 };
 
 // Classic thermal gradient (blue -> green -> yellow -> red) for route-by-metric colouring.
@@ -620,6 +652,14 @@ function computeMetricColors(a, metric){
   return values.map(v => (v===null||isNaN(v)) ? null : heatColor((v-min)/range));
 }
 
+function pointToSegmentDist(px,py,x1,y1,x2,y2){
+  const dx=x2-x1, dy=y2-y1;
+  const lenSq = dx*dx+dy*dy;
+  let t = lenSq>0 ? ((px-x1)*dx+(py-y1)*dy)/lenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px-(x1+t*dx), py-(y1+t*dy));
+}
+
 class SlippyMap {
   constructor(canvas){
     this.canvas = canvas;
@@ -627,8 +667,9 @@ class SlippyMap {
     this.z = 13; this.lon = 0; this.lat = 0;
     this.styleKey = 'dark';
     this.tileCache = new Map();
-    this.layers = []; // [{points:[{lat,lon,idx}], color, width, segmentColors, showEndpoints, opacity}]
+    this.layers = []; // [{id, points:[{lat,lon,idx}], color, width, segmentColors, showEndpoints, opacity}]
     this.marker = null;
+    this.onSelect = null; // (activityId) => void, called when a route line is tapped
     this._bindEvents();
     this._raf = null;
   }
@@ -737,8 +778,27 @@ class SlippyMap {
     });
 
     if (this.marker && this.marker.lat!==null){
+      // Glow the last stretch of the focused layer's line leading up to the
+      // marker, rather than a directional arrow, to show where it's tracking.
+      const focusedLayer = this.layers.find(l=>l.showEndpoints);
+      if (focusedLayer && typeof this.marker.idx === 'number'){
+        const glowSpan = 14;
+        const seg = focusedLayer.points
+          .slice(Math.max(0, this.marker.idx-glowSpan), this.marker.idx+1)
+          .filter(pt=>pt.lat!==null);
+        if (seg.length>1){
+          ctx.save();
+          ctx.shadowColor = 'rgba(242,201,76,0.85)';
+          ctx.shadowBlur = 14;
+          ctx.strokeStyle = '#F2C94C';
+          ctx.lineWidth = focusedLayer.width + 1;
+          ctx.lineCap='round'; ctx.lineJoin='round';
+          this._strokePath(ctx, seg, proj);
+          ctx.restore();
+        }
+      }
       const p = proj(this.marker);
-      this._drawRider(ctx, p, this.marker.heading||0);
+      this._drawRider(ctx, p);
     }
   }
   _strokePath(ctx, pts, proj){
@@ -750,15 +810,12 @@ class SlippyMap {
     ctx.beginPath(); ctx.arc(p.x,p.y,6,0,2*Math.PI); ctx.fillStyle=color; ctx.fill();
     ctx.beginPath(); ctx.arc(p.x,p.y,6,0,2*Math.PI); ctx.strokeStyle='#0E1512'; ctx.lineWidth=2; ctx.stroke();
   }
-  // The "user" marker: a small yellow arrow pointing the direction of travel,
-  // rather than a plain dot, so it reads as a rider/runner being tracked.
-  _drawRider(ctx, p, heading){
+  // The "user" marker: a small glowing circle rather than a directional arrow.
+  _drawRider(ctx, p){
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.beginPath(); ctx.arc(0,0,12,0,2*Math.PI); ctx.fillStyle='rgba(242,201,76,0.28)'; ctx.fill();
-    ctx.rotate(heading);
-    ctx.beginPath(); ctx.moveTo(9,0); ctx.lineTo(-6,5.5); ctx.lineTo(-6,-5.5); ctx.closePath();
-    ctx.fillStyle='#F2C94C'; ctx.fill();
+    ctx.beginPath(); ctx.arc(0,0,6,0,2*Math.PI); ctx.fillStyle='#F2C94C'; ctx.fill();
     ctx.lineWidth=2; ctx.strokeStyle='#241705'; ctx.stroke();
     ctx.restore();
   }
@@ -782,12 +839,36 @@ class SlippyMap {
     this.lat = y2lat(nOriginY+h/2, z1);
     this.scheduleDraw();
   }
+  // Finds the visible route line nearest a tap, for "select this run by tapping it on the map".
+  _hitTestLayers(cssX, cssY){
+    const z = this.z;
+    const originX = lon2x(this.lon,z) - this.cssW/2, originY = lat2y(this.lat,z) - this.cssH/2;
+    const proj = (p)=>({x: lon2x(p.lon,z)-originX, y: lat2y(p.lat,z)-originY});
+    let bestId=null, bestDist=Infinity;
+    this.layers.forEach(layer=>{
+      if (!layer.id) return;
+      const valid = layer.points.filter(p=>p.lat!==null);
+      for (let i=0;i<valid.length-1;i++){
+        const a=proj(valid[i]), b=proj(valid[i+1]);
+        const d = pointToSegmentDist(cssX,cssY,a.x,a.y,b.x,b.y);
+        if (d<bestDist){ bestDist=d; bestId=layer.id; }
+      }
+    });
+    return bestDist<=16 ? bestId : null;
+  }
   _bindEvents(){
     const c = this.canvas;
-    let dragging=false, lastX=0, lastY=0;
-    c.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; c.setPointerCapture(e.pointerId); });
-    c.addEventListener('pointermove', e=>{ if(!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; this.panBy(dx,dy); });
-    c.addEventListener('pointerup', e=>{ dragging=false; });
+    let dragging=false, lastX=0, lastY=0, moved=0;
+    c.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; moved=0; c.setPointerCapture(e.pointerId); });
+    c.addEventListener('pointermove', e=>{ if(!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; moved += Math.abs(dx)+Math.abs(dy); this.panBy(dx,dy); });
+    c.addEventListener('pointerup', e=>{
+      dragging=false;
+      if (moved<6 && this.onSelect){
+        const rect=c.getBoundingClientRect();
+        const id = this._hitTestLayers(e.clientX-rect.left, e.clientY-rect.top);
+        if (id) this.onSelect(id);
+      }
+    });
     c.addEventListener('pointercancel', ()=>{ dragging=false; });
     c.addEventListener('wheel', e=>{ e.preventDefault(); const rect=c.getBoundingClientRect(); this.zoomAt(e.clientX-rect.left, e.clientY-rect.top, e.deltaY<0?1:-1); }, {passive:false});
     c.addEventListener('dblclick', e=>{ const rect=c.getBoundingClientRect(); this.zoomAt(e.clientX-rect.left, e.clientY-rect.top, 1); });
@@ -895,11 +976,7 @@ class IsoView {
     this.canvas = canvas; this.ctx = canvas.getContext('2d');
     this.points = null; this.idx = 0; this.totalDist = 0;
     this.camPos = null; this.camHeading = 0;
-    this._running = false; this._raf = null;
-    // "Forward" in this projection is a fixed diagonal (rotating the world by
-    // heading before projecting is what puts the camera "behind" the rider) —
-    // the marker always points this same way rather than being rotated per-frame.
-    this._forwardAngle = Math.atan2(-0.5, 0.866);
+    this._running = false; this._raf = null; this._lastTime = null;
   }
   resize(){
     const rect = this.canvas.getBoundingClientRect();
@@ -956,10 +1033,11 @@ class IsoView {
   }
   start(){
     this._running = true;
+    this._lastTime = null;
     if (this._raf) return;
-    const step = () => {
+    const step = (now) => {
       if (!this._running){ this._raf = null; return; }
-      this._tick();
+      this._tick(now);
       this.draw();
       this._raf = requestAnimationFrame(step);
     };
@@ -969,16 +1047,22 @@ class IsoView {
     this._running = false;
     if (this._raf){ cancelAnimationFrame(this._raf); this._raf = null; }
   }
-  _tick(){
+  _tick(now){
     if (!this.points || !this.camPos) return;
     const target = this.points[Math.max(0,Math.min(this.points.length-1,this.idx))];
     if (!target) return;
     const targetHeading = this._headingAt(this.idx);
-    const POS_SMOOTH = 0.12, HEAD_SMOOTH = 0.10;
-    this.camPos.x += (target.x-this.camPos.x)*POS_SMOOTH;
-    this.camPos.y += (target.y-this.camPos.y)*POS_SMOOTH;
-    this.camPos.z += (target.z-this.camPos.z)*POS_SMOOTH;
-    this.camHeading = lerpAngle(this.camHeading, targetHeading, HEAD_SMOOTH);
+    // Time-constant based easing (not a fixed per-tick fraction) so smoothing
+    // stays consistent regardless of actual frame rate; heading eases slower
+    // than position so the camera doesn't visibly whip on sharp turns.
+    const dt = (this._lastTime!=null && now!=null) ? Math.min(100, now-this._lastTime) : 16.7;
+    this._lastTime = now;
+    const posFactor = 1 - Math.exp(-dt/220);
+    const headFactor = 1 - Math.exp(-dt/320);
+    this.camPos.x += (target.x-this.camPos.x)*posFactor;
+    this.camPos.y += (target.y-this.camPos.y)*posFactor;
+    this.camPos.z += (target.z-this.camPos.z)*posFactor;
+    this.camHeading = lerpAngle(this.camHeading, targetHeading, headFactor);
   }
   // World-rotate by -heading before the isometric fold, so the direction of
   // travel always maps to the same screen diagonal — a camera parked behind
@@ -1037,19 +1121,26 @@ class IsoView {
     }
     ctx.strokeStyle='#F2C94C'; ctx.lineWidth=4; ctx.stroke();
 
-    // rider marker, always facing the fixed "forward" screen direction (the
-    // world rotation above is what makes that read as behind-the-rider),
-    // with a simple ground shadow at the same smoothed camera position.
+    // glow just the last stretch leading into the marker, rather than the whole trail
+    const glowSpan = 16, glowStart = Math.max(0, this.idx-glowSpan);
+    ctx.save();
+    ctx.shadowColor='rgba(242,201,76,0.9)'; ctx.shadowBlur=16;
+    ctx.strokeStyle='#F2C94C'; ctx.lineWidth=4.5;
+    ctx.beginPath(); let gStarted=false;
+    for (let i=glowStart;i<=this.idx;i++){
+      const p=this.points[i]; if (!p){ gStarted=false; continue; }
+      const s=toScreen(p);
+      if (!gStarted){ ctx.moveTo(s.x,s.y); gStarted=true; } else ctx.lineTo(s.x,s.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // rider marker: a small circle with a ground shadow at the smoothed camera position
     const rp = toScreen({x:camX, y:camY, z:camZ});
     ctx.beginPath(); ctx.ellipse(rp.x,rp.y+3,9,4,0,0,2*Math.PI); ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fill();
-    ctx.save();
-    ctx.translate(rp.x, rp.y);
-    ctx.beginPath(); ctx.arc(0,0,13,0,2*Math.PI); ctx.fillStyle='rgba(242,201,76,0.25)'; ctx.fill();
-    ctx.rotate(this._forwardAngle);
-    ctx.beginPath(); ctx.moveTo(11,0); ctx.lineTo(-7,6); ctx.lineTo(-7,-6); ctx.closePath();
-    ctx.fillStyle='#F2C94C'; ctx.fill();
+    ctx.beginPath(); ctx.arc(rp.x,rp.y,13,0,2*Math.PI); ctx.fillStyle='rgba(242,201,76,0.25)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(rp.x,rp.y,6,0,2*Math.PI); ctx.fillStyle='#F2C94C'; ctx.fill();
     ctx.lineWidth=2; ctx.strokeStyle='#241705'; ctx.stroke();
-    ctx.restore();
   }
 }
 
@@ -1062,9 +1153,13 @@ let activities = [];
 let focusedId = null;
 let map, chartEle, chartSpeed, chartHr, chartCad, isoView;
 let playTimer = null;
+let playSpeed = 1;
 let mapStyleKey = 'dark';
 let routeMetric = 'flat';
 let currentView = 'map'; // 'map' | 'iso'
+let fileListExpanded = false;
+let filePage = 0;
+const FILES_PER_PAGE = 10;
 
 const MULTI_PALETTE = ['#4FA6E8','#B478E8','#78E8AE','#E8776B','#8FA396','#E8C24F'];
 
@@ -1078,6 +1173,10 @@ function showError(msg){
   line.textContent = msg;
   errBanner.appendChild(line);
   errBanner.classList.add('show');
+  setTimeout(()=>{
+    line.remove();
+    if (!errBanner.children.length) errBanner.classList.remove('show');
+  }, 6000);
 }
 function clearError(){ errBanner.classList.remove('show'); errBanner.innerHTML=''; }
 
@@ -1133,7 +1232,16 @@ function renderFileList(){
   el('fileList').classList.toggle('show', has);
   if (!has) return;
   el('fileListCount').textContent = activities.length + (activities.length===1?' file':' files');
-  el('fileRows').innerHTML = activities.map(act=>{
+  el('fileListToggleIcon').textContent = fileListExpanded ? '▴' : '▾';
+  el('fileListBody').classList.toggle('expanded', fileListExpanded);
+  if (!fileListExpanded) return;
+
+  const totalPages = Math.max(1, Math.ceil(activities.length/FILES_PER_PAGE));
+  filePage = Math.max(0, Math.min(filePage, totalPages-1));
+  const startI = filePage*FILES_PER_PAGE;
+  const pageItems = activities.slice(startI, startI+FILES_PER_PAGE);
+
+  el('fileRows').innerHTML = pageItems.map(act=>{
     const a = act.data;
     const icon = SPORT_ICON[a.sport] || '\u{1F4CD}';
     const sportName = SPORT_NAMES[a.sport] || 'Activity';
@@ -1151,7 +1259,19 @@ function renderFileList(){
       </div>
     `;
   }).join('');
+
+  const showPagination = activities.length > FILES_PER_PAGE;
+  el('filePagination').style.display = showPagination ? 'flex' : 'none';
+  if (showPagination){
+    el('filePageInfo').textContent = `${startI+1}–${Math.min(startI+FILES_PER_PAGE, activities.length)} of ${activities.length}`;
+    el('filePrevBtn').disabled = filePage===0;
+    el('fileNextBtn').disabled = filePage>=totalPages-1;
+  }
 }
+
+el('fileListToggle').addEventListener('click', ()=>{ fileListExpanded = !fileListExpanded; renderFileList(); });
+el('filePrevBtn').addEventListener('click', ()=>{ filePage--; renderFileList(); });
+el('fileNextBtn').addEventListener('click', ()=>{ filePage++; renderFileList(); });
 
 el('fileRows').addEventListener('click', e=>{
   const row = e.target.closest('.file-row'); if (!row) return;
@@ -1178,6 +1298,7 @@ function buildMapLayers(){
     const isFocused = act.id===focusedId;
     const points = a.lat.map((lat,i)=>({lat, lon:a.lon[i], idx:i}));
     return {
+      id: act.id,
       points,
       color: isFocused ? '#F2C94C' : act.color,
       width: isFocused ? 4 : 2.5,
@@ -1193,13 +1314,24 @@ function renderMap(fit){
   const hasPos = !!(focused && focused.data.hasPos);
   el('mapEmpty').classList.toggle('show', !hasPos);
   if (!hasPos) return;
-  if (!map) map = new SlippyMap(el('mapCanvas'));
+  if (!map){
+    map = new SlippyMap(el('mapCanvas'));
+    // Tapping a route line on the map selects that run, same as tapping its file-list row.
+    map.onSelect = (id) => { focusedId = id; renderAll(); };
+  }
   map.setStyle(mapStyleKey);
   el('mapAttrib').textContent = MAP_STYLES[mapStyleKey].attrib;
   map.resize();
   map.setLayers(buildMapLayers());
   if (fit) map.fitToRoute();
 }
+
+el('mapStyleTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  mapStyleKey = btn.dataset.style;
+  el('mapStyleTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+  renderMap(false);
+});
 
 function updateRouteColorAvailability(a){
   const buttons = el('routeColorTabs').querySelectorAll('button');
@@ -1323,23 +1455,13 @@ function renderAll(){
   window.addEventListener('resize', debouncedResize);
 }
 
-function computeHeading(a, idx){
-  if (!map) return 0;
-  const i0 = Math.max(0, idx-1), i1 = Math.min(a.n-1, idx+1);
-  if (a.lat[i0]===null || a.lat[i1]===null) return 0;
-  const z = map.z;
-  const p0 = {x:lon2x(a.lon[i0],z), y:lat2y(a.lat[i0],z)};
-  const p1 = {x:lon2x(a.lon[i1],z), y:lat2y(a.lat[i1],z)};
-  return Math.atan2(p1.y-p0.y, p1.x-p0.x);
-}
-
 function onChartHover(idx){
   const focused = getFocused();
   if (!focused) return;
   const a = focused.data;
   idx = Math.max(0, Math.min(a.n-1, idx));
   [chartEle,chartSpeed,chartHr,chartCad].forEach(c=>c && c.setActive(idx));
-  if (map && a.hasPos) map.setMarker({lat:a.lat[idx], lon:a.lon[idx], heading:computeHeading(a, idx)});
+  if (map && a.hasPos) map.setMarker({lat:a.lat[idx], lon:a.lon[idx], idx});
   if (isoView) isoView.setIndex(idx);
 
   el('roDist').textContent = fmtDist(a.dist[idx]);
@@ -1381,6 +1503,7 @@ function resetApp(){
   clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶';
   if (isoView) isoView.stop();
   activities = []; focusedId = null;
+  fileListExpanded = false; filePage = 0;
   fileInput.value = '';
   el('dropzone').style.display='';
   el('fileList').classList.remove('show');
@@ -1391,6 +1514,12 @@ function resetApp(){
 el('loadAnotherBtn').addEventListener('click', resetApp);
 el('loadAnotherBtn2').addEventListener('click', resetApp);
 
+el('speedTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  playSpeed = parseFloat(btn.dataset.speed);
+  el('speedTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+});
+
 el('playBtn').addEventListener('click', ()=>{
   if (!getFocused()) return;
   if (playTimer){ clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; return; }
@@ -1400,7 +1529,7 @@ el('playBtn').addEventListener('click', ()=>{
     const focused = getFocused();
     if (!focused){ clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; return; }
     const a = focused.data;
-    idx += Math.max(1, Math.round(a.n/300));
+    idx += Math.max(1, Math.round(a.n/300 * playSpeed));
     if (idx>=a.n){ idx=a.n-1; clearInterval(playTimer); playTimer=null; el('playBtn').textContent='▶'; }
     onChartHover(idx);
   }, 60);
