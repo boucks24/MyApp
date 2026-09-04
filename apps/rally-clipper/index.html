@@ -117,31 +117,96 @@
 
   .clip-filename{font-size:12px; color:var(--muted); margin-top:8px; word-break:break-all;}
 
-  .lib-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(136px,1fr)); gap:10px; margin-top:12px;}
-  .lib-card{
-    background:var(--court-dark); border:1px solid rgba(244,241,232,0.12); border-radius:10px;
-    overflow:hidden; cursor:pointer; touch-action:manipulation;
+  /* ============================================================
+     Fit Analysis + Video/Fit Sync — ported from the standalone Route
+     Mapper app. Re-themed onto this app's court/clay/ball palette rather
+     than its own (--rm-* aliases below map 1:1 onto route-mapper's
+     original --bg/--panel/--accent/etc. roles) and every class is
+     rm-prefixed so nothing collides with Shot Finder's styles above.
+     ============================================================ */
+  :root{
+    --rm-panel:var(--court); --rm-panel2:#2A5546; --rm-line:rgba(244,241,232,0.18);
+    --rm-text:var(--line); --rm-muted:var(--muted); --rm-accent:var(--ball); --rm-accent2:#4FB477;
   }
-  .lib-thumb{width:100%; aspect-ratio:16/9; background:#0E1815 center/cover no-repeat; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:11px;}
-  .lib-info{padding:8px 10px 10px;}
-  .lib-cat{font-size:12px; font-weight:700; color:var(--ball);}
-  .lib-sub{font-size:11.5px; color:var(--muted); margin-top:1px;}
-  .lib-name{font-size:10.5px; color:var(--muted); margin-top:5px; word-break:break-all; line-height:1.4;}
-  .lib-badge{font-size:9.5px; color:var(--muted); border:1px solid rgba(244,241,232,0.2); border-radius:5px; padding:1px 5px; display:inline-block; margin-top:5px;}
-  .lib-delete{
-    width:auto; position:absolute; top:0; right:0; margin:6px; padding:4px 8px; font-size:11px; border-radius:6px;
-    background:rgba(22,33,29,0.75); color:var(--line); border:1px solid rgba(244,241,232,0.25);
-  }
-  .lib-card-wrap{position:relative;}
+  .rm-dual-drop{display:flex; gap:10px; flex-wrap:wrap;}
+  .rm-dual-drop .dropzone{flex:1 1 200px; padding:20px 14px;}
+  .rm-file-tag{font-size:12px; color:var(--rm-accent2); margin-top:8px; word-break:break-all;}
 
-  .player-overlay{
-    position:fixed; inset:0; background:rgba(10,16,14,0.92); z-index:50;
-    display:flex; align-items:center; justify-content:center; padding:20px;
-  }
-  .player-box{background:var(--court); border-radius:14px; padding:16px; width:100%; max-width:480px;}
-  .player-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; font-weight:700;}
-  .player-head #playerCloseBtn{width:auto; padding:6px 12px;}
-  #playerVideo{width:100%; border-radius:10px; background:#000; display:block;}
+  .rm-stats-grid{display:none; grid-template-columns:repeat(3,1fr); gap:8px; margin:14px 0;}
+  .rm-stats-grid.show{display:grid;}
+  .rm-stat-card{background:var(--rm-panel); border:1px solid var(--rm-line); border-radius:10px; padding:10px 10px 9px;}
+  .rm-stat-card .v{font-family:'Archivo Black', sans-serif; font-size:16px; font-weight:700;}
+  .rm-stat-card .v small{font-size:11px; font-weight:600; color:var(--rm-muted);}
+  .rm-stat-card .l{font-size:10px; color:var(--rm-muted); text-transform:uppercase; letter-spacing:.04em; margin-top:2px;}
+
+  .rm-file-list{display:none; background:var(--rm-panel); border:1px solid var(--rm-line); border-radius:12px; padding:10px 10px 6px; margin:12px 0;}
+  .rm-file-list.show{display:block;}
+  .rm-file-list-head{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 2px;}
+  .rm-file-list-toggle{display:flex; align-items:center; gap:6px; background:none; border:none; color:var(--rm-text); width:auto; font-family:'Archivo', sans-serif; cursor:pointer; padding:4px 2px;}
+  .rm-file-list-toggle .t{font-size:11px; font-weight:700; color:var(--rm-muted); text-transform:uppercase; letter-spacing:.04em;}
+  .rm-file-list-toggle .ic{font-size:10px; color:var(--rm-muted);}
+  .rm-file-list-actions{display:flex; gap:6px;}
+  .rm-file-list-actions button{width:auto; background:none; border:none; color:var(--rm-muted); font-size:11px; font-weight:700; cursor:pointer; padding:2px 4px; font-family:'Archivo', sans-serif;}
+  .rm-file-list-actions button:active{color:var(--rm-text);}
+  .rm-file-list-body{display:none; margin-top:6px;}
+  .rm-file-list-body.expanded{display:block;}
+  .rm-file-row{display:flex; align-items:center; gap:9px; padding:7px 4px; border-radius:8px; cursor:pointer; touch-action:manipulation;}
+  .rm-file-row:active, .rm-file-row.focused{background:var(--rm-panel2);}
+  .rm-file-row input[type=checkbox]{width:17px; height:17px; flex:0 0 auto; accent-color:var(--rm-accent);}
+  .rm-file-swatch{width:10px; height:10px; border-radius:50%; flex:0 0 auto;}
+  .rm-file-info{flex:1; min-width:0;}
+  .rm-file-name{font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .rm-file-meta{font-size:10.5px; color:var(--rm-muted); margin-top:1px;}
+  .rm-file-remove{width:auto; background:none; border:none; color:var(--rm-muted); font-size:15px; cursor:pointer; flex:0 0 auto; padding:2px 4px;}
+  .rm-file-remove:active{color:var(--clay);}
+  .rm-file-pagination{display:none; align-items:center; justify-content:center; gap:12px; padding:8px 4px 4px;}
+  .rm-file-pagination button{width:auto; background:none; border:1px solid var(--rm-line); color:var(--rm-text); border-radius:14px; padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer; font-family:'Archivo', sans-serif;}
+  .rm-file-pagination button:disabled{opacity:0.3; cursor:not-allowed;}
+  .rm-file-pagination span{font-size:11px; color:var(--rm-muted);}
+  .rm-file-add-row{padding:6px 4px 2px;}
+
+  .rm-switch-row{display:none; gap:10px; flex-wrap:wrap; margin:10px 0 8px;}
+  .rm-switch-row.show{display:flex;}
+  .rm-seg-switch{display:flex; background:var(--rm-panel); border:1px solid var(--rm-line); border-radius:20px; overflow:hidden; font-size:11.5px; font-weight:700;}
+  .rm-seg-switch button{width:auto; background:none; border:none; color:var(--rm-muted); padding:6px 11px; cursor:pointer; font-family:'Archivo', sans-serif; font-weight:700; white-space:nowrap;}
+  .rm-seg-switch button.active{background:var(--rm-accent); color:var(--ink);}
+  .rm-seg-switch button:disabled{opacity:0.35; cursor:not-allowed;}
+  .rm-seg-switch.compact{font-size:10.5px;}
+  .rm-seg-switch.compact button{padding:5px 8px;}
+
+  .rm-map-wrap, .rm-iso-wrap{display:none; position:relative; border-radius:14px; overflow:hidden; border:1px solid var(--rm-line); margin:6px 0 4px; background:#0A0F0C;}
+  .rm-map-wrap.show, .rm-iso-wrap.show{display:block;}
+  .rm-map-wrap canvas, .rm-iso-wrap canvas{display:block; width:100%; touch-action:none;}
+  .rm-map-controls{position:absolute; top:8px; right:8px; display:flex; flex-direction:column; gap:6px;}
+  .rm-map-controls button{width:32px; height:32px; border-radius:8px; background:rgba(20,28,22,0.85); border:1px solid var(--rm-line); color:var(--rm-text); font-size:16px; cursor:pointer; font-family:'Archivo', sans-serif;}
+  .rm-map-controls button:active{background:var(--rm-panel2);}
+  .rm-map-fit{position:absolute; top:8px; left:8px;}
+  .rm-map-fit button{width:auto; background:rgba(20,28,22,0.85); border:1px solid var(--rm-line); color:var(--rm-text); border-radius:8px; padding:6px 10px; font-size:11px; font-weight:700; cursor:pointer;}
+  .rm-map-attrib{position:absolute; bottom:2px; right:6px; font-size:9.5px; color:rgba(244,241,232,0.55); background:rgba(10,15,12,0.5); padding:1px 5px; border-radius:4px;}
+  .rm-map-empty{display:none; padding:30px 14px; text-align:center; color:var(--rm-muted); font-size:12.5px; background:var(--rm-panel); border:1px solid var(--rm-line); border-radius:14px; margin:6px 0;}
+  .rm-map-empty.show{display:block;}
+  .rm-iso-hint{position:absolute; bottom:8px; left:8px; font-size:10px; color:rgba(244,241,232,0.5); background:rgba(10,15,12,0.5); padding:2px 6px; border-radius:5px;}
+
+  .rm-readout{display:none; justify-content:space-between; gap:6px; margin:10px 0 2px; flex-wrap:wrap; background:var(--rm-panel); border:1px solid var(--rm-line); border-radius:10px; padding:8px 12px;}
+  .rm-readout.show{display:flex;}
+  .rm-readout .ritem{font-size:11.5px; color:var(--rm-muted);}
+  .rm-readout .ritem b{color:var(--rm-text); font-family:'Archivo Black', sans-serif; font-size:13px; font-weight:700; display:block;}
+  .rm-play-btn{width:30px; height:30px; background:var(--rm-accent); border:none; color:var(--ink); border-radius:20px; font-size:13px; cursor:pointer; flex:0 0 auto; padding:0;}
+
+  .rm-chart-block{display:none; margin:14px 0;}
+  .rm-chart-block.show{display:block;}
+  .rm-chart-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;}
+  .rm-chart-head .t{font-size:12px; font-weight:700; color:var(--rm-muted); text-transform:uppercase; letter-spacing:.04em;}
+  .rm-chart-head .v{font-family:'Archivo Black', sans-serif; font-size:13px; font-weight:700;}
+  .rm-chart-block canvas{display:block; width:100%; height:110px; border-radius:8px; background:var(--rm-panel); border:1px solid var(--rm-line); touch-action:none;}
+
+  .rm-wellness-card{display:none;}
+  .rm-wellness-card.show{display:block;}
+  .rm-nudge-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;}
+  .rm-nudge-row button{width:auto; background:var(--rm-panel); border:1px solid var(--rm-line); color:var(--rm-text); border-radius:8px; padding:8px 11px; font-size:12.5px; font-weight:700; font-family:'Archivo', sans-serif; cursor:pointer;}
+  .rm-nudge-row button:active{background:var(--rm-panel2);}
+  .rm-sync-readout{font-size:13px; color:var(--rm-muted); margin-top:10px; line-height:1.5;}
+  .rm-sync-readout b{color:var(--rm-text);}
 </style>
 </head>
 <body>
@@ -150,10 +215,11 @@
   <header>
     <div class="eyebrow">Tennis</div>
     <h1>Tennis Analysis</h1>
-    <div class="sub">Find the rallies in a match video, or build a tagged library of your own serve/forehand/backhand clips.</div>
+    <div class="sub">Find the rallies in a match video, sync a video against your watch's .fit data, or explore a route/wellness file on its own.</div>
     <nav class="tool-tabs">
       <button type="button" class="tool-tab-btn active" data-tool-tab="finder">Shot Finder</button>
-      <button type="button" class="tool-tab-btn" data-tool-tab="library">Shot Library</button>
+      <button type="button" class="tool-tab-btn" data-tool-tab="sync">Video + Fit Sync</button>
+      <button type="button" class="tool-tab-btn" data-tool-tab="fit">Fit Analysis</button>
     </nav>
   </header>
 
@@ -235,56 +301,190 @@
   </div>
   </section>
 
-  <section class="tool-panel" id="panel-library">
+  <section class="tool-panel" id="panel-sync">
     <div class="card">
-      <h2>Add a clip</h2>
-      <div class="note" style="margin:0 0 12px; padding:0; border:none;">Pick a video from your phone or computer and tag it by shot type. On a browser that supports it (desktop Chrome/Edge), the clip stays where it is and this just remembers a reference, re-asking permission to open it when needed. On others (including iOS Safari) there's no way to keep that link, so you'll be asked to re-pick the same file when you want to play it back.</div>
-      <button class="primary" id="addClipBtn">+ Add a clip</button>
-      <input type="file" id="pendingFileInput" accept="video/*" style="display:none;">
-      <div class="status-line" id="libraryStatus"></div>
+      <h2>1. Load video + .fit file</h2>
+      <div class="note" style="margin:0 0 12px; padding:0; border:none;">Lines up your match footage with the HR/pace/elevation your watch recorded, so scrubbing the video shows what your body was doing at that instant. There's no camera/GPS matching involved — sync starts from each file's own timestamp and you fine-tune it by eye below.</div>
+      <div class="rm-dual-drop">
+        <div class="dropzone" id="syncVideoDrop">
+          <div><strong>Tap to choose</strong> a video</div>
+        </div>
+        <div class="dropzone" id="syncFitDrop">
+          <div><strong>Tap to choose</strong> a .fit file</div>
+        </div>
+      </div>
+      <input type="file" id="syncVideoInput" accept="video/*" style="display:none;">
+      <input type="file" id="syncFitInput" accept=".fit,application/octet-stream" style="display:none;">
+      <div id="syncVideoTag" class="rm-file-tag hidden"></div>
+      <div id="syncFitTag" class="rm-file-tag hidden"></div>
+      <div class="status-line" id="syncStatus"></div>
+      <video id="syncVideo" class="hidden" controls playsinline></video>
     </div>
 
-    <div class="card hidden" id="tagFormCard">
-      <h2>Tag this clip</h2>
-      <video id="tagPreviewVideo" controls playsinline muted></video>
-      <div class="clip-filename" id="tagFileName"></div>
-      <div class="field-row" style="margin-top:14px;">
-        <label style="margin-bottom:8px;">Shot type</label>
-        <div class="chip-row" id="categoryChips"></div>
+    <div class="card hidden" id="syncCard">
+      <h2>2. Sync</h2>
+      <div class="rm-sync-readout" id="syncReadout"></div>
+      <div class="rm-nudge-row" id="syncNudgeRow">
+        <button type="button" data-nudge="-5">&minus;5s</button>
+        <button type="button" data-nudge="-1">&minus;1s</button>
+        <button type="button" data-nudge="-0.1">&minus;0.1s</button>
+        <button type="button" data-nudge="0.1">+0.1s</button>
+        <button type="button" data-nudge="1">+1s</button>
+        <button type="button" data-nudge="5">+5s</button>
+        <button type="button" id="syncResetBtn">Reset guess</button>
       </div>
-      <div class="field-row hidden" id="subcategoryRow">
-        <label style="margin-bottom:8px;">Type</label>
-        <div class="chip-row" id="subcategoryChips"></div>
-      </div>
-      <div class="field-row">
-        <label style="margin-bottom:8px;">Note (optional)</label>
-        <input type="text" id="tagNote" placeholder="e.g. down the line, off a short ball" style="width:100%; background:var(--court-dark); border:1px solid rgba(244,241,232,0.15); border-radius:8px; color:var(--line); font-size:15px; padding:10px;">
-      </div>
-      <button class="primary" id="saveClipBtn" disabled>Save to library</button>
-      <button class="secondary" id="cancelTagBtn" style="margin-top:10px;">Cancel</button>
     </div>
 
-    <div class="card">
-      <h2>Library</h2>
-      <div class="chip-row" id="libraryFilterChips"></div>
-      <div class="lib-grid" id="libraryGrid"></div>
-      <div class="status-line" id="libraryEmptyStatus">No clips saved yet — add one above.</div>
+    <div class="card hidden" id="syncStatsCard">
+      <h2>3. Play the video — charts track along</h2>
+      <div class="rm-stats-grid show" id="syncStatsGrid"></div>
+      <div class="rm-chart-block show" id="syncChartHrBlock">
+        <div class="rm-chart-head"><span class="t">Heart rate</span><span class="v" id="syncChartHrV"></span></div>
+        <canvas id="syncChartHr"></canvas>
+      </div>
+      <div class="rm-chart-block show" id="syncChartSpeedBlock">
+        <div class="rm-chart-head"><span class="t" id="syncChartSpeedT">Pace</span><span class="v" id="syncChartSpeedV"></span></div>
+        <canvas id="syncChartSpeed"></canvas>
+      </div>
+      <div class="rm-chart-block show" id="syncChartEleBlock">
+        <div class="rm-chart-head"><span class="t">Elevation</span><span class="v" id="syncChartEleV"></span></div>
+        <canvas id="syncChartEle"></canvas>
+      </div>
+      <div class="note">Click anywhere on a chart to jump the video to that instant, whether it's playing or paused.</div>
     </div>
   </section>
-</div>
 
-<div class="player-overlay hidden" id="playerOverlay">
-  <div class="player-box">
-    <div class="player-head">
-      <div id="playerTitle"></div>
-      <button type="button" class="small secondary" id="playerCloseBtn">✕</button>
+  <section class="tool-panel" id="panel-fit">
+    <div class="card">
+      <h2>Load .fit file(s)</h2>
+      <div class="note" style="margin:0 0 12px; padding:0; border:none;">Recorded activities (a run, ride, or match with GPS on) show up as a route on a map or an isometric ride-along, with elevation/pace/HR charts — pick multiple to compare routes. A daily wellness/health export (no GPS, just background steps/HR/stress) shows a separate summary below instead.</div>
+      <div class="dropzone" id="rmDropzone">
+        <div><strong>Tap to choose</strong> .fit file(s), or drag them here</div>
+      </div>
+      <input type="file" id="rmFileInput" accept=".fit,application/octet-stream" multiple style="display:none;">
+      <div class="status-line" id="rmErrBanner"></div>
     </div>
-    <video id="playerVideo" controls playsinline autoplay></video>
-    <div class="status-line" id="playerStatus"></div>
-    <div class="hidden" id="relinkRow">
-      <button class="primary" id="relinkBtn">Re-select file</button>
+
+    <div class="card rm-wellness-card" id="rmWellnessCard">
+      <h2>Daily wellness — <span id="rmWellnessFileName"></span></h2>
+      <div class="rm-stats-grid show" id="rmWellnessStats"></div>
+      <div class="rm-chart-block show" id="rmWellnessStressBlock">
+        <div class="rm-chart-head"><span class="t">Stress score through the day</span><span class="v" id="rmWellnessStressV"></span></div>
+        <canvas id="rmWellnessStressChart"></canvas>
+      </div>
+      <div class="note">This is a background health export, not a recorded activity — no GPS/route. Resting heart rate is usually just one or two readings a day (shown as a stat above, not a chart); stress is sampled roughly every minute, so it's the one series worth charting. Garmin's other daily-summary fields (steps, floors, detailed calories) aren't reliably documented outside their own SDK, so this stays to the field decoded with real confidence rather than guess at scale factors for the rest.</div>
     </div>
-  </div>
+
+    <div class="rm-file-list" id="rmFileList">
+      <div class="rm-file-list-head">
+        <button class="rm-file-list-toggle" id="rmFileListToggle" type="button">
+          <span class="t" id="rmFileListCount">0 files</span><span class="ic" id="rmFileListToggleIcon">&#9662;</span>
+        </button>
+        <div class="rm-file-list-actions">
+          <button id="rmShowAllBtn" type="button">Show all</button>
+          <button id="rmHideAllBtn" type="button">Hide all</button>
+        </div>
+      </div>
+      <div class="rm-file-list-body" id="rmFileListBody">
+        <div id="rmFileRows"></div>
+        <div class="rm-file-pagination" id="rmFilePagination">
+          <button id="rmFilePrevBtn" type="button">&lsaquo; Prev</button>
+          <span id="rmFilePageInfo"></span>
+          <button id="rmFileNextBtn" type="button">Next &rsaquo;</button>
+        </div>
+        <div class="rm-file-add-row"><button class="pill-btn" id="rmAddMoreBtn" type="button" style="width:100%;">+ Add more files</button></div>
+      </div>
+    </div>
+
+    <div class="card hidden" id="rmActivityBar" style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div style="font-size:24px;" id="rmActivityIcon">&#127939;</div>
+        <div>
+          <h2 style="margin:0;" id="rmActivityTitle">Activity</h2>
+          <div class="status-line" style="margin:0;" id="rmActivityWhen"></div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <div class="rm-seg-switch" id="rmUnitToggle">
+          <button data-unit="metric" class="active" type="button">KM</button>
+          <button data-unit="imperial" type="button">MI</button>
+        </div>
+        <button class="pill-btn" id="rmLoadAnotherBtn" type="button" style="width:auto;">New file</button>
+      </div>
+    </div>
+
+    <div class="rm-stats-grid" id="rmStatsGrid"></div>
+
+    <div class="rm-switch-row" id="rmViewSwitchRow">
+      <div class="rm-seg-switch" id="rmViewTabs">
+        <button data-view="map" class="active" type="button">Map</button>
+        <button data-view="iso" type="button">Ride-along</button>
+      </div>
+      <div class="rm-seg-switch" id="rmMapStyleTabs">
+        <button data-style="dark" class="active" type="button">Dark</button>
+        <button data-style="satellite" type="button">Satellite</button>
+      </div>
+    </div>
+    <div class="rm-switch-row" id="rmRouteColorRow">
+      <div class="rm-seg-switch" id="rmRouteColorTabs">
+        <button data-metric="flat" class="active" type="button">Flat</button>
+        <button data-metric="speed" type="button">Speed</button>
+        <button data-metric="hr" type="button">Heart rate</button>
+        <button data-metric="ele" type="button">Elevation</button>
+      </div>
+    </div>
+
+    <div class="rm-map-wrap" id="rmMapWrap">
+      <canvas id="rmMapCanvas"></canvas>
+      <div class="rm-map-fit"><button id="rmFitBtn" type="button">Fit route</button></div>
+      <div class="rm-map-controls">
+        <button id="rmZoomInBtn" type="button">+</button>
+        <button id="rmZoomOutBtn" type="button">&minus;</button>
+      </div>
+      <div class="rm-map-attrib" id="rmMapAttrib">&copy; OpenStreetMap contributors</div>
+    </div>
+    <div class="rm-iso-wrap" id="rmIsoWrap">
+      <canvas id="rmIsoCanvas"></canvas>
+      <div class="rm-iso-hint">Drag to rotate — follows the focused activity's marker</div>
+    </div>
+    <div class="rm-map-empty" id="rmMapEmpty">No GPS data in this file — showing charts only.</div>
+
+    <div class="rm-readout" id="rmReadout">
+      <button class="rm-play-btn" id="rmPlayBtn" type="button">&#9654;</button>
+      <div class="rm-seg-switch compact" id="rmSpeedTabs">
+        <button data-speed="1" class="active" type="button">1&times;</button>
+        <button data-speed="4" type="button">4&times;</button>
+        <button data-speed="16" type="button">16&times;</button>
+        <button data-speed="32" type="button">32&times;</button>
+      </div>
+      <div class="ritem">Distance<b id="rmRoDist">&mdash;</b></div>
+      <div class="ritem">Time<b id="rmRoTime">&mdash;</b></div>
+      <div class="ritem">Elev<b id="rmRoEle">&mdash;</b></div>
+      <div class="ritem"><span id="rmRoSpeedLabel">Pace</span><b id="rmRoSpeed">&mdash;</b></div>
+      <div class="ritem" id="rmRoHrWrap">HR<b id="rmRoHr">&mdash;</b></div>
+    </div>
+
+    <div class="rm-chart-block" id="rmChartEleBlock">
+      <div class="rm-chart-head"><span class="t">Elevation</span><span class="v" id="rmChartEleV"></span></div>
+      <canvas id="rmChartEle"></canvas>
+    </div>
+    <div class="rm-chart-block" id="rmChartSpeedBlock">
+      <div class="rm-chart-head"><span class="t" id="rmChartSpeedT">Pace</span><span class="v" id="rmChartSpeedV"></span></div>
+      <canvas id="rmChartSpeed"></canvas>
+    </div>
+    <div class="rm-chart-block" id="rmChartHrBlock">
+      <div class="rm-chart-head"><span class="t">Heart rate</span><span class="v" id="rmChartHrV"></span></div>
+      <canvas id="rmChartHr"></canvas>
+    </div>
+    <div class="rm-chart-block" id="rmChartCadBlock">
+      <div class="rm-chart-head"><span class="t">Cadence</span><span class="v" id="rmChartCadV"></span></div>
+      <canvas id="rmChartCad"></canvas>
+    </div>
+
+    <div class="hidden" id="rmFooterActions" style="margin-top:22px; text-align:center;">
+      <button class="pill-btn" id="rmLoadAnotherBtn2" type="button" style="width:auto;">Load another file</button>
+    </div>
+  </section>
 </div>
 
 <script>
@@ -907,373 +1107,1625 @@ document.querySelectorAll('.tool-tab-btn').forEach(btn => {
 });
 
 /* ============================================================
-   SHOT LIBRARY
+   SHARED: FIT binary parsing + activity model + formatting + line chart
    ============================================================
-   Saved clips are references, not copies. Where the File System Access
-   API is available (desktop Chrome/Edge) a picked file's FileSystemFileHandle
-   is stored directly in IndexedDB (structured clone supports this) and
-   re-opened later via handle.requestPermission() — the browser re-prompts
-   for access rather than us re-importing the video. iOS Safari (and any
-   browser without that API) has no way to keep a working link to a file
-   outside the page at all, so those entries store only filename/size/date
-   metadata and the user is asked to re-pick the same file to play it back.
-   Either way, the video's bytes are never duplicated into app storage. */
+   Used by both "Video + Fit Sync" and "Fit Analysis" below — kept at
+   top level (not inside either tool's own IIFE) since these are pure/
+   stateless helpers, ported from the standalone Route Mapper app. The
+   one deliberately shared piece of mutable state is `unit` (km/mi),
+   which both tools intentionally treat as a single app-wide preference. */
+
+const FIT_EPOCH = 631065600; // seconds between 1970-01-01 and the FIT epoch (1989-12-31T00:00:00Z)
+
+const BASE_TYPES = {
+  0x00:{size:1,invalid:0xFF, read:(dv,o)=>dv.getUint8(o)},
+  0x01:{size:1,invalid:0x7F, read:(dv,o)=>dv.getInt8(o)},
+  0x02:{size:1,invalid:0xFF, read:(dv,o)=>dv.getUint8(o)},
+  0x83:{size:2,invalid:0x7FFF, read:(dv,o,le)=>dv.getInt16(o,le)},
+  0x84:{size:2,invalid:0xFFFF, read:(dv,o,le)=>dv.getUint16(o,le)},
+  0x85:{size:4,invalid:0x7FFFFFFF, read:(dv,o,le)=>dv.getInt32(o,le)},
+  0x86:{size:4,invalid:0xFFFFFFFF, read:(dv,o,le)=>dv.getUint32(o,le)},
+  0x07:{size:1,string:true},
+  0x88:{size:4,invalid:null, read:(dv,o,le)=>dv.getFloat32(o,le)},
+  0x89:{size:8,invalid:null, read:(dv,o,le)=>dv.getFloat64(o,le)},
+  0x0A:{size:1,invalid:0x00, read:(dv,o)=>dv.getUint8(o)},
+  0x8B:{size:2,invalid:0x0000, read:(dv,o,le)=>dv.getUint16(o,le)},
+  0x8C:{size:4,invalid:0x00000000, read:(dv,o,le)=>dv.getUint32(o,le)},
+  0x0D:{size:1,invalid:0xFF, read:(dv,o)=>dv.getUint8(o)},
+  0x8E:{size:8,invalid:null, read:(dv,o,le)=>Number(dv.getBigInt64(o,le))},
+  0x8F:{size:8,invalid:null, read:(dv,o,le)=>Number(dv.getBigUint64(o,le))},
+  0x90:{size:8,invalid:null, read:(dv,o,le)=>Number(dv.getBigUint64(o,le))},
+};
+
+const MESG = { FILE_ID:0, RECORD:20, SESSION:18, MONITORING:55, MONITORING_HR:211, STRESS_LEVEL:227 };
+
+function parseFitFile(buf){
+  const dv = new DataView(buf);
+  if (buf.byteLength < 14) throw new Error('File is too small to be a .fit file.');
+  const headerSize = dv.getUint8(0);
+  const magic = String.fromCharCode(dv.getUint8(8),dv.getUint8(9),dv.getUint8(10),dv.getUint8(11));
+  if (magic !== '.FIT') throw new Error('Not a recognised .fit file (missing ".FIT" marker).');
+  const dataSize = dv.getUint32(4, true);
+  let pos = headerSize;
+  const end = Math.min(headerSize + dataSize, buf.byteLength);
+
+  const localDefs = {}; // localType -> {littleEndian, globalNum, fields:[{num,size,base}], devFields:[{num,size}]}
+  let lastTimestamp = 0;
+  const records = [], sessions = [], fileIds = [], monitoring = [], monitoringHr = [], stressLevel = [];
+
+  while (pos < end - 1) {
+    const headerByte = dv.getUint8(pos); pos += 1;
+    const compressed = !!(headerByte & 0x80);
+    let localType, timeOffset = null;
+    if (compressed) {
+      localType = (headerByte >> 5) & 0x03;
+      timeOffset = headerByte & 0x1F;
+    } else {
+      const isDef = !!(headerByte & 0x40);
+      localType = headerByte & 0x0F;
+      if (isDef) {
+        pos += 1; // reserved
+        const arch = dv.getUint8(pos); pos += 1;
+        const le = arch === 0;
+        const globalNum = dv.getUint16(pos, le); pos += 2;
+        const numFields = dv.getUint8(pos); pos += 1;
+        const fields = [];
+        for (let i=0;i<numFields;i++){
+          fields.push({num:dv.getUint8(pos), size:dv.getUint8(pos+1), base:dv.getUint8(pos+2)});
+          pos += 3;
+        }
+        let devFields = [];
+        if (headerByte & 0x20) {
+          const numDev = dv.getUint8(pos); pos += 1;
+          for (let i=0;i<numDev;i++){
+            devFields.push({num:dv.getUint8(pos), size:dv.getUint8(pos+1)});
+            pos += 3;
+          }
+        }
+        localDefs[localType] = {le, globalNum, fields, devFields};
+        continue;
+      }
+    }
+
+    const def = localDefs[localType];
+    if (!def) break; // desynced stream — stop rather than reading garbage
+
+    const msg = {};
+    for (const f of def.fields) {
+      const info = BASE_TYPES[f.base];
+      if (!info) { pos += f.size; continue; }
+      if (info.string) {
+        let s = '';
+        for (let i=0;i<f.size;i++){ const c = dv.getUint8(pos+i); if (c===0) break; s += String.fromCharCode(c); }
+        pos += f.size;
+        msg[f.num] = s;
+        continue;
+      }
+      msg[f.num] = info.read(dv, pos, def.le);
+      pos += f.size;
+    }
+    for (const df of def.devFields) pos += df.size;
+
+    if (compressed) {
+      const base = lastTimestamp - (lastTimestamp % 32);
+      let ts = base + timeOffset;
+      if (ts < lastTimestamp) ts += 32;
+      lastTimestamp = ts;
+      msg[253] = ts;
+    } else if (typeof msg[253] === 'number') {
+      lastTimestamp = msg[253];
+    }
+
+    if (def.globalNum === MESG.RECORD) records.push(msg);
+    else if (def.globalNum === MESG.SESSION) sessions.push(msg);
+    else if (def.globalNum === MESG.FILE_ID) fileIds.push(msg);
+    else if (def.globalNum === MESG.MONITORING) monitoring.push(msg);
+    else if (def.globalNum === MESG.MONITORING_HR) monitoringHr.push(msg);
+    else if (def.globalNum === MESG.STRESS_LEVEL) stressLevel.push(msg);
+  }
+
+  return {records, sessions, fileIds, monitoring, monitoringHr, stressLevel};
+}
+
+/* ---- field helpers ---- */
+
+const SEMI = 180 / 2147483648; // semicircles -> degrees
+
+function v(msg, field, invalid){ const x = msg[field]; return (x === undefined || x === invalid) ? null : x; }
+
+function recordToPoint(r){
+  const rawT = v(r,253,4294967295);
+  if (rawT === null) return null;
+  const latRaw = v(r,0,2147483647), lonRaw = v(r,1,2147483647);
+  const eleEnh = v(r,78,4294967295), eleStd = v(r,2,65535);
+  const spdEnh = v(r,73,4294967295), spdStd = v(r,6,65535);
+  const dist = v(r,5,4294967295);
+  let hr = v(r,3,255); if (hr === 0) hr = null;
+  let cad = v(r,4,255);
+  const power = v(r,7,65535);
+  return {
+    t: (rawT + FIT_EPOCH) * 1000,
+    lat: latRaw===null ? null : latRaw*SEMI,
+    lon: lonRaw===null ? null : lonRaw*SEMI,
+    ele: eleEnh!==null ? (eleEnh/5 - 500) : (eleStd!==null ? (eleStd/5 - 500) : null),
+    speed: spdEnh!==null ? spdEnh/1000 : (spdStd!==null ? spdStd/1000 : null),
+    dist: dist!==null ? dist/100 : null,
+    hr, cad, power,
+  };
+}
+
+const SPORT_NAMES = {0:'Activity',1:'Run',2:'Ride',5:'Swim',6:'Basketball',7:'Soccer',8:'Tennis',9:'Training',
+  10:'Walk',11:'XC Ski',12:'Alpine Ski',13:'Snowboard',14:'Row',15:'Mountaineering',16:'Hike',17:'Multisport',
+  18:'Paddle',19:'Flying',20:'E-Bike',21:'Motorcycling',22:'Boating',23:'Driving',24:'Golf',26:'Horse Riding',
+  29:'Inline Skate',30:'Climb',31:'Sailing',32:'Ice Skate',34:'Snowshoe',36:'SUP',37:'Surf',40:'Kayak',
+  42:'Windsurf',43:'Kitesurf',53:'Dive',62:'HIIT',65:'Racket Sport',76:'Pickleball',84:'Padel'};
+const SPORT_ICON = {1:'\u{1F3C3}',2:'\u{1F6B4}',5:'\u{1F3CA}',10:'\u{1F6B6}',14:'\u{1F6A3}',16:'\u{1F97E}',
+  18:'\u{1F6F6}',30:'\u{1F9D7}',32:'⛸',36:'\u{1F3C4}',40:'\u{1F6F6}',31:'⛵'};
+const PACE_SPORTS = new Set([1,10,16,34]);
+
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371000, toRad=Math.PI/180;
+  const dLat=(lat2-lat1)*toRad, dLon=(lon2-lon1)*toRad;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLon/2)**2;
+  return R * 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function movingAvg(arr, win){
+  const out = new Array(arr.length).fill(null);
+  const half = Math.floor(win/2);
+  for (let i=0;i<arr.length;i++){
+    if (arr[i]===null) continue;
+    let sum=0,n=0;
+    for (let j=Math.max(0,i-half); j<=Math.min(arr.length-1,i+half); j++){
+      if (arr[j]!==null){ sum+=arr[j]; n++; }
+    }
+    out[i] = n ? sum/n : null;
+  }
+  return out;
+}
+
+function fillGaps(arr){
+  const out = arr.slice();
+  let lastVal = null, lastIdx = -1;
+  for (let i=0;i<out.length;i++){
+    if (out[i]!==null){
+      if (lastIdx>=0 && lastIdx<i-1){
+        for (let k=lastIdx+1;k<i;k++){
+          const f = (k-lastIdx)/(i-lastIdx);
+          out[k] = lastVal + (out[i]-lastVal)*f;
+        }
+      }
+      lastVal = out[i]; lastIdx = i;
+    }
+  }
+  for (let i=0;i<out.length;i++) if (out[i]===null && lastVal!==null) out[i]=lastVal;
+  return out;
+}
+
+function buildActivity(parsed){
+  const pts = parsed.records.map(recordToPoint).filter(Boolean).sort((a,b)=>a.t-b.t);
+  if (!pts.length) throw new Error('No timestamped records found in this file.');
+
+  const n = pts.length;
+  const t = pts.map(p=>p.t);
+  const hasPos = pts.some(p=>p.lat!==null && p.lon!==null);
+
+  let dist = new Array(n).fill(null);
+  const deviceDistCount = pts.filter(p=>p.dist!==null).length;
+  if (deviceDistCount > n*0.5) {
+    dist = pts.map(p=>p.dist);
+    dist = fillGaps(dist);
+    if (dist[0]===null) dist[0]=0;
+  } else if (hasPos) {
+    let acc = 0, prev = null;
+    for (let i=0;i<n;i++){
+      const p = pts[i];
+      if (p.lat!==null && p.lon!==null){
+        if (prev) acc += haversine(prev.lat,prev.lon,p.lat,p.lon);
+        prev = p;
+      }
+      dist[i] = acc;
+    }
+  } else {
+    dist.fill(0);
+  }
+
+  const totalDist = dist[n-1] || 0;
+
+  const eleRaw = pts.map(p=>p.ele);
+  const hasEle = eleRaw.some(x=>x!==null);
+  const eleFilled = hasEle ? fillGaps(eleRaw) : null;
+  const eleSmooth = hasEle ? movingAvg(eleFilled, 9) : null;
+
+  let gain=0, loss=0;
+  if (hasEle){
+    let running = 0;
+    for (let i=1;i<n;i++){
+      const d = eleSmooth[i]-eleSmooth[i-1];
+      running += d;
+      if (running >= 1.0){ gain += running; running = 0; }
+      else if (running <= -1.0){ loss += -running; running = 0; }
+    }
+  }
+
+  const speedRaw = pts.map(p=>p.speed);
+  const hasSpeedField = speedRaw.some(x=>x!==null);
+  let speed;
+  if (hasSpeedField) {
+    speed = fillGaps(speedRaw);
+  } else {
+    speed = new Array(n).fill(0);
+    const WIN = 8000;
+    let j = 0;
+    for (let i=0;i<n;i++){
+      while (j<i && t[i]-t[j] > WIN) j++;
+      const dt = (t[i]-t[j])/1000;
+      speed[i] = dt>0 ? (dist[i]-dist[j])/dt : 0;
+    }
+  }
+  const speedSmooth = movingAvg(speed, 5);
+
+  const hrRaw = pts.map(p=>p.hr);
+  const hasHr = hrRaw.some(x=>x!==null);
+  const cadRaw = pts.map(p=>p.cad);
+  const hasCad = cadRaw.some(x=>x!==null && x>0);
+
+  const elapsedS = (t[n-1]-t[0])/1000;
+  const GAP_CAP = 6;
+  let movingS = 0;
+  for (let i=1;i<n;i++) movingS += Math.min((t[i]-t[i-1])/1000, GAP_CAP);
+
+  const avgSpeed = movingS>0 ? totalDist/movingS : 0;
+  let maxSpeed = 0;
+  for (const s of speed) if (s!==null && s>maxSpeed && s<50) maxSpeed = s;
+  let avgHr=null, maxHr=null;
+  if (hasHr){
+    const vals = hrRaw.filter(x=>x!==null);
+    avgHr = vals.reduce((a,b)=>a+b,0)/vals.length;
+    maxHr = Math.max(...vals);
+  }
+  let avgCad=null, maxCad=null;
+  if (hasCad){
+    const vals = cadRaw.filter(x=>x!==null && x>0);
+    if (vals.length){ avgCad = vals.reduce((a,b)=>a+b,0)/vals.length; maxCad = Math.max(...vals); }
+  }
+
+  const sess = parsed.sessions[0] || {};
+  const sportEnum = v(sess,5,255);
+  const startTime = t[0];
+  const sCalories = v(sess,11,65535);
+  const sAscent = v(sess,22,65535), sDescent = v(sess,23,65535);
+  const sAvgHr = v(sess,16,255), sMaxHr = v(sess,17,255);
+  const sAvgCad = v(sess,18,255), sMaxCad = v(sess,19,255);
+
+  return {
+    n, t, dist, totalDist,
+    hasPos, lat: pts.map(p=>p.lat), lon: pts.map(p=>p.lon),
+    hasEle, ele: eleSmooth,
+    speed: speedSmooth,
+    hasHr, hr: hrRaw,
+    hasCad, cad: cadRaw,
+    elapsedS, movingS,
+    avgSpeed, maxSpeed,
+    gain, loss,
+    ascentOverride: sAscent, descentOverride: sDescent,
+    avgHr: sAvgHr!==null?sAvgHr:avgHr, maxHr: sMaxHr!==null?sMaxHr:maxHr,
+    avgCad: sAvgCad!==null?sAvgCad:avgCad, maxCad: sMaxCad!==null?sMaxCad:maxCad,
+    calories: sCalories,
+    sport: sportEnum, startTime,
+  };
+}
+
+// A daily wellness/monitoring export (no GPS route — background health data a
+// watch syncs automatically) carries none of the record/session messages an
+// activity file has, but does carry monitoring/stress_level/monitoring_hr_data.
+// Returns null for anything that isn't recognisably one of these.
+function summarizeWellness(parsed){
+  if (parsed.records.length) return null;
+  if (!parsed.monitoring.length && !parsed.stressLevel.length && !parsed.monitoringHr.length) return null;
+
+  let minT = Infinity, maxT = -Infinity;
+  const noteT = ts => { if (ts==null) return; const ms=(ts+FIT_EPOCH)*1000; if (ms<minT) minT=ms; if (ms>maxT) maxT=ms; };
+  parsed.monitoring.forEach(m=>noteT(v(m,253,4294967295)));
+  parsed.stressLevel.forEach(m=>noteT(v(m,1,4294967295)));
+  parsed.monitoringHr.forEach(m=>noteT(v(m,253,4294967295)));
+  if (!isFinite(minT)) { minT = 0; maxT = 0; }
+
+  // stress_level: field 0 = stress score (0-100; negative sentinel values mean
+  // "resting"/"not measurable" in Garmin's encoding, not a real low score),
+  // field 1 = that reading's own FIT timestamp — sampled roughly once a minute.
+  const stressPts = parsed.stressLevel
+    .map(m=>({ t:v(m,1,4294967295), val:v(m,0,32767) }))
+    .filter(p=>p.t!=null && p.val!=null && p.val>=0)
+    .sort((a,b)=>a.t-b.t);
+  const stressT = stressPts.map(p=>(p.t+FIT_EPOCH)*1000 - minT);
+  const stressV = stressPts.map(p=>p.val);
+  const avgStress = stressV.length ? Math.round(stressV.reduce((a,b)=>a+b,0)/stressV.length) : null;
+  const maxStress = stressV.length ? Math.max(...stressV) : null;
+
+  // monitoring_hr_data is usually just one or two readings a day, not a
+  // series — field 0 = resting_heart_rate, field 1 = current_day_resting_heart_rate.
+  const hrMsg = parsed.monitoringHr[parsed.monitoringHr.length-1] || {};
+  const restingHr = v(hrMsg,0,255);
+  const currentDayRestingHr = v(hrMsg,1,255);
+
+  const fileId = parsed.fileIds[0] || {};
+  const manufacturer = v(fileId,1,65535);
+  const product = v(fileId,2,65535);
+
+  return {
+    dayStart: minT, dayEnd: maxT,
+    stressT, stressV, avgStress, maxStress,
+    restingHr, currentDayRestingHr,
+    manufacturer, product,
+  };
+}
+
+/* ---- formatting ---- */
+
+let unit = 'metric';
+
+function fmtDist(m){
+  if (unit==='metric'){ const km=m/1000; return (km<10?km.toFixed(2):km.toFixed(1))+' km'; }
+  const mi=m/1609.344; return (mi<10?mi.toFixed(2):mi.toFixed(1))+' mi';
+}
+function fmtDur(s){
+  s = Math.round(s);
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sec=s%60;
+  if (h>0) return h+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
+  return m+':'+String(sec).padStart(2,'0');
+}
+function fmtEle(m){ if (m===null) return '—'; return unit==='metric' ? Math.round(m)+' m' : Math.round(m*3.28084)+' ft'; }
+function fmtSpeedOrPace(mps, sportEnum){
+  if (mps===null || mps<=0.05) return '—';
+  if (PACE_SPORTS.has(sportEnum)) {
+    const secPerUnit = unit==='metric' ? 1000/mps : 1609.344/mps;
+    const mm = Math.floor(secPerUnit/60), ss = Math.round(secPerUnit%60);
+    return mm+':'+String(ss).padStart(2,'0')+(unit==='metric'?' /km':' /mi');
+  }
+  const kmh = unit==='metric' ? mps*3.6 : mps*2.23694;
+  return kmh.toFixed(1)+(unit==='metric'?' km/h':' mph');
+}
+function statCard(label, value, sub){
+  return `<div class="rm-stat-card"><div class="v">${value}${sub?` <small>${sub}</small>`:''}</div><div class="l">${label}</div></div>`;
+}
+
+/* ---- line chart (shared by Fit Analysis and Video+Fit Sync) ---- */
+
+class RouteChart {
+  constructor(canvas, opts){
+    this.canvas = canvas; this.ctx = canvas.getContext('2d');
+    this.color = opts.color; this.fill = opts.fill;
+    this.onHover = opts.onHover;
+    this.xs = []; this.ys = []; this.activeIdx = null;
+    this._bindEvents();
+  }
+  resize(){
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio||1, 2);
+    this.canvas.width = Math.round(rect.width*dpr);
+    this.canvas.height = Math.round(rect.height*dpr);
+    this.cssW = rect.width; this.cssH = rect.height;
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.draw();
+  }
+  setData(xs, ys){
+    this.xs = xs; this.ys = ys;
+    const valid = ys.filter(y=>y!==null && !isNaN(y));
+    this.yMin = valid.length ? Math.min(...valid) : 0;
+    this.yMax = valid.length ? Math.max(...valid) : 1;
+    if (this.yMin===this.yMax){ this.yMin -= 1; this.yMax += 1; }
+    this.draw();
+  }
+  setActive(idx){ this.activeIdx = idx; this.draw(); }
+  _px(i){ const xmax = this.xs[this.xs.length-1]||1; return (this.xs[i]/xmax) * (this.cssW-8) + 4; }
+  _py(y){ const pad=8; return this.cssH-pad - (y-this.yMin)/(this.yMax-this.yMin) * (this.cssH-2*pad); }
+  draw(){
+    const ctx=this.ctx, w=this.cssW, h=this.cssH;
+    if (!w||!h) return;
+    ctx.clearRect(0,0,w,h);
+    if (!this.xs.length) return;
+
+    ctx.beginPath();
+    let started=false;
+    for (let i=0;i<this.xs.length;i++){
+      if (this.ys[i]===null || isNaN(this.ys[i])) { started=false; continue; }
+      const x=this._px(i), y=this._py(this.ys[i]);
+      if (!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+    }
+    if (this.fill){
+      ctx.lineTo(this._px(this.xs.length-1), h); ctx.lineTo(this._px(0), h); ctx.closePath();
+      ctx.fillStyle = this.fill; ctx.fill();
+      ctx.beginPath(); started=false;
+      for (let i=0;i<this.xs.length;i++){
+        if (this.ys[i]===null || isNaN(this.ys[i])) { started=false; continue; }
+        const x=this._px(i), y=this._py(this.ys[i]);
+        if (!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y);
+      }
+    }
+    ctx.strokeStyle=this.color; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+
+    if (this.activeIdx!==null && this.ys[this.activeIdx]!==null){
+      const x=this._px(this.activeIdx), y=this._py(this.ys[this.activeIdx]);
+      ctx.strokeStyle='rgba(244,241,232,0.35)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x,y,4,0,2*Math.PI); ctx.fillStyle='#fff'; ctx.fill();
+    }
+  }
+  _idxAt(cssX){
+    if (!this.xs.length) return 0;
+    const xmax = this.xs[this.xs.length-1]||1;
+    const frac = (cssX-4)/(this.cssW-8);
+    const target = Math.max(0,Math.min(xmax, frac*xmax));
+    let lo=0, hi=this.xs.length-1;
+    while (lo<hi){ const mid=(lo+hi)>>1; if (this.xs[mid]<target) lo=mid+1; else hi=mid; }
+    return lo;
+  }
+  _bindEvents(){
+    const c=this.canvas;
+    const handle=(clientX)=>{ const rect=c.getBoundingClientRect(); const idx=this._idxAt(clientX-rect.left); if(this.onHover) this.onHover(idx); };
+    c.addEventListener('pointerdown', e=>{ c.setPointerCapture(e.pointerId); handle(e.clientX); });
+    c.addEventListener('pointermove', e=>{ handle(e.clientX); });
+  }
+}
+
+function findIdxForTime(t, targetT){
+  let lo=0, hi=t.length-1;
+  while (lo<hi){ const mid=(lo+hi)>>1; if (t[mid]<targetT) lo=mid+1; else hi=mid; }
+  return lo;
+}
+
+/* ============================================================
+   VIDEO + FIT SYNC
+   ============================================================
+   Lines up a video's own timeline with a .fit activity's recorded
+   timestamps. There's no reliable way to automatically match camera
+   footage to GPS/motion data client-side, so this starts from each
+   file's own timestamp — the .fit recording's start vs. a guess at when
+   filming started, from the video file's lastModified minus its
+   duration (lastModified is usually close to when recording stopped on
+   a phone) — and lets the user nudge the offset by eye from there. */
 (function(){
   "use strict";
 
-  const SHOT_CATEGORIES = {
-    serve:    { label:'Serve',    subcategories:['Flat','Slice','Kick','Underarm'] },
-    forehand: { label:'Forehand', subcategories:['Topspin','Slice','Flat','Volley','Drop shot','Lob'] },
-    backhand: { label:'Backhand', subcategories:['Topspin','Slice','Flat','Volley','Drop shot','Lob'] },
-    overhead: { label:'Overhead', subcategories:['Flat','Slice'] }
-  };
-  const supportsFileHandle = 'showOpenFilePicker' in window;
+  const videoDrop = document.getElementById('syncVideoDrop');
+  const fitDrop = document.getElementById('syncFitDrop');
+  const videoInput = document.getElementById('syncVideoInput');
+  const fitInput = document.getElementById('syncFitInput');
+  const videoTag = document.getElementById('syncVideoTag');
+  const fitTag = document.getElementById('syncFitTag');
+  const statusEl = document.getElementById('syncStatus');
+  const video = document.getElementById('syncVideo');
+  const syncCard = document.getElementById('syncCard');
+  const syncReadout = document.getElementById('syncReadout');
+  const syncNudgeRow = document.getElementById('syncNudgeRow');
+  const syncResetBtn = document.getElementById('syncResetBtn');
+  const syncStatsCard = document.getElementById('syncStatsCard');
+  const syncStatsGrid = document.getElementById('syncStatsGrid');
 
-  /* ---------------- IndexedDB (video handles/metadata only — no video bytes) ---------------- */
-  const DB_NAME = 'tennis-analysis', DB_VERSION = 1, STORE = 'clips';
-  function openDb(){
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
-      req.onupgradeneeded = () => {
-        if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE, { keyPath:'id' });
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-  async function dbPut(entry){
-    const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).put(entry);
-      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
-    });
-  }
-  async function dbGetAll(){
-    const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(STORE, 'readonly').objectStore(STORE).getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async function dbDelete(id){
-    const db = await openDb();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.objectStore(STORE).delete(id);
-      tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
-    });
-  }
+  videoDrop.addEventListener('click', ()=>videoInput.click());
+  fitDrop.addEventListener('click', ()=>fitInput.click());
 
-  const addClipBtn = document.getElementById('addClipBtn');
-  const pendingFileInput = document.getElementById('pendingFileInput');
-  const libraryStatus = document.getElementById('libraryStatus');
-  const tagFormCard = document.getElementById('tagFormCard');
-  const tagPreviewVideo = document.getElementById('tagPreviewVideo');
-  const tagFileName = document.getElementById('tagFileName');
-  const categoryChips = document.getElementById('categoryChips');
-  const subcategoryRow = document.getElementById('subcategoryRow');
-  const subcategoryChips = document.getElementById('subcategoryChips');
-  const tagNote = document.getElementById('tagNote');
-  const saveClipBtn = document.getElementById('saveClipBtn');
-  const cancelTagBtn = document.getElementById('cancelTagBtn');
-  const libraryFilterChips = document.getElementById('libraryFilterChips');
-  const libraryGrid = document.getElementById('libraryGrid');
-  const libraryEmptyStatus = document.getElementById('libraryEmptyStatus');
-  const playerOverlay = document.getElementById('playerOverlay');
-  const playerTitle = document.getElementById('playerTitle');
-  const playerVideo = document.getElementById('playerVideo');
-  const playerStatus = document.getElementById('playerStatus');
-  const playerCloseBtn = document.getElementById('playerCloseBtn');
-  const relinkRow = document.getElementById('relinkRow');
-  const relinkBtn = document.getElementById('relinkBtn');
+  let videoFile = null, videoDuration = 0;
+  let activity = null;
+  let offsetMs = null;      // epoch ms corresponding to video currentTime === 0
+  let guessOffsetMs = null;
+  let chartHr, chartSpeed, chartEle;
 
-  let library = [];
-  let libraryFilter = 'all';
-  let pendingFile = null, pendingHandle = null, pendingCategory = null, pendingSubcategory = null;
-  let playerObjectUrl = null;
-  let relinkTarget = null;
-
-  function fmtDate(ts){
-    const d = new Date(ts);
-    return d.toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' });
-  }
-
-  /* ---------------- add + tag flow ---------------- */
-  addClipBtn.addEventListener('click', async () => {
-    if (supportsFileHandle){
-      try {
-        const [handle] = await window.showOpenFilePicker({
-          types: [{ description:'Video', accept:{ 'video/*':['.mp4','.mov','.m4v','.webm'] } }]
-        });
-        const file = await handle.getFile();
-        openTagForm(file, handle);
-        return;
-      } catch(e){
-        if (e.name === 'AbortError') return;
-        // fall through to the plain input on anything unexpected
-      }
-    }
-    pendingFileInput.click();
-  });
-  pendingFileInput.addEventListener('change', () => {
-    if (pendingFileInput.files[0]) openTagForm(pendingFileInput.files[0], null);
-    pendingFileInput.value = '';
-  });
-
-  function openTagForm(file, handle){
-    pendingFile = file; pendingHandle = handle;
-    pendingCategory = null; pendingSubcategory = null;
-    tagPreviewVideo.src = URL.createObjectURL(file);
-    tagFileName.textContent = file.name;
-    tagNote.value = '';
-    renderCategoryChips();
-    subcategoryRow.classList.add('hidden');
-    subcategoryChips.innerHTML = '';
-    saveClipBtn.disabled = true;
-    tagFormCard.classList.remove('hidden');
-    libraryStatus.textContent = '';
-    tagFormCard.scrollIntoView({ behavior:'smooth', block:'start' });
-  }
-
-  function closeTagForm(){
-    tagFormCard.classList.add('hidden');
-    if (tagPreviewVideo.src) URL.revokeObjectURL(tagPreviewVideo.src);
-    tagPreviewVideo.removeAttribute('src');
-    pendingFile = null; pendingHandle = null;
-  }
-  cancelTagBtn.addEventListener('click', closeTagForm);
-
-  function renderCategoryChips(){
-    categoryChips.innerHTML = '';
-    Object.keys(SHOT_CATEGORIES).forEach(key => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'chip-btn' + (pendingCategory === key ? ' active' : '');
-      btn.textContent = SHOT_CATEGORIES[key].label;
-      btn.addEventListener('click', () => {
-        pendingCategory = key; pendingSubcategory = null;
-        renderCategoryChips(); renderSubcategoryChips();
-        saveClipBtn.disabled = true;
-      });
-      categoryChips.appendChild(btn);
-    });
-  }
-
-  function renderSubcategoryChips(){
-    subcategoryChips.innerHTML = '';
-    if (!pendingCategory){ subcategoryRow.classList.add('hidden'); return; }
-    subcategoryRow.classList.remove('hidden');
-    SHOT_CATEGORIES[pendingCategory].subcategories.forEach(sub => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'chip-btn' + (pendingSubcategory === sub ? ' active' : '');
-      btn.textContent = sub;
-      btn.addEventListener('click', () => {
-        pendingSubcategory = sub;
-        renderSubcategoryChips();
-        saveClipBtn.disabled = false;
-      });
-      subcategoryChips.appendChild(btn);
-    });
-  }
-
-  function captureThumbnail(video){
-    return new Promise(resolve => {
-      const w = 160;
-      let settled = false;
-      const done = (val) => { if (settled) return; settled = true; resolve(val); };
-      const grab = () => {
-        try {
-          const h = Math.max(1, Math.round(w * ((video.videoHeight / video.videoWidth) || 0.5625)));
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(video, 0, 0, w, h);
-          done(canvas.toDataURL('image/jpeg', 0.6));
-        } catch(e){ done(null); }
-      };
-      if (video.readyState >= 2) grab();
-      else {
-        // A file that fails to decode (unsupported codec, or just not a real
-        // video) never fires loadeddata — fall back to no thumbnail rather
-        // than hanging the save indefinitely.
-        video.addEventListener('loadeddata', grab, { once:true });
-        video.addEventListener('error', () => done(null), { once:true });
-        setTimeout(() => done(null), 2000);
-      }
-    });
-  }
-
-  saveClipBtn.addEventListener('click', async () => {
-    if (!pendingFile || !pendingCategory || !pendingSubcategory) return;
-    saveClipBtn.disabled = true;
-    saveClipBtn.textContent = 'Saving…';
-    const thumbnail = await captureThumbnail(tagPreviewVideo);
-    const entry = {
-      id: 'clip_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
-      category: pendingCategory,
-      subcategory: pendingSubcategory,
-      note: tagNote.value.trim(),
-      addedAt: Date.now(),
-      fileName: pendingFile.name,
-      fileSize: pendingFile.size,
-      fileLastModified: pendingFile.lastModified,
-      thumbnail,
-      kind: pendingHandle ? 'handle' : 'meta'
-    };
-    if (pendingHandle) entry.handle = pendingHandle;
-    try {
-      await dbPut(entry);
-      library.unshift(entry);
-      renderLibrary();
-      libraryStatus.textContent = 'Saved to library.';
-      closeTagForm();
-    } catch(e){
-      console.error(e);
-      libraryStatus.textContent = 'Could not save that clip — try again.';
-    }
-    saveClipBtn.disabled = false;
-    saveClipBtn.textContent = 'Save to library';
-  });
-
-  /* ---------------- library rendering ---------------- */
-  function renderFilterChips(){
-    libraryFilterChips.innerHTML = '';
-    const opts = [['all', 'All']].concat(Object.keys(SHOT_CATEGORIES).map(k => [k, SHOT_CATEGORIES[k].label]));
-    opts.forEach(([key, label]) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'chip-btn' + (libraryFilter === key ? ' active' : '');
-      btn.textContent = label;
-      btn.addEventListener('click', () => { libraryFilter = key; renderLibrary(); });
-      libraryFilterChips.appendChild(btn);
-    });
-  }
-
-  function renderLibrary(){
-    renderFilterChips();
-    const shown = libraryFilter === 'all' ? library : library.filter(c => c.category === libraryFilter);
-    libraryGrid.innerHTML = '';
-    libraryEmptyStatus.classList.toggle('hidden', library.length > 0);
-    shown.slice().sort((a,b) => b.addedAt - a.addedAt).forEach(entry => {
-      const wrap = document.createElement('div');
-      wrap.className = 'lib-card-wrap';
-      const card = document.createElement('div');
-      card.className = 'lib-card';
-      const catLabel = SHOT_CATEGORIES[entry.category] ? SHOT_CATEGORIES[entry.category].label : entry.category;
-      card.innerHTML = `
-        <div class="lib-thumb" style="${entry.thumbnail ? `background-image:url('${entry.thumbnail}')` : ''}">${entry.thumbnail ? '' : '▶'}</div>
-        <div class="lib-info">
-          <div class="lib-cat">${catLabel}</div>
-          <div class="lib-sub">${entry.subcategory}</div>
-          <div class="lib-name">${entry.fileName}</div>
-          <div class="lib-badge">${entry.kind === 'handle' ? 'Linked' : fmtDate(entry.addedAt)}</div>
-        </div>
-      `;
-      card.addEventListener('click', () => playEntry(entry));
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'lib-delete';
-      del.textContent = '✕';
-      del.title = 'Remove from library';
-      del.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await dbDelete(entry.id);
-        library = library.filter(c => c.id !== entry.id);
-        renderLibrary();
-      });
-      wrap.appendChild(card);
-      wrap.appendChild(del);
-      libraryGrid.appendChild(wrap);
-    });
-  }
-
-  /* ---------------- playback + relink ---------------- */
-  function showPlayer(file, entry, warning){
-    if (playerObjectUrl) URL.revokeObjectURL(playerObjectUrl);
-    playerObjectUrl = URL.createObjectURL(file);
-    playerVideo.src = playerObjectUrl;
-    const catLabel = SHOT_CATEGORIES[entry.category] ? SHOT_CATEGORIES[entry.category].label : entry.category;
-    playerTitle.textContent = `${catLabel} — ${entry.subcategory}`;
-    playerStatus.textContent = warning || '';
-    relinkRow.classList.add('hidden');
-    relinkTarget = null;
-    playerOverlay.classList.remove('hidden');
-  }
-
-  function showRelinkPrompt(entry, message){
-    if (playerObjectUrl){ URL.revokeObjectURL(playerObjectUrl); playerObjectUrl = null; }
-    playerVideo.removeAttribute('src');
-    const catLabel = SHOT_CATEGORIES[entry.category] ? SHOT_CATEGORIES[entry.category].label : entry.category;
-    playerTitle.textContent = `${catLabel} — ${entry.subcategory}`;
-    playerStatus.textContent = message;
-    relinkTarget = entry;
-    relinkRow.classList.remove('hidden');
-    playerOverlay.classList.remove('hidden');
-  }
-
-  async function playEntry(entry){
-    if (entry.kind === 'handle' && entry.handle){
-      try {
-        let perm = await entry.handle.queryPermission({ mode:'read' });
-        if (perm !== 'granted') perm = await entry.handle.requestPermission({ mode:'read' });
-        if (perm !== 'granted') throw new Error('permission not granted');
-        const file = await entry.handle.getFile();
-        showPlayer(file, entry);
-        return;
-      } catch(e){
-        console.error(e);
-        showRelinkPrompt(entry, "Couldn't open the saved file — it may have moved or access was denied. Re-select it below.");
-        return;
-      }
-    }
-    showRelinkPrompt(entry, `This browser can't keep a link to your files — re-select "${entry.fileName}" to play it.`);
-  }
-
-  function pickViaInput(){
-    return new Promise(resolve => {
-      const input = document.createElement('input');
-      input.type = 'file'; input.accept = 'video/*';
-      input.addEventListener('change', () => resolve(input.files[0] || null), { once:true });
-      input.click();
-    });
-  }
-
-  relinkBtn.addEventListener('click', async () => {
-    const entry = relinkTarget;
-    if (!entry) return;
-    let file = null, handle = null;
-    if (supportsFileHandle){
-      try {
-        const [h] = await window.showOpenFilePicker({
-          types: [{ description:'Video', accept:{ 'video/*':['.mp4','.mov','.m4v','.webm'] } }]
-        });
-        handle = h; file = await handle.getFile();
-      } catch(e){ if (e.name === 'AbortError') return; }
-    }
-    if (!file) file = await pickViaInput();
+  videoInput.addEventListener('change', ()=>{
+    const file = videoInput.files[0];
     if (!file) return;
-    const looksSame = file.name === entry.fileName && file.size === entry.fileSize;
-    entry.fileName = file.name; entry.fileSize = file.size; entry.fileLastModified = file.lastModified;
-    if (handle){ entry.handle = handle; entry.kind = 'handle'; }
-    try { await dbPut(entry); } catch(e){ console.error(e); }
-    renderLibrary();
-    showPlayer(file, entry, looksSame ? null : "Heads up — that file's name/size doesn't match what was saved.");
+    videoFile = file;
+    video.src = URL.createObjectURL(file);
+    video.classList.remove('hidden');
+    videoTag.textContent = file.name;
+    videoTag.classList.remove('hidden');
+    video.onloadedmetadata = () => { videoDuration = video.duration; tryReadyToSync(); };
   });
 
-  playerCloseBtn.addEventListener('click', () => {
-    playerOverlay.classList.add('hidden');
-    playerVideo.pause();
-    playerVideo.removeAttribute('src');
-    if (playerObjectUrl){ URL.revokeObjectURL(playerObjectUrl); playerObjectUrl = null; }
+  fitInput.addEventListener('change', ()=>{
+    const file = fitInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = parseFitFile(reader.result);
+        if (!parsed.records.length){
+          const wellness = summarizeWellness(parsed);
+          statusEl.textContent = wellness
+            ? `"${file.name}" looks like a daily wellness export, not a recorded activity — pick a workout .fit file instead (the Fit Analysis tab can show wellness files on their own).`
+            : `Couldn't find any recorded activity data in "${file.name}".`;
+          return;
+        }
+        activity = buildActivity(parsed);
+        fitTag.textContent = file.name;
+        fitTag.classList.remove('hidden');
+        statusEl.textContent = '';
+        tryReadyToSync();
+      } catch(err){
+        console.error(err);
+        statusEl.textContent = `Couldn't read "${file.name}": ` + err.message;
+      }
+    };
+    reader.onerror = () => { statusEl.textContent = `Couldn't read "${file.name}" from disk.`; };
+    reader.readAsArrayBuffer(file);
   });
 
-  /* ---------------- init ---------------- */
-  (async function init(){
-    try { library = await dbGetAll(); } catch(e){ console.error(e); library = []; }
-    renderLibrary();
-  })();
+  function tryReadyToSync(){
+    if (!videoFile || !videoDuration || !activity) return;
+    guessOffsetMs = videoFile.lastModified - videoDuration*1000;
+    offsetMs = guessOffsetMs;
+    syncCard.classList.remove('hidden');
+    syncStatsCard.classList.remove('hidden');
+    if (!chartHr) setupCharts();
+    updateSyncReadout();
+    video.removeEventListener('timeupdate', onVideoTime);
+    video.addEventListener('timeupdate', onVideoTime);
+    onVideoTime();
+  }
+
+  function setupCharts(){
+    chartHr = new RouteChart(document.getElementById('syncChartHr'), {color:'#D9614F', fill:'rgba(217,97,79,0.12)', onHover:seekVideoToIdx});
+    chartSpeed = new RouteChart(document.getElementById('syncChartSpeed'), {color:'#4FB477', fill:'rgba(79,180,119,0.12)', onHover:seekVideoToIdx});
+    chartEle = new RouteChart(document.getElementById('syncChartEle'), {color:'#E8A33D', fill:'rgba(232,163,61,0.12)', onHover:seekVideoToIdx});
+    chartHr.resize(); chartSpeed.resize(); chartEle.resize();
+    document.getElementById('syncChartHrBlock').classList.toggle('hidden', !activity.hasHr);
+    document.getElementById('syncChartEleBlock').classList.toggle('hidden', !activity.hasEle);
+    const paceMode = PACE_SPORTS.has(activity.sport);
+    document.getElementById('syncChartSpeedT').textContent = paceMode ? 'Pace' : 'Speed';
+    // Time-based x-axis, not distance: syncing footage to data is inherently
+    // about matching wall-clock moments, and for tennis specifically a rally
+    // covers almost no ground — a distance axis would bunch the whole match
+    // into a sliver of the chart (this is also why Fit Analysis's own charts,
+    // which are about a *route*, deliberately keep distance as their x-axis).
+    const elapsedS = activity.t.map(t => (t - activity.t[0]) / 1000);
+    chartHr.setData(elapsedS, activity.hr);
+    chartSpeed.setData(elapsedS, activity.speed);
+    if (activity.hasEle) chartEle.setData(elapsedS, activity.ele);
+
+    let cards = '';
+    cards += statCard('Distance', fmtDist(activity.totalDist));
+    cards += statCard('Duration', fmtDur(activity.elapsedS));
+    if (activity.hasHr) cards += statCard('Avg HR', Math.round(activity.avgHr), 'bpm');
+    syncStatsGrid.innerHTML = cards;
+  }
+
+  function updateSyncReadout(){
+    const videoStart = new Date(offsetMs);
+    const activityStart = new Date(activity.t[0]);
+    const deltaS = Math.round((offsetMs - activity.t[0]) / 1000);
+    syncReadout.innerHTML = `Video 0:00 &asymp; <b>${videoStart.toLocaleTimeString()}</b> &middot; Fit recording started <b>${activityStart.toLocaleTimeString()}</b> &middot; offset from recording start: <b>${deltaS>=0?'+':''}${deltaS}s</b>`;
+  }
+
+  syncNudgeRow.addEventListener('click', e=>{
+    const btn = e.target.closest('button[data-nudge]'); if (!btn) return;
+    offsetMs += parseFloat(btn.dataset.nudge)*1000;
+    updateSyncReadout();
+    onVideoTime();
+  });
+  syncResetBtn.addEventListener('click', ()=>{
+    offsetMs = guessOffsetMs;
+    updateSyncReadout();
+    onVideoTime();
+  });
+
+  function onVideoTime(){
+    if (!activity || offsetMs==null) return;
+    const activityMs = offsetMs + video.currentTime*1000;
+    const idx = Math.max(0, Math.min(activity.n-1, findIdxForTime(activity.t, activityMs)));
+    chartHr.setActive(idx); chartSpeed.setActive(idx); if (activity.hasEle) chartEle.setActive(idx);
+    document.getElementById('syncChartHrV').textContent = (activity.hasHr && activity.hr[idx]!=null) ? Math.round(activity.hr[idx])+' bpm' : '';
+    document.getElementById('syncChartSpeedV').textContent = fmtSpeedOrPace(activity.speed[idx], activity.sport);
+    document.getElementById('syncChartEleV').textContent = activity.hasEle ? fmtEle(activity.ele[idx]) : '';
+  }
+
+  // Clicking a chart seeks the VIDEO — the video element is already the
+  // single source of truth for "current time" here (no separate play loop
+  // to fight it, unlike Fit Analysis's standalone ride-along), so a click
+  // "during playback" just works: currentTime updates immediately either way.
+  function seekVideoToIdx(idx){
+    if (!activity || offsetMs==null) return;
+    idx = Math.max(0, Math.min(activity.n-1, idx));
+    const targetVideoT = (activity.t[idx] - offsetMs) / 1000;
+    video.currentTime = Math.max(0, Math.min(videoDuration, targetVideoT));
+  }
 })();
+
+/* ============================================================
+   FIT ANALYSIS — ported from the standalone Route Mapper app
+   ============================================================
+   Handles two kinds of .fit file: a recorded activity (shows a route on
+   a map or isometric ride-along, with elevation/pace/HR charts — this
+   part is an unmodified port) and a daily wellness/monitoring export
+   (no GPS, shown as a separate summary card instead — "another area"
+   of this same tool, not mixed into the multi-activity map/compare view
+   since a wellness file has no route to compare against one). */
+(function(){
+'use strict';
+
+/* ============================== slippy map ============================== */
+
+const TILE=256, MIN_Z=2, MAX_Z=21;
+// The basemaps' own tile servers don't have imagery at the very top zoom levels —
+// for the last couple of levels, fall back to the nearest zoomed-out tile that IS
+// loaded (cropped + scaled up) instead of leaving a blank placeholder rect.
+const OVERZOOM_LEVELS = 2;
+function lon2x(lon,z){ return (lon+180)/360 * Math.pow(2,z) * TILE; }
+function lat2y(lat,z){
+  const r = lat*Math.PI/180;
+  return (1 - Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2 * Math.pow(2,z) * TILE;
+}
+function x2lon(x,z){ return x/(Math.pow(2,z)*TILE)*360 - 180; }
+function y2lat(y,z){ const n = Math.PI - 2*Math.PI*y/(Math.pow(2,z)*TILE); return 180/Math.PI*Math.atan(Math.sinh(n)); }
+
+// Keyless raster tile sources only (no API key / signup), matching this app's
+// existing "no server, no accounts" constraint. Both are served straight off
+// Esri's public ArcGIS Online tile endpoints (note their tile scheme is
+// {z}/{y}/{x}, row before column) — "Satellite" is aerial/satellite imagery
+// for a Google-Earth-style detailed look, "Dark" the minimal grey/black map.
+const MAP_STYLES = {
+  dark: { label:'Dark', bg:'#0B0D10', attrib:'© Esri, HERE, Garmin, © OpenStreetMap contributors',
+          url:(z,x,y)=>`https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}` },
+  satellite: { label:'Satellite', bg:'#0B0D10', attrib:'© Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+          url:(z,x,y)=>`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}` },
+};
+
+// Classic thermal gradient (blue -> green -> yellow -> red) for route-by-metric colouring.
+function heatColor(t){
+  t = Math.max(0, Math.min(1, t));
+  const stops = [[0,[59,130,246]],[0.35,[16,185,129]],[0.65,[234,179,8]],[1,[220,38,38]]];
+  for (let i=0;i<stops.length-1;i++){
+    const [t0,c0]=stops[i], [t1,c1]=stops[i+1];
+    if (t<=t1){
+      const f=(t-t0)/(t1-t0||1);
+      return `rgb(${Math.round(c0[0]+(c1[0]-c0[0])*f)},${Math.round(c0[1]+(c1[1]-c0[1])*f)},${Math.round(c0[2]+(c1[2]-c0[2])*f)})`;
+    }
+  }
+  return 'rgb(220,38,38)';
+}
+function computeMetricColors(a, metric){
+  const values = metric==='speed' ? a.speed : metric==='hr' ? a.hr : metric==='ele' ? a.ele : null;
+  if (!values) return null;
+  const valid = values.filter(v=>v!==null && !isNaN(v));
+  if (!valid.length) return null;
+  const min = Math.min(...valid), max = Math.max(...valid), range = (max-min)||1;
+  return values.map(v => (v===null||isNaN(v)) ? null : heatColor((v-min)/range));
+}
+
+function pointToSegmentDist(px,py,x1,y1,x2,y2){
+  const dx=x2-x1, dy=y2-y1;
+  const lenSq = dx*dx+dy*dy;
+  let t = lenSq>0 ? ((px-x1)*dx+(py-y1)*dy)/lenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px-(x1+t*dx), py-(y1+t*dy));
+}
+
+class SlippyMap {
+  constructor(canvas){
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.z = 13; this.lon = 0; this.lat = 0;
+    this.styleKey = 'dark';
+    this.tileCache = new Map();
+    this.layers = []; // [{id, points:[{lat,lon,idx}], color, width, segmentColors, showEndpoints, opacity}]
+    this.marker = null;
+    this.onSelect = null; // (activityId) => void, called when a route line is tapped
+    this._bindEvents();
+    this._raf = null;
+  }
+  resize(){
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio||1, 2);
+    this.canvas.width = Math.round(rect.width*dpr);
+    this.canvas.height = Math.round(rect.height*dpr);
+    this.cssW = rect.width; this.cssH = rect.height;
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.scheduleDraw();
+  }
+  setStyle(key){
+    if (this.styleKey===key) return;
+    this.styleKey = key; this.tileCache.clear(); this.scheduleDraw();
+  }
+  setLayers(layers){ this.layers = layers||[]; this.scheduleDraw(); }
+  setMarker(pt){ this.marker = pt; this.scheduleDraw(); }
+  fitToRoute(padding){
+    padding = padding===undefined?36:padding;
+    const valid = [];
+    this.layers.forEach(l=>l.points.forEach(p=>{ if (p.lat!==null) valid.push(p); }));
+    if (!valid.length) return;
+    let minLat=90,maxLat=-90,minLon=180,maxLon=-180;
+    for (const p of valid){ if(p.lat<minLat)minLat=p.lat; if(p.lat>maxLat)maxLat=p.lat; if(p.lon<minLon)minLon=p.lon; if(p.lon>maxLon)maxLon=p.lon; }
+    if (minLat===maxLat && minLon===maxLon){ this.lat=minLat; this.lon=minLon; this.z=15; this.scheduleDraw(); return; }
+    let z = MAX_Z;
+    for (; z>=MIN_Z; z--){
+      const pw = lon2x(maxLon,z)-lon2x(minLon,z);
+      const ph = lat2y(minLat,z)-lat2y(maxLat,z);
+      if (pw <= this.cssW-2*padding && ph <= this.cssH-2*padding) break;
+    }
+    this.z = Math.max(MIN_Z, z);
+    const cy = (lat2y(minLat,this.z)+lat2y(maxLat,this.z))/2;
+    const cx = (lon2x(minLon,this.z)+lon2x(maxLon,this.z))/2;
+    this.lat = y2lat(cy, this.z);
+    this.lon = x2lon(cx, this.z);
+    this.scheduleDraw();
+  }
+  scheduleDraw(){
+    if (this._raf) return;
+    this._raf = requestAnimationFrame(()=>{ this._raf=null; this.draw(); });
+  }
+  _tileImg(z,x,y){
+    const nx = ((x % (1<<z)) + (1<<z)) % (1<<z);
+    if (y<0 || y>=(1<<z)) return null;
+    const key = this.styleKey+'/'+z+'/'+nx+'/'+y;
+    let entry = this.tileCache.get(key);
+    if (!entry){
+      const img = new Image();
+      entry = {img, loaded:false};
+      img.onload = ()=>{ entry.loaded=true; this.scheduleDraw(); };
+      img.src = MAP_STYLES[this.styleKey].url(z, nx, y);
+      this.tileCache.set(key, entry);
+    }
+    return entry;
+  }
+  // Walk up to `maxSteps` parent zoom levels looking for an already-loaded tile,
+  // returning the sub-rectangle of it that covers (z,x,y) so it can be scaled up
+  // to fill the target tile instead of showing nothing.
+  _ancestorTile(z, x, y, maxSteps){
+    for (let step=1; step<=maxSteps; step++){
+      const az = z - step;
+      if (az < MIN_Z) break;
+      const scale = 1<<step;
+      const ax = Math.floor(x/scale), ay = Math.floor(y/scale);
+      const entry = this._tileImg(az, ax, ay);
+      if (entry && entry.loaded){
+        const sSize = TILE/scale;
+        const sx = (x - ax*scale) * sSize, sy = (y - ay*scale) * sSize;
+        return {img: entry.img, sx, sy, sw:sSize, sh:sSize};
+      }
+    }
+    return null;
+  }
+  draw(){
+    const ctx = this.ctx, w=this.cssW, h=this.cssH;
+    if (!w || !h) return;
+    const style = MAP_STYLES[this.styleKey] || MAP_STYLES.dark;
+    ctx.fillStyle = style.bg; ctx.fillRect(0,0,w,h);
+    const z = this.z;
+    const cx = lon2x(this.lon,z), cy = lat2y(this.lat,z);
+    const originX = cx - w/2, originY = cy - h/2;
+    const x0 = Math.floor(originX/TILE)-1, x1 = Math.floor((originX+w)/TILE)+1;
+    const y0 = Math.floor(originY/TILE)-1, y1 = Math.floor((originY+h)/TILE)+1;
+    for (let ty=y0; ty<=y1; ty++){
+      for (let tx=x0; tx<=x1; tx++){
+        const entry = this._tileImg(z,tx,ty);
+        const px = tx*TILE - originX, py = ty*TILE - originY;
+        if (entry && entry.loaded){
+          ctx.drawImage(entry.img, px, py, TILE, TILE);
+        } else if (z > MAX_Z - OVERZOOM_LEVELS){
+          const fb = this._ancestorTile(z, tx, ty, OVERZOOM_LEVELS);
+          if (fb) ctx.drawImage(fb.img, fb.sx, fb.sy, fb.sw, fb.sh, px, py, TILE, TILE);
+          else { ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(px,py,TILE,TILE); }
+        } else {
+          ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.fillRect(px,py,TILE,TILE);
+        }
+      }
+    }
+    // dim the basemap slightly so route lines always read clearly on top of it
+    ctx.fillStyle='rgba(0,0,0,0.18)'; ctx.fillRect(0,0,w,h);
+
+    const proj = (p)=>({x: lon2x(p.lon,z)-originX, y: lat2y(p.lat,z)-originY});
+
+    this.layers.forEach(layer=>{
+      const valid = layer.points.filter(p=>p.lat!==null);
+      if (valid.length<2) return;
+      ctx.save();
+      ctx.globalAlpha = layer.opacity==null ? 1 : layer.opacity;
+      ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=layer.width+3;
+      this._strokePath(ctx, valid, proj);
+      if (layer.segmentColors){
+        for (let i=0;i<valid.length-1;i++){
+          const c1=proj(valid[i]), c2=proj(valid[i+1]);
+          ctx.strokeStyle = layer.segmentColors[valid[i].idx] || layer.color;
+          ctx.lineWidth = layer.width;
+          ctx.beginPath(); ctx.moveTo(c1.x,c1.y); ctx.lineTo(c2.x,c2.y); ctx.stroke();
+        }
+      } else {
+        ctx.strokeStyle = layer.color; ctx.lineWidth = layer.width;
+        this._strokePath(ctx, valid, proj);
+      }
+      if (layer.showEndpoints){
+        const s = proj(valid[0]), e = proj(valid[valid.length-1]);
+        this._dot(ctx, s, '#4FB477');
+        this._dot(ctx, e, '#D9614F');
+      }
+      ctx.restore();
+    });
+
+    if (this.marker && this.marker.lat!==null){
+      // Glow the last stretch of the focused layer's line leading up to the
+      // marker, rather than a directional arrow, to show where it's tracking.
+      const focusedLayer = this.layers.find(l=>l.showEndpoints);
+      if (focusedLayer && typeof this.marker.idx === 'number'){
+        const glowSpan = 14;
+        const seg = focusedLayer.points
+          .slice(Math.max(0, this.marker.idx-glowSpan), this.marker.idx+1)
+          .filter(pt=>pt.lat!==null);
+        if (seg.length>1){
+          ctx.save();
+          ctx.shadowColor = 'rgba(242,201,76,0.85)';
+          ctx.shadowBlur = 14;
+          ctx.strokeStyle = '#F2C94C';
+          ctx.lineWidth = focusedLayer.width + 1;
+          ctx.lineCap='round'; ctx.lineJoin='round';
+          this._strokePath(ctx, seg, proj);
+          ctx.restore();
+        }
+      }
+      const p = proj(this.marker);
+      this._drawRider(ctx, p);
+    }
+  }
+  _strokePath(ctx, pts, proj){
+    ctx.beginPath();
+    pts.forEach((p,i)=>{ const c=proj(p); if(i===0) ctx.moveTo(c.x,c.y); else ctx.lineTo(c.x,c.y); });
+    ctx.stroke();
+  }
+  _dot(ctx, p, color){
+    ctx.beginPath(); ctx.arc(p.x,p.y,6,0,2*Math.PI); ctx.fillStyle=color; ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x,p.y,6,0,2*Math.PI); ctx.strokeStyle='#0E1512'; ctx.lineWidth=2; ctx.stroke();
+  }
+  // The "user" marker: a small glowing circle rather than a directional arrow.
+  _drawRider(ctx, p){
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.beginPath(); ctx.arc(0,0,12,0,2*Math.PI); ctx.fillStyle='rgba(242,201,76,0.28)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(0,0,6,0,2*Math.PI); ctx.fillStyle='#F2C94C'; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle='#241705'; ctx.stroke();
+    ctx.restore();
+  }
+  panBy(dxPx, dyPx){
+    const z=this.z;
+    const cx = lon2x(this.lon,z)-dxPx, cy = lat2y(this.lat,z)-dyPx;
+    this.lon = x2lon(cx,z); this.lat = y2lat(cy,z);
+    this.scheduleDraw();
+  }
+  zoomAt(cssX, cssY, delta){
+    const z0=this.z;
+    let z1 = Math.max(MIN_Z, Math.min(MAX_Z, z0+delta));
+    if (z1===z0) return;
+    const w=this.cssW,h=this.cssH;
+    const originX = lon2x(this.lon,z0)-w/2, originY = lat2y(this.lat,z0)-h/2;
+    const worldX = originX+cssX, worldY = originY+cssY;
+    const lon = x2lon(worldX,z0), lat = y2lat(worldY,z0);
+    this.z = z1;
+    const nOriginX = lon2x(lon,z1)-cssX, nOriginY = lat2y(lat,z1)-cssY;
+    this.lon = x2lon(nOriginX+w/2, z1);
+    this.lat = y2lat(nOriginY+h/2, z1);
+    this.scheduleDraw();
+  }
+  // Finds the visible route line nearest a tap, for "select this run by tapping it on the map".
+  _hitTestLayers(cssX, cssY){
+    const z = this.z;
+    const originX = lon2x(this.lon,z) - this.cssW/2, originY = lat2y(this.lat,z) - this.cssH/2;
+    const proj = (p)=>({x: lon2x(p.lon,z)-originX, y: lat2y(p.lat,z)-originY});
+    let bestId=null, bestDist=Infinity;
+    this.layers.forEach(layer=>{
+      if (!layer.id) return;
+      const valid = layer.points.filter(p=>p.lat!==null);
+      for (let i=0;i<valid.length-1;i++){
+        const a=proj(valid[i]), b=proj(valid[i+1]);
+        const d = pointToSegmentDist(cssX,cssY,a.x,a.y,b.x,b.y);
+        if (d<bestDist){ bestDist=d; bestId=layer.id; }
+      }
+    });
+    return bestDist<=16 ? bestId : null;
+  }
+  _bindEvents(){
+    const c = this.canvas;
+    let dragging=false, lastX=0, lastY=0, moved=0;
+    c.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; moved=0; c.setPointerCapture(e.pointerId); });
+    c.addEventListener('pointermove', e=>{ if(!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; moved += Math.abs(dx)+Math.abs(dy); this.panBy(dx,dy); });
+    c.addEventListener('pointerup', e=>{
+      dragging=false;
+      if (moved<6 && this.onSelect){
+        const rect=c.getBoundingClientRect();
+        const id = this._hitTestLayers(e.clientX-rect.left, e.clientY-rect.top);
+        if (id) this.onSelect(id);
+      }
+    });
+    c.addEventListener('pointercancel', ()=>{ dragging=false; });
+    c.addEventListener('wheel', e=>{ e.preventDefault(); const rect=c.getBoundingClientRect(); this.zoomAt(e.clientX-rect.left, e.clientY-rect.top, e.deltaY<0?1:-1); }, {passive:false});
+    c.addEventListener('dblclick', e=>{ const rect=c.getBoundingClientRect(); this.zoomAt(e.clientX-rect.left, e.clientY-rect.top, 1); });
+  }
+}
+
+/* ============================== isometric ride-along ==============================
+   A fixed-angle isometric camera that follows the rider's position (and
+   elevation, exaggerated) — the route is projected into local flat metres
+   around a reference point, then folded into a 2:1 isometric projection at a
+   user-controlled rotation (drag left/right to orbit around the marker; it
+   doesn't auto-rotate to face the direction of travel). Camera position is
+   smoothed frame-by-frame (a running requestAnimationFrame loop, not a
+   one-shot redraw per scrub step) so scrubbing or noisy GPS points don't snap
+   the view around — it eases toward wherever the scrubber currently is. */
+
+class IsoView {
+  constructor(canvas){
+    this.canvas = canvas; this.ctx = canvas.getContext('2d');
+    this.points = null; this.idx = 0; this.totalDist = 0;
+    this.camPos = null;
+    this.rotation = -Math.PI/4; // user-controlled orbit angle around the marker; drag to change
+    this._running = false; this._raf = null; this._lastTime = null;
+    this._bindEvents();
+  }
+  resize(){
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio||1, 2);
+    this.canvas.width = Math.round(rect.width*dpr);
+    this.canvas.height = Math.round(rect.height*dpr);
+    this.cssW = rect.width; this.cssH = rect.height;
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.draw();
+  }
+  setActivity(a){
+    this.stop();
+    if (!a || !a.hasPos){ this.points = null; this.draw(); return; }
+    let refLat=null, refLon=null;
+    for (let i=0;i<a.n;i++){ if (a.lat[i]!==null){ refLat=a.lat[i]; refLon=a.lon[i]; break; } }
+    if (refLat===null){ this.points = null; this.draw(); return; }
+    const mPerDegLat = 110540;
+    const mPerDegLon = 111320 * Math.cos(refLat*Math.PI/180);
+    const ZEXAG = 4; // real elevation change is subtle next to horizontal distance — exaggerate for a readable silhouette
+    this.points = new Array(a.n);
+    for (let i=0;i<a.n;i++){
+      if (a.lat[i]===null){ this.points[i] = null; continue; }
+      this.points[i] = {
+        x: (a.lon[i]-refLon)*mPerDegLon,
+        y: (a.lat[i]-refLat)*mPerDegLat,
+        z: (a.hasEle && a.ele[i]!==null ? a.ele[i] : 0) * ZEXAG,
+      };
+    }
+    this.totalDist = a.totalDist || 200;
+    this.idx = Math.min(this.idx, a.n-1);
+    const first = this.points.find(Boolean);
+    this.camPos = first ? {x:first.x, y:first.y, z:first.z} : null;
+    this.draw();
+  }
+  setIndex(idx){
+    this.idx = idx;
+    if (this._running) return; // the running loop already redraws every frame
+    this.draw();
+  }
+  start(){
+    this._running = true;
+    this._lastTime = null;
+    if (this._raf) return;
+    const step = (now) => {
+      if (!this._running){ this._raf = null; return; }
+      this._tick(now);
+      this.draw();
+      this._raf = requestAnimationFrame(step);
+    };
+    this._raf = requestAnimationFrame(step);
+  }
+  stop(){
+    this._running = false;
+    if (this._raf){ cancelAnimationFrame(this._raf); this._raf = null; }
+  }
+  // idx may be fractional (mid-playback, between two GPS fixes) — interpolate
+  // between the bracketing points rather than snapping to whichever is nearest.
+  _pointAt(idx){
+    const n = this.points.length;
+    const lo = Math.max(0, Math.min(n-1, Math.floor(idx)));
+    const hi = Math.max(0, Math.min(n-1, Math.ceil(idx)));
+    const p0 = this.points[lo], p1 = this.points[hi];
+    if (!p0 || !p1) return p0 || p1 || null;
+    if (lo===hi) return p0;
+    const frac = idx-lo;
+    return { x:p0.x+(p1.x-p0.x)*frac, y:p0.y+(p1.y-p0.y)*frac, z:p0.z+(p1.z-p0.z)*frac };
+  }
+  _tick(now){
+    if (!this.points || !this.camPos) return;
+    const target = this._pointAt(this.idx);
+    if (!target) return;
+    // Time-constant based easing (not a fixed per-tick fraction) so smoothing
+    // stays consistent regardless of actual frame rate.
+    const dt = (this._lastTime!=null && now!=null) ? Math.min(100, now-this._lastTime) : 16.7;
+    this._lastTime = now;
+    const posFactor = 1 - Math.exp(-dt/220);
+    this.camPos.x += (target.x-this.camPos.x)*posFactor;
+    this.camPos.y += (target.y-this.camPos.y)*posFactor;
+    this.camPos.z += (target.z-this.camPos.z)*posFactor;
+  }
+  // Rotate the world by the user-controlled orbit angle before the isometric
+  // fold — a fixed camera angle by default, but "fixed" means "doesn't
+  // auto-follow heading", not "can't be turned": dragging changes `rotation`.
+  _iso(p, camX, camY, camZ){
+    const dx = p.x-camX, dy = p.y-camY, dz = p.z-camZ;
+    const cos = Math.cos(this.rotation), sin = Math.sin(this.rotation);
+    const rx = dx*cos - dy*sin, ry = dx*sin + dy*cos;
+    return { x: (rx-ry)*0.866, y: -(rx+ry)*0.5 - dz };
+  }
+  _bindEvents(){
+    const c = this.canvas;
+    let dragging=false, lastX=0, pointerId=null;
+    // While a pointer holds capture on this canvas, browsers retarget its click
+    // too — so if a drag never cleanly ends (finger lifted off-screen, the tab
+    // switched away mid-gesture, etc.) taps on OTHER controls like the Map tab
+    // can silently do nothing until this canvas gets a pointerup. The window-level
+    // listeners below are a safety net so a stuck drag can't swallow clicks
+    // elsewhere.
+    const endDrag = ()=>{
+      if (!dragging) return;
+      dragging = false;
+      if (pointerId!=null){ try{ c.releasePointerCapture(pointerId); }catch(e){} }
+      pointerId = null;
+    };
+    this._endDrag = endDrag; // callable externally when the view switches away from ride-along
+    c.addEventListener('pointerdown', e=>{ dragging=true; lastX=e.clientX; pointerId=e.pointerId; c.setPointerCapture(e.pointerId); });
+    c.addEventListener('pointermove', e=>{
+      if (!dragging) return;
+      const dx = e.clientX-lastX; lastX = e.clientX;
+      this.rotation += dx * 0.012;
+      if (!this._running) this.draw();
+    });
+    c.addEventListener('pointerup', endDrag);
+    c.addEventListener('pointercancel', endDrag);
+    window.addEventListener('pointerup', endDrag);
+    window.addEventListener('pointercancel', endDrag);
+    window.addEventListener('blur', endDrag);
+  }
+  draw(){
+    const ctx=this.ctx, w=this.cssW, h=this.cssH;
+    if (!w||!h) return;
+    ctx.fillStyle='#0A0F0C'; ctx.fillRect(0,0,w,h);
+    if (!this.points){
+      ctx.fillStyle='rgba(244,241,232,0.4)'; ctx.font='13px sans-serif'; ctx.textAlign='center';
+      ctx.fillText('No GPS data for the ride-along view', w/2, h/2);
+      return;
+    }
+    if (!this.camPos) return;
+    const camX = this.camPos.x, camY = this.camPos.y, camZ = this.camPos.z;
+    const viewRadius = Math.max(35, Math.min(160, this.totalDist/6));
+    const scale = Math.min(w,h) / (viewRadius*2.2);
+    const toScreen = (p)=>{ const iso=this._iso(p,camX,camY,camZ); return { x: w/2+iso.x*scale, y: h*0.62+iso.y*scale }; };
+
+    // Ground grid sits at the rider's current elevation (not sea level), so it
+    // reads as a stable local plane sliding underneath rather than jumping
+    // with every hill — the camera already compensates by camZ.
+    const gridStep=20, gridExtent=Math.ceil(viewRadius/gridStep)+2;
+    const gox = Math.floor(camX/gridStep)*gridStep, goy = Math.floor(camY/gridStep)*gridStep;
+    ctx.strokeStyle='rgba(143,163,150,0.18)'; ctx.lineWidth=1;
+    for (let i=-gridExtent;i<=gridExtent;i++){
+      const wy = goy+i*gridStep;
+      let a1=toScreen({x:gox-gridExtent*gridStep,y:wy,z:camZ}), a2=toScreen({x:gox+gridExtent*gridStep,y:wy,z:camZ});
+      ctx.beginPath(); ctx.moveTo(a1.x,a1.y); ctx.lineTo(a2.x,a2.y); ctx.stroke();
+      const wx = gox+i*gridStep;
+      let b1=toScreen({x:wx,y:goy-gridExtent*gridStep,z:camZ}), b2=toScreen({x:wx,y:goy+gridExtent*gridStep,z:camZ});
+      ctx.beginPath(); ctx.moveTo(b1.x,b1.y); ctx.lineTo(b2.x,b2.y); ctx.stroke();
+    }
+
+    // full path, dim (context of what's ahead/behind)
+    ctx.beginPath(); let started=false;
+    this.points.forEach(p=>{
+      if (!p){ started=false; return; }
+      const s=toScreen(p);
+      if (!started){ ctx.moveTo(s.x,s.y); started=true; } else ctx.lineTo(s.x,s.y);
+    });
+    ctx.strokeStyle='rgba(244,241,232,0.28)'; ctx.lineWidth=3; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.stroke();
+
+    // travelled portion, yellow tracker
+    ctx.beginPath(); started=false;
+    for (let i=0;i<=this.idx;i++){
+      const p=this.points[i]; if (!p){ started=false; continue; }
+      const s=toScreen(p);
+      if (!started){ ctx.moveTo(s.x,s.y); started=true; } else ctx.lineTo(s.x,s.y);
+    }
+    ctx.strokeStyle='#F2C94C'; ctx.lineWidth=4; ctx.stroke();
+
+    // glow just the last stretch leading into the marker, rather than the whole trail
+    const glowSpan = 16, glowStart = Math.max(0, this.idx-glowSpan);
+    ctx.save();
+    ctx.shadowColor='rgba(242,201,76,0.9)'; ctx.shadowBlur=16;
+    ctx.strokeStyle='#F2C94C'; ctx.lineWidth=4.5;
+    ctx.beginPath(); let gStarted=false;
+    for (let i=glowStart;i<=this.idx;i++){
+      const p=this.points[i]; if (!p){ gStarted=false; continue; }
+      const s=toScreen(p);
+      if (!gStarted){ ctx.moveTo(s.x,s.y); gStarted=true; } else ctx.lineTo(s.x,s.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // rider marker: a small circle with a ground shadow at the smoothed camera position
+    const rp = toScreen({x:camX, y:camY, z:camZ});
+    ctx.beginPath(); ctx.ellipse(rp.x,rp.y+3,9,4,0,0,2*Math.PI); ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(rp.x,rp.y,13,0,2*Math.PI); ctx.fillStyle='rgba(242,201,76,0.25)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(rp.x,rp.y,6,0,2*Math.PI); ctx.fillStyle='#F2C94C'; ctx.fill();
+    ctx.lineWidth=2; ctx.strokeStyle='#241705'; ctx.stroke();
+  }
+}
+
+/* ============================== app wiring ============================== */
+
+// Each loaded file becomes one entry: {id, fileName, data (buildActivity() result), color, visible}.
+// `focusedId` is the one entry driving stats/charts/readout/ride-along — the map can show any
+// combination of visible entries at once, with the focused one always drawn as the yellow tracker.
+let activities = [];
+let focusedId = null;
+let map, chartEle, chartSpeed, chartHr, chartCad, isoView;
+let playTimer = null;
+let playSpeed = 1;
+let mapStyleKey = 'dark';
+let routeMetric = 'flat';
+let currentView = 'map'; // 'map' | 'iso'
+let fileListExpanded = false;
+let filePage = 0;
+const FILES_PER_PAGE = 10;
+
+const MULTI_PALETTE = ['#4FA6E8','#B478E8','#78E8AE','#E8776B','#8FA396','#E8C24F'];
+
+const el = id => document.getElementById(id);
+const dropzone = el('rmDropzone'), fileInput = el('rmFileInput'), errBanner = el('rmErrBanner');
+
+function getFocused(){ return activities.find(a=>a.id===focusedId) || null; }
+
+function showError(msg){
+  const line = document.createElement('div');
+  line.textContent = msg;
+  errBanner.appendChild(line);
+  errBanner.classList.add('show');
+  setTimeout(()=>{
+    line.remove();
+    if (!errBanner.children.length) errBanner.classList.remove('show');
+  }, 6000);
+}
+function clearError(){ errBanner.classList.remove('show'); errBanner.innerHTML=''; }
+
+['dragenter','dragover'].forEach(evt=>dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
+['dragleave','drop'].forEach(evt=>dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.remove('drag'); }));
+dropzone.addEventListener('drop', e=>{ const files=e.dataTransfer.files; if (files && files.length) loadFiles(files); });
+dropzone.addEventListener('click', ()=>fileInput.click());
+fileInput.addEventListener('change', ()=>{ if (fileInput.files.length) loadFiles(fileInput.files); fileInput.value=''; });
+el('rmAddMoreBtn').addEventListener('click', ()=>fileInput.click());
+
+/* ---------------- wellness (daily monitoring file) — a separate, single-file area ---------------- */
+
+let wellnessChart = null;
+
+function renderWellness(fileName, w){
+  el('rmWellnessFileName').textContent = fileName;
+  const dayLabel = w.dayStart ? new Date(w.dayStart).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}) : '—';
+  let cards = '';
+  cards += statCard('Day', dayLabel);
+  if (w.restingHr!=null) cards += statCard('Resting HR', w.restingHr, 'bpm');
+  if (w.currentDayRestingHr!=null) cards += statCard('Current-day resting HR', w.currentDayRestingHr, 'bpm');
+  if (w.avgStress!=null) cards += statCard('Avg stress', w.avgStress);
+  if (w.maxStress!=null) cards += statCard('Max stress', w.maxStress);
+  el('rmWellnessStats').innerHTML = cards;
+
+  const stressBlock = el('rmWellnessStressBlock');
+  if (w.stressV.length){
+    stressBlock.classList.add('show');
+    if (!wellnessChart) wellnessChart = new RouteChart(el('rmWellnessStressChart'), {color:'#B478E8', fill:'rgba(180,120,232,0.14)', onHover:()=>{}});
+    wellnessChart.resize();
+    wellnessChart.setData(w.stressT, w.stressV);
+  } else {
+    stressBlock.classList.remove('show');
+  }
+  el('rmWellnessCard').classList.add('show');
+}
+
+function loadFiles(fileList){
+  clearError();
+  Array.from(fileList).forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = parseFitFile(reader.result);
+        if (!parsed.records.length){
+          const wellness = summarizeWellness(parsed);
+          if (wellness){ renderWellness(file.name, wellness); return; }
+          throw new Error('no GPS/record data found');
+        }
+        addActivity(file.name, buildActivity(parsed));
+      } catch (err) {
+        console.error(err);
+        showError(`Skipped "${file.name}": ` + err.message);
+      }
+    };
+    reader.onerror = () => showError(`Skipped "${file.name}": could not read from disk.`);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function addActivity(fileName, data){
+  const id = 'act_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+  const color = MULTI_PALETTE[activities.length % MULTI_PALETTE.length];
+  activities.push({ id, fileName, data, color, visible:true });
+  focusedId = id;
+  renderAll(true);
+}
+
+function removeActivity(id){
+  activities = activities.filter(a=>a.id!==id);
+  if (focusedId===id) focusedId = activities.length ? activities[activities.length-1].id : null;
+  if (!activities.length){ resetApp(); return; }
+  renderAll();
+}
+
+/* ---------------- file list ---------------- */
+
+function renderFileList(){
+  const has = activities.length>0;
+  el('rmFileList').classList.toggle('show', has);
+  if (!has) return;
+  el('rmFileListCount').textContent = activities.length + (activities.length===1?' file':' files');
+  el('rmFileListToggleIcon').textContent = fileListExpanded ? '▴' : '▾';
+  el('rmFileListBody').classList.toggle('expanded', fileListExpanded);
+  if (!fileListExpanded) return;
+
+  const totalPages = Math.max(1, Math.ceil(activities.length/FILES_PER_PAGE));
+  filePage = Math.max(0, Math.min(filePage, totalPages-1));
+  const startI = filePage*FILES_PER_PAGE;
+  const pageItems = activities.slice(startI, startI+FILES_PER_PAGE);
+
+  el('rmFileRows').innerHTML = pageItems.map(act=>{
+    const a = act.data;
+    const icon = SPORT_ICON[a.sport] || '\u{1F4CD}';
+    const sportName = SPORT_NAMES[a.sport] || 'Activity';
+    const when = new Date(a.startTime).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+    const focused = act.id===focusedId;
+    return `
+      <div class="rm-file-row ${focused?'focused':''}" data-id="${act.id}">
+        <input type="checkbox" data-action="toggle" ${act.visible?'checked':''} aria-label="Show ${act.fileName} on map">
+        <span class="rm-file-swatch" style="background:${focused?'#F2C94C':act.color}"></span>
+        <div class="rm-file-info" data-action="focus">
+          <div class="rm-file-name">${icon} ${act.fileName}</div>
+          <div class="rm-file-meta">${sportName} · ${fmtDist(a.totalDist)} · ${when}</div>
+        </div>
+        <button class="rm-file-remove" data-action="remove" type="button" aria-label="Remove ${act.fileName}">&times;</button>
+      </div>
+    `;
+  }).join('');
+
+  const showPagination = activities.length > FILES_PER_PAGE;
+  el('rmFilePagination').style.display = showPagination ? 'flex' : 'none';
+  if (showPagination){
+    el('rmFilePageInfo').textContent = `${startI+1}–${Math.min(startI+FILES_PER_PAGE, activities.length)} of ${activities.length}`;
+    el('rmFilePrevBtn').disabled = filePage===0;
+    el('rmFileNextBtn').disabled = filePage>=totalPages-1;
+  }
+}
+
+el('rmFileListToggle').addEventListener('click', ()=>{ fileListExpanded = !fileListExpanded; renderFileList(); });
+el('rmFilePrevBtn').addEventListener('click', ()=>{ filePage--; renderFileList(); });
+el('rmFileNextBtn').addEventListener('click', ()=>{ filePage++; renderFileList(); });
+
+el('rmFileRows').addEventListener('click', e=>{
+  const row = e.target.closest('.rm-file-row'); if (!row) return;
+  const id = row.dataset.id;
+  const actionEl = e.target.closest('[data-action]');
+  const action = actionEl ? actionEl.dataset.action : 'focus';
+  if (action==='remove'){ removeActivity(id); return; }
+  if (action==='toggle'){
+    const act = activities.find(a=>a.id===id);
+    if (act){ act.visible = actionEl.checked; renderAll(); }
+    return;
+  }
+  focusedId = id;
+  renderAll();
+});
+el('rmShowAllBtn').addEventListener('click', ()=>{ activities.forEach(a=>a.visible=true); renderAll(); });
+el('rmHideAllBtn').addEventListener('click', ()=>{ activities.forEach(a=>a.visible=false); renderAll(); });
+
+/* ---------------- map layers / style / route colour ---------------- */
+
+function buildMapLayers(){
+  return activities.filter(act=>act.visible && act.data.hasPos).map(act=>{
+    const a = act.data;
+    const isFocused = act.id===focusedId;
+    const points = a.lat.map((lat,i)=>({lat, lon:a.lon[i], idx:i}));
+    return {
+      id: act.id,
+      points,
+      color: isFocused ? '#F2C94C' : act.color,
+      width: isFocused ? 4 : 2.5,
+      segmentColors: (isFocused && routeMetric!=='flat') ? computeMetricColors(a, routeMetric) : null,
+      showEndpoints: isFocused,
+      opacity: isFocused ? 1 : 0.55,
+    };
+  });
+}
+
+function renderMap(fit){
+  const focused = getFocused();
+  const hasPos = !!(focused && focused.data.hasPos);
+  el('rmMapEmpty').classList.toggle('show', !hasPos);
+  if (!hasPos) return;
+  const isNewMap = !map;
+  if (!map){
+    map = new SlippyMap(el('rmMapCanvas'));
+    // Tapping a route line on the map selects that run, same as tapping its file-list row —
+    // just switching which run is focused, so it shouldn't reset the current pan/zoom.
+    map.onSelect = (id) => { focusedId = id; renderAll(false); };
+  }
+  map.setStyle(mapStyleKey);
+  el('rmMapAttrib').textContent = MAP_STYLES[mapStyleKey].attrib;
+  map.resize();
+  map.setLayers(buildMapLayers());
+  // Always fit when the map is first created (nothing to preserve yet); otherwise
+  // only fit when the caller explicitly asks for it (e.g. a newly loaded file).
+  if (fit || isNewMap) map.fitToRoute();
+}
+
+el('rmMapStyleTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  mapStyleKey = btn.dataset.style;
+  el('rmMapStyleTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+  renderMap(false);
+});
+
+function updateRouteColorAvailability(a){
+  const buttons = el('rmRouteColorTabs').querySelectorAll('button');
+  buttons.forEach(b=>{
+    const m = b.dataset.metric;
+    const avail = m==='hr' ? a.hasHr : m==='ele' ? a.hasEle : true;
+    b.disabled = !avail;
+    if (!avail && routeMetric===m) routeMetric = 'flat';
+  });
+  buttons.forEach(b=>b.classList.toggle('active', b.dataset.metric===routeMetric));
+}
+el('rmRouteColorTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn || btn.disabled) return;
+  routeMetric = btn.dataset.metric;
+  el('rmRouteColorTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+  renderMap(false);
+});
+
+/* ---------------- view mode (map vs. isometric ride-along) ---------------- */
+
+el('rmViewTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  currentView = btn.dataset.view;
+  el('rmViewTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+  applyViewMode();
+});
+
+function applyViewMode(){
+  const focused = getFocused();
+  const hasPos = !!(focused && focused.data.hasPos);
+  const showMap = hasPos && currentView==='map';
+  const showIso = hasPos && currentView==='iso';
+  el('rmMapWrap').classList.toggle('show', showMap);
+  el('rmIsoWrap').classList.toggle('show', showIso);
+  el('rmMapEmpty').classList.toggle('show', !hasPos);
+  if (showMap && map) map.resize();
+  if (showIso && isoView) isoView.resize();
+  if (isoView){
+    if (showIso) isoView.start();
+    else { isoView.stop(); if (isoView._endDrag) isoView._endDrag(); }
+  }
+}
+
+/* ---------------- stats / charts / readout for the focused activity ---------------- */
+
+function renderStatsAndCharts(a){
+  el('rmActivityIcon').textContent = SPORT_ICON[a.sport] || '\u{1F4CD}';
+  el('rmActivityTitle').textContent = SPORT_NAMES[a.sport] || 'Activity';
+  const d = new Date(a.startTime);
+  el('rmActivityWhen').textContent = d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'}) + ' · ' + d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+
+  const paceMode = PACE_SPORTS.has(a.sport);
+  el('rmChartSpeedT').textContent = paceMode ? 'Pace' : 'Speed';
+  el('rmRoSpeedLabel').textContent = paceMode ? 'Pace' : 'Speed';
+
+  const gain = a.ascentOverride!==null ? a.ascentOverride : a.gain;
+  const loss = a.descentOverride!==null ? a.descentOverride : a.loss;
+
+  let cards = '';
+  cards += statCard('Distance', fmtDist(a.totalDist));
+  cards += statCard('Moving time', fmtDur(a.movingS));
+  cards += statCard('Elapsed', fmtDur(a.elapsedS));
+  if (a.hasEle) cards += statCard('Elev gain', fmtEle(gain));
+  if (a.hasEle) cards += statCard('Elev loss', fmtEle(loss));
+  cards += statCard('Avg ' + (paceMode?'pace':'speed'), fmtSpeedOrPace(a.avgSpeed, a.sport));
+  cards += statCard('Max ' + (paceMode?'pace':'speed'), fmtSpeedOrPace(a.maxSpeed, a.sport));
+  if (a.hasHr) cards += statCard('Avg HR', Math.round(a.avgHr), 'bpm');
+  if (a.hasHr) cards += statCard('Max HR', Math.round(a.maxHr), 'bpm');
+  if (a.hasCad) cards += statCard('Avg cadence', Math.round(a.avgCad), 'rpm');
+  if (a.calories!==null) cards += statCard('Calories', a.calories, 'kcal');
+  el('rmStatsGrid').innerHTML = cards;
+
+  if (a.hasEle){
+    el('rmChartEleBlock').classList.add('show');
+    if (!chartEle) chartEle = new RouteChart(el('rmChartEle'), {color:'#E8A33D', fill:'rgba(232,163,61,0.12)', onHover:seekToIdx});
+    chartEle.resize();
+    chartEle.setData(a.dist, a.ele);
+  } else el('rmChartEleBlock').classList.remove('show');
+
+  el('rmChartSpeedBlock').classList.add('show');
+  if (!chartSpeed) chartSpeed = new RouteChart(el('rmChartSpeed'), {color:'#4FB477', fill:'rgba(79,180,119,0.12)', onHover:seekToIdx});
+  chartSpeed.resize();
+  chartSpeed.setData(a.dist, a.speed);
+
+  if (a.hasHr){
+    el('rmChartHrBlock').classList.add('show');
+    el('rmRoHrWrap').style.display='';
+    if (!chartHr) chartHr = new RouteChart(el('rmChartHr'), {color:'#D9614F', fill:'rgba(217,97,79,0.12)', onHover:seekToIdx});
+    chartHr.resize();
+    chartHr.setData(a.dist, a.hr);
+  } else { el('rmChartHrBlock').classList.remove('show'); el('rmRoHrWrap').style.display='none'; }
+
+  if (a.hasCad){
+    el('rmChartCadBlock').classList.add('show');
+    if (!chartCad) chartCad = new RouteChart(el('rmChartCad'), {color:'#8FA396', fill:'rgba(143,163,150,0.12)', onHover:seekToIdx});
+    chartCad.resize();
+    chartCad.setData(a.dist, a.cad);
+  } else el('rmChartCadBlock').classList.remove('show');
+}
+
+function renderAll(fit=false){
+  renderFileList();
+  const focused = getFocused();
+  if (!focused){ resetApp(); return; }
+
+  el('rmActivityBar').classList.remove('hidden');
+  el('rmStatsGrid').classList.add('show');
+  el('rmReadout').classList.add('show');
+  el('rmFooterActions').classList.remove('hidden');
+  el('rmViewSwitchRow').classList.add('show');
+  el('rmRouteColorRow').classList.add('show');
+
+  // Apply the map/iso .show class BEFORE resize() runs on either canvas —
+  // resizing while display:none measures a 0x0 box and permanently zeroes it.
+  applyViewMode();
+  renderStatsAndCharts(focused.data);
+  updateRouteColorAvailability(focused.data);
+  renderMap(fit);
+  if (!isoView) isoView = new IsoView(el('rmIsoCanvas'));
+  isoView.setActivity(focused.data);
+
+  playElapsedMs = 0; playLastFrameTime = null;
+  onChartHover(0);
+  window.addEventListener('resize', debouncedResize);
+}
+
+function onChartHover(idx, targetT){
+  const focused = getFocused();
+  if (!focused) return;
+  const a = focused.data;
+  idx = Math.max(0, Math.min(a.n-1, idx));
+  [chartEle,chartSpeed,chartHr,chartCad].forEach(c=>c && c.setActive(idx));
+
+  // During playback (targetT given), findIdxForTime lands on the fix at/after
+  // targetT — interpolate back from the previous fix instead of snapping straight
+  // to it, so movement reads smoothly even when fixes are a second or more apart.
+  let markerIdx = idx, mLat = a.lat[idx], mLon = a.lon[idx];
+  if (targetT!=null){
+    const lo = Math.max(0, idx-1);
+    if (lo < idx && a.lat[lo]!==null && a.lat[idx]!==null){
+      const t0=a.t[lo], t1=a.t[idx];
+      const frac = t1>t0 ? Math.max(0, Math.min(1, (targetT-t0)/(t1-t0))) : 1;
+      mLat = a.lat[lo] + (a.lat[idx]-a.lat[lo])*frac;
+      mLon = a.lon[lo] + (a.lon[idx]-a.lon[lo])*frac;
+      markerIdx = lo + frac;
+    }
+  }
+  if (map && a.hasPos) map.setMarker({lat:mLat, lon:mLon, idx:markerIdx});
+  if (isoView) isoView.setIndex(markerIdx);
+
+  el('rmRoDist').textContent = fmtDist(a.dist[idx]);
+  el('rmRoTime').textContent = fmtDur((a.t[idx]-a.t[0])/1000);
+  el('rmRoEle').textContent = a.hasEle ? fmtEle(a.ele[idx]) : '—';
+  el('rmRoSpeed').textContent = fmtSpeedOrPace(a.speed[idx], a.sport);
+  el('rmRoHr').textContent = (a.hasHr && a.hr[idx]!==null) ? Math.round(a.hr[idx]) : '—';
+
+  el('rmChartEleV').textContent = a.hasEle ? fmtEle(a.ele[idx]) : '';
+  el('rmChartSpeedV').textContent = fmtSpeedOrPace(a.speed[idx], a.sport);
+  el('rmChartHrV').textContent = (a.hasHr && a.hr[idx]!==null) ? Math.round(a.hr[idx])+' bpm' : '';
+  el('rmChartCadV').textContent = (a.hasCad && a.cad[idx]) ? Math.round(a.cad[idx])+' rpm' : '';
+}
+
+let resizeTimer=null;
+function debouncedResize(){
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=>{
+    // Only resize whichever view is actually visible — resizing a display:none
+    // canvas measures a 0x0 box and zeroes it until the next full re-render.
+    if (map && currentView==='map') map.resize();
+    if (isoView && currentView==='iso') isoView.resize();
+    [chartEle,chartSpeed,chartHr,chartCad].forEach(c=>c && c.resize());
+  }, 150);
+}
+
+el('rmFitBtn').addEventListener('click', ()=>{ if (map) map.fitToRoute(); });
+el('rmZoomInBtn').addEventListener('click', ()=>{ if (map) map.zoomAt(map.cssW/2, map.cssH/2, 1); });
+el('rmZoomOutBtn').addEventListener('click', ()=>{ if (map) map.zoomAt(map.cssW/2, map.cssH/2, -1); });
+
+el('rmUnitToggle').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  unit = btn.dataset.unit;
+  el('rmUnitToggle').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+  if (activities.length) renderAll();
+});
+
+function resetApp(){
+  cancelAnimationFrame(playTimer); playTimer=null; el('rmPlayBtn').textContent='▶';
+  playElapsedMs = 0; playLastFrameTime = null;
+  if (isoView) isoView.stop();
+  activities = []; focusedId = null;
+  fileListExpanded = false; filePage = 0;
+  fileInput.value = '';
+  el('rmFileList').classList.remove('show');
+  ['rmStatsGrid','rmReadout','rmMapWrap','rmIsoWrap','rmMapEmpty','rmChartEleBlock','rmChartSpeedBlock','rmChartHrBlock','rmChartCadBlock','rmViewSwitchRow','rmRouteColorRow']
+    .forEach(id=>el(id).classList.remove('show'));
+  el('rmActivityBar').classList.add('hidden');
+  el('rmFooterActions').classList.add('hidden');
+  clearError();
+}
+el('rmLoadAnotherBtn').addEventListener('click', resetApp);
+el('rmLoadAnotherBtn2').addEventListener('click', resetApp);
+
+el('rmSpeedTabs').addEventListener('click', e=>{
+  const btn = e.target.closest('button'); if (!btn) return;
+  playSpeed = parseFloat(btn.dataset.speed);
+  el('rmSpeedTabs').querySelectorAll('button').forEach(b=>b.classList.toggle('active', b===btn));
+});
+
+// playElapsedMs is ms into the focused activity's own recorded timeline — shared
+// between the play loop and manual seeks (chart click/drag) so clicking a chart
+// WHILE playing rebases where playback continues from, instead of the next
+// animation frame snapping the marker straight back to the old computed position.
+let playElapsedMs = 0;
+let playLastFrameTime = null;
+
+function seekToActivityMs(ms){
+  const focused = getFocused();
+  if (!focused) return;
+  const a = focused.data;
+  playElapsedMs = Math.max(0, Math.min(a.t[a.n-1]-a.t[0], ms));
+  playLastFrameTime = null; // don't let the next play frame count the seek itself as elapsed time
+  const targetT = a.t[0] + playElapsedMs;
+  onChartHover(findIdxForTime(a.t, targetT), targetT);
+}
+function seekToIdx(idx){
+  const focused = getFocused();
+  if (!focused) return;
+  const a = focused.data;
+  seekToActivityMs(a.t[Math.max(0,Math.min(a.n-1,idx))] - a.t[0]);
+}
+
+el('rmPlayBtn').addEventListener('click', ()=>{
+  if (!getFocused()) return;
+  if (playTimer){ cancelAnimationFrame(playTimer); playTimer=null; el('rmPlayBtn').textContent='▶'; return; }
+  el('rmPlayBtn').textContent='⏸';
+  // 1x tracks real elapsed time against the activity's own recorded timestamps —
+  // wall-clock seconds advance activity-timeline ms 1:1, scaled by playSpeed.
+  playLastFrameTime = null;
+  const step = (now) => {
+    const focused = getFocused();
+    if (!focused){ playTimer=null; el('rmPlayBtn').textContent='▶'; return; }
+    const a = focused.data;
+    if (playLastFrameTime==null) playLastFrameTime = now;
+    playElapsedMs += (now-playLastFrameTime) * playSpeed;
+    playLastFrameTime = now;
+    const targetT = a.t[0] + playElapsedMs;
+    const idx = findIdxForTime(a.t, targetT);
+    if (idx >= a.n-1){
+      onChartHover(a.n-1);
+      playTimer=null; el('rmPlayBtn').textContent='▶';
+      return;
+    }
+    onChartHover(idx, targetT);
+    playTimer = requestAnimationFrame(step);
+  };
+  playTimer = requestAnimationFrame(step);
+});
+
+})();
+
 </script>
 </body>
 </html>
