@@ -554,6 +554,7 @@
   let pendingCycleUp = null; // {tms:{...}} while modal shown
   let historyTab = 'log'; // log | progress
   let historyLiftFilter = 'all'; // 'all' | lift key
+  let progressCycle = 0; // 0 = all cycles combined; else a specific cycle number -- Progress tab's own cycle nav
   let editingHistoryIdx = null;
   let pendingStaleReminder = null; // {exportedAt, days} when the committed backup file is over a month old
   let sessionWeights = null; // {main:[w,w,w], bbb:w} — editable overrides for the in-progress workout
@@ -1088,9 +1089,12 @@
 
   const LIFT_COLOR = { squat:'var(--steel)', bench:'var(--brass)', deadlift:'var(--iron)', press:'var(--moss)' };
 
-  function e1rmSeries(lift){
+  // cycle is optional -- omitted (or 0) means "all cycles combined", used by
+  // bestE1rmForLift()'s always-best-ever PR check as well as the Progress
+  // chart's own per-cycle filter.
+  function e1rmSeries(lift, cycle){
     return history
-      .filter(h => h.lift === lift)
+      .filter(h => h.lift === lift && (!cycle || h.cycle === cycle))
       .map(h => {
         const top = h.mainSets[h.mainSets.length-1];
         if (!top.amrap || !top.actualReps) return null;
@@ -1160,10 +1164,27 @@
     </svg>`;
   }
 
+  // progressCycle (0 = all cycles) lets the Progress tab's charts be scoped to
+  // one past cycle instead of always combining every cycle ever logged.
+  function progressCycleNav(){
+    return `
+      <div class="card" style="margin-bottom:14px;">
+        <div class="cp-toolbar">
+          <button type="button" class="cp-navbtn" data-action="progressCycleNav" data-dir="-1" ${progressCycle<=0?'disabled':''} aria-label="Previous cycle">‹</button>
+          <h2>${progressCycle === 0 ? 'All cycles' : 'Cycle ' + progressCycle}</h2>
+          <button type="button" class="cp-navbtn" data-action="progressCycleNav" data-dir="1" ${progressCycle>=state.cycle?'disabled':''} aria-label="Next cycle">›</button>
+        </div>
+      </div>
+    `;
+  }
+
   function renderProgressBody(){
     const lifts = ['squat','bench','deadlift','press'];
-    return lifts.map(lift=>{
-      const pts = e1rmSeries(lift);
+    const emptyMsg = progressCycle === 0
+      ? 'Log at least two AMRAP sets for this lift to see a trend.'
+      : `No AMRAP sets logged for this lift in Cycle ${progressCycle} yet.`;
+    return progressCycleNav() + lifts.map(lift=>{
+      const pts = e1rmSeries(lift, progressCycle);
       const svg = buildSparkline(pts, LIFT_COLOR[lift]);
       const latest = pts.length ? pts[pts.length-1].v : null;
       return `
@@ -1175,7 +1196,7 @@
               <div class="meta">Estimated 1-rep max, from logged AMRAP sets</div>
             </div>
           </div>
-          ${svg ? svg : `<div class="chart-empty">Log at least two AMRAP sets for this lift to see a trend.</div>`}
+          ${svg ? svg : `<div class="chart-empty">${emptyMsg}</div>`}
           ${latest !== null ? `<div class="chart-latest">${fmtW(latest)}<span class="u">latest estimate</span></div>` : ''}
         </div>
       `;
@@ -1357,6 +1378,10 @@
     else if (action === 'toggleLiftHistory') { liftHistoryOpen = !liftHistoryOpen; render(); }
     else if (action === 'cycleNav') {
       viewingCycle = Math.max(1, Math.min(state.cycle, viewingCycle + parseInt(el.getAttribute('data-dir'))));
+      render();
+    }
+    else if (action === 'progressCycleNav') {
+      progressCycle = Math.max(0, Math.min(state.cycle, progressCycle + parseInt(el.getAttribute('data-dir'))));
       render();
     }
     else if (action === 'pdSelectLift') { pendingPickDay.dayIndex = parseInt(el.getAttribute('data-idx')); render(); }
@@ -1615,9 +1640,14 @@
     showToast('Downloaded history.json');
   }
 
+  // Deliberately excludes h.cycle: cycle is a display/organization tag on a
+  // workout, not part of its identity, so re-tagging a past entry's cycle
+  // (e.g. backfilling legacy cycle:0 rows into a real cycle number) and
+  // re-merging updates the existing entry in place instead of creating a
+  // duplicate keyed on the old cycle value.
   function historyKey(h){
     const top = h.mainSets[h.mainSets.length-1];
-    return [h.date, h.lift, h.cycle, h.week, h.mainSets.map(s=>s.weight).join(','), top.actualReps ?? ''].join('|');
+    return [h.date, h.lift, h.week, h.mainSets.map(s=>s.weight).join(','), top.actualReps ?? ''].join('|');
   }
 
   function mergeHistoryArrays(a, b){

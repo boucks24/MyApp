@@ -27,7 +27,7 @@
     {
       "date": "2026-08-08",
       "lift": "press",
-      "cycle": 0,
+      "cycle": 1,
       "week": 1,
       "weekLabel": "5s",
       "mainSets": [
@@ -58,7 +58,7 @@
     {
       "date": "2026-08-08",
       "lift": "deadlift",
-      "cycle": 0,
+      "cycle": 1,
       "week": 1,
       "weekLabel": "5s",
       "mainSets": [
@@ -89,7 +89,7 @@
     {
       "date": "2026-08-08",
       "lift": "bench",
-      "cycle": 0,
+      "cycle": 1,
       "week": 1,
       "weekLabel": "5s",
       "mainSets": [
@@ -120,7 +120,7 @@
     {
       "date": "2026-08-08",
       "lift": "squat",
-      "cycle": 0,
+      "cycle": 1,
       "week": 1,
       "weekLabel": "5s",
       "mainSets": [
@@ -151,7 +151,7 @@
     {
       "date": "2026-08-08",
       "lift": "deadlift",
-      "cycle": 0,
+      "cycle": 1,
       "week": 2,
       "weekLabel": "3s",
       "mainSets": [
@@ -182,7 +182,7 @@
     {
       "date": "2026-08-08",
       "lift": "bench",
-      "cycle": 0,
+      "cycle": 1,
       "week": 2,
       "weekLabel": "3s",
       "mainSets": [
@@ -213,7 +213,7 @@
     {
       "date": "2026-08-08",
       "lift": "squat",
-      "cycle": 0,
+      "cycle": 1,
       "week": 2,
       "weekLabel": "3s",
       "mainSets": [
@@ -244,7 +244,7 @@
     {
       "date": "2026-08-08",
       "lift": "press",
-      "cycle": 0,
+      "cycle": 1,
       "week": 3,
       "weekLabel": "5/3/1",
       "mainSets": [
@@ -275,7 +275,7 @@
     {
       "date": "2026-08-08",
       "lift": "deadlift",
-      "cycle": 0,
+      "cycle": 1,
       "week": 3,
       "weekLabel": "5/3/1",
       "mainSets": [
@@ -306,7 +306,7 @@
     {
       "date": "2026-08-08",
       "lift": "bench",
-      "cycle": 0,
+      "cycle": 1,
       "week": 3,
       "weekLabel": "5/3/1",
       "mainSets": [
@@ -337,7 +337,7 @@
     {
       "date": "2026-08-08",
       "lift": "squat",
-      "cycle": 0,
+      "cycle": 1,
       "week": 3,
       "weekLabel": "5/3/1",
       "mainSets": [
@@ -368,7 +368,7 @@
     {
       "date": "2026-08-31",
       "lift": "press",
-      "cycle": 0,
+      "cycle": 1,
       "week": 2,
       "weekLabel": "3s",
       "mainSets": [
