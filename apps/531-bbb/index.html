@@ -205,11 +205,13 @@
   .rest-timer{
     position:fixed;left:0;right:0;bottom:0;
     max-width:560px;margin:0 auto;
-    background:var(--steel);color:#fff;
+    background:var(--moss);color:#fff;
     display:flex;align-items:center;justify-content:space-between;gap:14px;
     padding:14px 20px calc(14px + env(safe-area-inset-bottom));
     z-index:30;
+    transition:background-color .3s ease;
   }
+  .rest-timer.overtime{background:var(--iron);}
   .rest-timer.hidden{display:none;}
   .rest-timer .rt-label{font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;opacity:0.85;}
   .rest-timer .rt-time{font-family:var(--font-display);font-size:24px;font-weight:600;flex:1;}
@@ -547,7 +549,9 @@
   let sessionWeights = null; // {main:[w,w,w], bbb:w} — editable overrides for the in-progress workout
   let warmupDone = [false, false, false];
   let mainDone = [false, false, false];
-  let restEndsAt = null; // ms epoch when the current rest countdown ends, or null if not resting
+  let restStartAt = null; // ms epoch when the current rest clock started, or null if not resting
+  let restTarget = 0; // seconds -- the usual rest length for this set type, used only to flag "overtime" colouring
+  let restOvertime = false; // true once elapsed has passed restTarget (drives the colour flip + one-time vibrate)
   let viewingCycle = state.cycle; // which cycle the Home progress grid is paged to
   let pendingPickDay = null; // {dayIndex, week} while the "choose a different day" modal is open
   let pendingCycleTMEdit = null; // {squat,bench,deadlift,press} while the TM-edit modal is open
@@ -564,39 +568,46 @@
 
   /* ---------------- rest timer ----------------
      A single global ticker (started once, never re-created) repaints the
-     countdown by id every tick — a full render() every 250ms would thrash
-     the whole page and steal focus, so the ticking display bypasses it and
-     only patches the two text nodes directly. render() itself still owns
-     showing/hiding the timer (based on restEndsAt) whenever something else
-     causes a re-render anyway. */
+     clock by id every tick — a full render() every 250ms would thrash the
+     whole page and steal focus, so the ticking display bypasses it and only
+     patches the text node + colour class directly. render() itself still
+     owns showing/hiding the timer (based on restStartAt) whenever something
+     else causes a re-render anyway.
+     It counts UP from the moment a set is ticked done, rather than down to
+     a target and disappearing -- so it always reads as "time since last
+     set" and stays on screen until the next set (which restarts it) or a
+     manual Skip. restTarget is only used to flip the colour/vibrate once
+     elapsed passes the usual rest length for that set type -- a nudge that
+     you've gone long, not a hard cutoff. */
   function startRest(seconds){
-    restEndsAt = Date.now() + seconds * 1000;
+    restStartAt = Date.now();
+    restTarget = seconds;
+    restOvertime = false;
     updateRestTimerUI();
   }
   function stopRest(){
-    restEndsAt = null;
+    restStartAt = null;
     updateRestTimerUI();
   }
   // Also used directly by renderTrain() so a freshly-rendered timer shows the
-  // real remaining time immediately, rather than a placeholder until the
-  // next tick of the global ticker below.
+  // real elapsed time immediately, rather than a placeholder until the next
+  // tick of the global ticker below.
   function restLabelText(){
-    if (!restEndsAt) return '0:00';
-    const s = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
+    if (!restStartAt) return '0:00';
+    const s = Math.max(0, Math.floor((Date.now() - restStartAt) / 1000));
     return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
   function updateRestTimerUI(){
     const el = document.getElementById('restTimer');
     if (!el) return; // not on Train right now
-    if (!restEndsAt){ el.classList.add('hidden'); return; }
-    const remainingMs = restEndsAt - Date.now();
-    if (remainingMs <= 0){
-      restEndsAt = null;
-      el.classList.add('hidden');
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-      return;
-    }
+    if (!restStartAt){ el.classList.add('hidden'); return; }
     el.classList.remove('hidden');
+    const elapsedS = Math.floor((Date.now() - restStartAt) / 1000);
+    if (elapsedS >= restTarget && !restOvertime){
+      restOvertime = true;
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    }
+    el.classList.toggle('overtime', restOvertime);
     const label = document.getElementById('restTimerLabel');
     if (label) label.textContent = restLabelText();
   }
@@ -925,8 +936,8 @@
 
         <button class="btn" data-action="finishWorkout">Finish &amp; log workout</button>
       </main>
-      <div class="rest-timer ${restEndsAt ? '' : 'hidden'}" id="restTimer">
-        <span class="rt-label">Resting</span>
+      <div class="rest-timer ${restStartAt ? '' : 'hidden'} ${restOvertime ? 'overtime' : ''}" id="restTimer">
+        <span class="rt-label">Since last set</span>
         <span class="rt-time" id="restTimerLabel">${restLabelText()}</span>
         <button type="button" class="rt-skip" data-action="skipRest">Skip</button>
       </div>
