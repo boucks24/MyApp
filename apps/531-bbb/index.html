@@ -173,6 +173,16 @@
   .lift-head{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
   .lift-head .name{font-family:var(--font-display);font-size:24px;font-weight:700;letter-spacing:0.01em;}
   .lift-head .meta{color:var(--muted);font-size:12px;}
+  .history-toggle-btn{
+    margin-left:auto;flex-shrink:0;
+    background:var(--panel-2);border:1px solid var(--line);color:var(--muted);
+    font-family:var(--font-body);font-weight:600;font-size:12px;
+    padding:8px 12px;cursor:pointer;touch-action:manipulation;
+  }
+  .history-toggle-btn.open{color:var(--chalk);border-color:var(--steel);}
+  .lift-history-panel{margin-top:10px;padding-top:2px;border-top:1px solid var(--line);}
+  .lift-history-panel .history-item{padding:10px 0;}
+  .lift-history-more{font-size:11px;color:var(--muted);padding-top:6px;text-align:center;}
 
   .set-row{
     display:flex;align-items:center;justify-content:space-between;
@@ -547,6 +557,7 @@
   let editingHistoryIdx = null;
   let pendingStaleReminder = null; // {exportedAt, days} when the committed backup file is over a month old
   let sessionWeights = null; // {main:[w,w,w], bbb:w} — editable overrides for the in-progress workout
+  let liftHistoryOpen = false; // Train's "history for this lift" panel -- collapsed by default, toggled per session
   let warmupDone = [false, false, false];
   let mainDone = [false, false, false];
   let restStartAt = null; // ms epoch when the current rest clock started, or null if not resting
@@ -561,6 +572,7 @@
   function go(r){
     route = r; bbbDone = 0; repsInput = {}; sessionWeights = null;
     warmupDone = [false, false, false]; mainDone = [false, false, false];
+    liftHistoryOpen = false;
     if (r === '531home') viewingCycle = state.cycle;
     stopRest();
     render(); window.scrollTo(0,0);
@@ -910,7 +922,9 @@
               <div class="name">${LIFT_LABEL[lift]}</div>
               <div class="meta">Training max ${fmtW(w.tm)}</div>
             </div>
+            <button type="button" class="history-toggle-btn ${liftHistoryOpen ? 'open' : ''}" data-action="toggleLiftHistory" aria-expanded="${liftHistoryOpen}">${liftHistoryOpen ? 'Hide history' : 'History'}</button>
           </div>
+          ${liftHistoryOpen ? renderLiftHistoryPanel(lift) : ''}
         </div>
 
         <div class="card">
@@ -987,6 +1001,40 @@
         </div>
       </div>
     `;
+  }
+
+  const LIFT_HISTORY_LIMIT = 6; // Train's inline history panel shows only the most recent N -- full log is one tab away
+
+  // Read-only, no Edit/Delete (unlike renderHistoryItem) -- this sits inline in an
+  // active workout, so it should be quick to glance at and not double as an editor.
+  function renderLiftHistoryPanel(lift){
+    const entries = history.filter(h => h.lift === lift).slice().reverse();
+    if (!entries.length){
+      return `<div class="lift-history-panel"><div class="empty" style="padding:16px 0;"><div>No previous ${LIFT_LABEL[lift]} workouts logged yet.</div></div></div>`;
+    }
+    const rows = entries.slice(0, LIFT_HISTORY_LIMIT).map(h => {
+      const top = h.mainSets[h.mainSets.length-1];
+      let detail;
+      if (top.amrap && top.actualReps){
+        const e1rm = Math.round(epley(top.weight, top.actualReps));
+        detail = `<span class="hi-pr">${top.actualReps} reps @ ${fmtW(top.weight)} · est. 1RM ${fmtW(e1rm)}</span>`;
+      } else {
+        detail = `Top set: ${fmtW(top.weight)} × ${top.reps ?? top.repsLabel}`;
+      }
+      return `
+        <div class="history-item">
+          <div class="hi-top">
+            <span class="hi-lift">${h.weekLabel}</span>
+            <span class="hi-date">${h.date}</span>
+          </div>
+          <div class="hi-detail">${detail}</div>
+        </div>
+      `;
+    }).join('');
+    const more = entries.length > LIFT_HISTORY_LIMIT
+      ? `<div class="lift-history-more">+ ${entries.length - LIFT_HISTORY_LIMIT} earlier in the History tab</div>`
+      : '';
+    return `<div class="lift-history-panel">${rows}${more}</div>`;
   }
 
   function renderHistory(){
@@ -1306,6 +1354,7 @@
     else if (action === 'startNewCycle') doStartNewCycle();
     else if (action === 'cycleCell') doCycleCellClick(parseInt(el.getAttribute('data-week')), el.getAttribute('data-lift'));
     else if (action === 'skipRest') stopRest();
+    else if (action === 'toggleLiftHistory') { liftHistoryOpen = !liftHistoryOpen; render(); }
     else if (action === 'cycleNav') {
       viewingCycle = Math.max(1, Math.min(state.cycle, viewingCycle + parseInt(el.getAttribute('data-dir'))));
       render();
