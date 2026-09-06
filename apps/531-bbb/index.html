@@ -290,7 +290,9 @@
     color:var(--muted);font-family:var(--font-display);font-size:13px;font-weight:600;letter-spacing:0.02em;cursor:pointer;}
   .subtab.active{background:var(--iron);border-color:var(--iron);color:#fff;}
 
-  .chart-card{margin-bottom:14px;}
+  .chart-card{margin-bottom:14px;cursor:pointer;touch-action:manipulation;transition:transform .12s ease;}
+  .chart-card:active{transform:scale(0.98);}
+  .chart-card .view-log-hint{margin-left:auto;color:var(--muted);font-size:11px;font-weight:600;flex-shrink:0;}
   .chart-empty{color:var(--muted);font-size:12px;padding:8px 0 2px;line-height:1.5;}
   .chart-latest{font-family:var(--font-display);font-size:22px;font-weight:600;margin-top:6px;}
   .chart-latest .u{color:var(--muted);font-size:11px;font-family:var(--font-body);font-weight:500;margin-left:6px;}
@@ -552,7 +554,7 @@
   let bbbDone = 0;
   let repsInput = {};
   let pendingCycleUp = null; // {tms:{...}} while modal shown
-  let historyTab = 'log'; // log | progress
+  let historyTab = 'progress'; // log | progress -- Progress opens first, Log is one tap (or one chart tap) away
   let historyLiftFilter = 'all'; // 'all' | lift key
   let progressCycle = 0; // 0 = all cycles combined; else a specific cycle number -- Progress tab's own cycle nav
   let editingHistoryIdx = null;
@@ -1188,13 +1190,14 @@
       const svg = buildSparkline(pts, LIFT_COLOR[lift]);
       const latest = pts.length ? pts[pts.length-1].v : null;
       return `
-        <div class="card chart-card">
+        <div class="card chart-card" data-action="viewLiftLog" data-lift="${lift}">
           <div class="lift-head" style="margin-bottom:6px;">
             <div class="plate ${LIFT_CLASS[lift]}"></div>
             <div>
               <div class="name" style="font-size:18px;">${LIFT_LABEL[lift]}</div>
               <div class="meta">Estimated 1-rep max, from logged AMRAP sets</div>
             </div>
+            <span class="view-log-hint">View log &rsaquo;</span>
           </div>
           ${svg ? svg : `<div class="chart-empty">${emptyMsg}</div>`}
           ${latest !== null ? `<div class="chart-latest">${fmtW(latest)}<span class="u">latest estimate</span></div>` : ''}
@@ -1366,6 +1369,11 @@
     else if (action === 'applyCycleUp') doApplyCycleUp();
     else if (action === 'skipCycleUp') doSkipCycleUp();
     else if (action === 'setHistoryTab') { historyTab = el.getAttribute('data-tab'); render(); }
+    else if (action === 'viewLiftLog') {
+      historyTab = 'log';
+      historyLiftFilter = el.getAttribute('data-lift');
+      render(); window.scrollTo(0,0);
+    }
     else if (action === 'editHistory') doEditHistory(parseInt(el.getAttribute('data-idx')));
     else if (action === 'cancelEditHistory') doCancelEditHistory();
     else if (action === 'saveEditHistory') doSaveEditHistory();
