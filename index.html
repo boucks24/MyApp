@@ -32,6 +32,7 @@
   }
   .hero .mark span.dot{color:var(--iron);}
   .hero .tag{color:var(--muted);font-size:14px;margin-top:8px;}
+  .hero .updated{color:var(--muted);font-size:11px;margin-top:6px;}
 
   .refresh-wrap{flex:0 0 auto;margin-top:4px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;}
   .refresh-btn{
@@ -71,6 +72,7 @@
     <div>
       <div class="mark">APP<span class="dot">.</span>SHELF</div>
       <div class="tag">Your own tools, one tap away.</div>
+      <div class="updated" id="lastUpdated">Checking last update&hellip;</div>
     </div>
     <div class="refresh-wrap">
       <button class="refresh-btn" id="refreshBtn" aria-label="Refresh page">
@@ -121,6 +123,18 @@
   // A plain location.reload() can still be served from the cached copy iOS
   // keeps for a home-screen web app — navigating to a new URL (a fresh query
   // string) forces an actual network fetch instead.
+  // Last-Modified reflects the actual file the server just handed us, so it
+  // proves whether a refresh really pulled a newer deploy (vs. a cached copy).
+  const lastUpdatedEl = document.getElementById('lastUpdated');
+  fetch(location.pathname, {cache:'no-store', method:'HEAD'})
+    .then(res => {
+      const lm = res.headers.get('last-modified');
+      lastUpdatedEl.textContent = lm
+        ? 'Last updated ' + new Date(lm).toLocaleString(undefined, {dateStyle:'medium', timeStyle:'short'})
+        : '';
+    })
+    .catch(() => { lastUpdatedEl.textContent = ''; });
+
   const refreshBtn = document.getElementById('refreshBtn');
   const refreshStatus = document.getElementById('refreshStatus');
   refreshBtn.addEventListener('click', () => {
