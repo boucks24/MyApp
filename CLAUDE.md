@@ -6,7 +6,7 @@ Static single-page app shelf (e.g. GitHub Pages). No `package.json`, no build/li
 - `index.html` — landing page tile grid (`.menu-grid`/`.tile`), links to `apps/<name>/`
 - `apps/531-bbb` — 5/3/1 lift tracker
 - `apps/court-allocator` — tennis court randomizer
-- `apps/rally-clipper` — tennis analysis: auto rally/shot detector + clip exporter, video↔.fit sync, and .fit route/wellness analysis (formerly the standalone Route Mapper app, merged in)
+- `apps/rally-clipper` — tennis analysis: auto rally/shot detector + clip exporter, video↔.fit sync, .fit route/wellness analysis (formerly the standalone Route Mapper app, merged in), and a pose-similarity photo montage builder
 - `apps/underpaint` — paint mixer, palette extractor, image-to-vector
 - `apps/scoreboard` — live/upcoming sport scores (ESPN public feeds)
 - `apps/sketchpad` — basic freehand drawing canvas

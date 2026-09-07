@@ -124,6 +124,17 @@
 
   .clip-filename{font-size:12px; color:var(--muted); margin-top:8px; word-break:break-all;}
 
+  /* Pose Montage thumbnail grids (upload preview + ordered sequence) */
+  .pm-thumb-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(72px,1fr)); gap:6px; margin-top:12px;}
+  .pm-thumb{position:relative; aspect-ratio:1; border-radius:8px; overflow:hidden; background:var(--court-dark);}
+  .pm-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .pm-thumb .pm-badge{position:absolute; top:3px; left:3px; background:rgba(0,0,0,0.6); color:var(--ball); font-size:10px; font-weight:700; padding:2px 5px; border-radius:6px; font-family:monospace;}
+  .pm-thumb .pm-remove{position:absolute; top:3px; right:3px; width:18px; height:18px; border-radius:50%; background:rgba(0,0,0,0.6); color:var(--line); display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1; cursor:pointer;}
+  .pm-thumb.pm-low-confidence{outline:2px solid var(--clay); outline-offset:-2px;}
+  .pm-thumb .pm-move{position:absolute; left:3px; right:3px; bottom:3px; display:flex; justify-content:space-between; gap:4px;}
+  .pm-thumb .pm-move-btn{padding:2px 7px; font-size:12px; border-radius:5px; background:rgba(0,0,0,0.6); color:var(--line);}
+  .pm-thumb .pm-move-btn:disabled{opacity:0.3;}
+
   /* ============================================================
      Fit Analysis + Video/Fit Sync — ported from the standalone Route
      Mapper app. Re-themed onto this app's court/clay/ball palette rather
@@ -222,11 +233,12 @@
   <header>
     <div class="eyebrow">Tennis</div>
     <h1>Tennis Analysis</h1>
-    <div class="sub">Find the rallies in a match video, sync a video against your watch's .fit data, or explore a route/wellness file on its own.</div>
+    <div class="sub">Find the rallies in a match video, sync a video against your watch's .fit data, explore a route/wellness file on its own, or build a montage from a batch of photos.</div>
     <nav class="tool-tabs">
       <button type="button" class="tool-tab-btn active" data-tool-tab="finder">Shot Finder</button>
       <button type="button" class="tool-tab-btn" data-tool-tab="sync">Video + Fit Sync</button>
       <button type="button" class="tool-tab-btn" data-tool-tab="fit">Fit Analysis</button>
+      <button type="button" class="tool-tab-btn" data-tool-tab="montage">Pose Montage</button>
     </nav>
   </header>
 
@@ -491,6 +503,50 @@
 
     <div class="hidden" id="rmFooterActions" style="margin-top:22px; text-align:center;">
       <button class="pill-btn" id="rmLoadAnotherBtn2" type="button" style="width:auto;">Load another file</button>
+    </div>
+  </section>
+
+  <section class="tool-panel" id="panel-montage">
+    <div class="card" id="pmUploadCard">
+      <h2>1. Upload photos</h2>
+      <div class="dropzone" id="pmDropzone">
+        <div><strong>Tap to choose</strong> tennis photos from your phone</div>
+        <div style="margin-top:4px;">Pick as many as you like — burst shots work well</div>
+      </div>
+      <input type="file" id="pmPhotosInput" accept="image/*" multiple class="visually-hidden-file">
+      <div class="status-line" id="pmUploadStatus"></div>
+      <div class="pm-thumb-grid" id="pmThumbGrid"></div>
+    </div>
+
+    <div class="card hidden" id="pmSettingsCard">
+      <h2>2. Order by body position</h2>
+      <div class="note" style="margin:0 0 14px; padding:0; border:none;">Runs pose detection (TensorFlow.js MoveNet, the same model Shot Finder's ball/swing tracking uses) on each photo, then chains them so similar limb angles and player size sit next to each other — aiming for a sequence that reads as one continuous, fluid motion rather than a random slideshow. Works best with one clear player per photo; a 2D pose model can't tell front from back, so treat the order as a strong starting point, not gospel.</div>
+      <button class="primary" id="pmAnalyzeBtn">Analyze &amp; order photos</button>
+      <div class="status-line" id="pmAnalyzeStatus"></div>
+      <div class="progress-track hidden" id="pmAnalyzeProgressTrack"><div class="progress-fill" id="pmAnalyzeProgressFill"></div></div>
+    </div>
+
+    <div class="card hidden" id="pmOrderCard">
+      <h2>3. Ordered sequence</h2>
+      <div class="note" style="margin:0 0 10px; padding:0; border:none;">Use the arrows to nudge a photo left/right — photos outlined in orange had no confident pose detected and were placed by best guess.</div>
+      <div class="pm-thumb-grid" id="pmOrderedGrid"></div>
+    </div>
+
+    <div class="card hidden" id="pmExportCard">
+      <h2>4. Build montage video</h2>
+      <div class="field-row">
+        <label>Seconds per photo <span class="val" id="pmHoldVal">1.0</span></label>
+        <input type="range" id="pmHoldSlider" min="0.4" max="3" step="0.1" value="1.0">
+      </div>
+      <div class="field-row">
+        <label>Crossfade (s) <span class="val" id="pmFadeVal">0.35</span></label>
+        <input type="range" id="pmFadeSlider" min="0" max="1" step="0.05" value="0.35">
+      </div>
+      <button class="primary" id="pmExportBtn">Build montage video</button>
+      <div class="status-line" id="pmExportStatus"></div>
+      <div class="progress-track hidden" id="pmExportProgressTrack"><div class="progress-fill" id="pmExportProgressFill"></div></div>
+      <video id="pmOutputVideo" class="hidden" controls playsinline></video>
+      <button class="secondary hidden" id="pmDownloadBtn" style="margin-top:10px;">Download video</button>
     </div>
   </section>
 </div>
@@ -2835,6 +2891,493 @@ el('rmPlayBtn').addEventListener('click', ()=>{
   playTimer = requestAnimationFrame(step);
 });
 
+})();
+
+/* ============================================================
+   TOOL: POSE MONTAGE
+   Takes a batch of stills, runs pose detection on each (MoveNet, the
+   same model Shot Finder's ball/swing tracking lazy-loads — but only
+   that model, not coco-ssd, since there's no ball to find here), and
+   chains the photos so similar limb-angle "body positions" and player
+   size sit next to each other: a nearest-neighbor walk over a
+   precomputed distance matrix, cleaned up with a bounded 2-opt pass so
+   the whole sequence reads as one smoother arc rather than just each
+   pair of neighbors matching. Angles (elbow/knee/shoulder/hip) rather
+   than raw keypoint coordinates make the match scale/position
+   invariant — the same swing phase lines up whether the player is
+   near or far from camera. Export renders the ordered photos (with a
+   short crossfade between each) into an actual MP4 via the same
+   WebCodecs+Mediabunny engine as Shot Finder's export, using
+   Mediabunny's CanvasSource to encode whatever's drawn on a canvas
+   frame-by-frame rather than remuxing existing video packets.
+   Independent IIFE, own `pm`-prefixed ids/classes — no state shared
+   with the other three tools. */
+(function(){
+  "use strict";
+
+  const dropzone = document.getElementById('pmDropzone');
+  const photosInput = document.getElementById('pmPhotosInput');
+  const uploadStatus = document.getElementById('pmUploadStatus');
+  const thumbGrid = document.getElementById('pmThumbGrid');
+  const settingsCard = document.getElementById('pmSettingsCard');
+  const analyzeBtn = document.getElementById('pmAnalyzeBtn');
+  const analyzeStatus = document.getElementById('pmAnalyzeStatus');
+  const analyzeProgressTrack = document.getElementById('pmAnalyzeProgressTrack');
+  const analyzeProgressFill = document.getElementById('pmAnalyzeProgressFill');
+  const orderCard = document.getElementById('pmOrderCard');
+  const orderedGrid = document.getElementById('pmOrderedGrid');
+  const exportCard = document.getElementById('pmExportCard');
+  const holdSlider = document.getElementById('pmHoldSlider');
+  const holdVal = document.getElementById('pmHoldVal');
+  const fadeSlider = document.getElementById('pmFadeSlider');
+  const fadeVal = document.getElementById('pmFadeVal');
+  const exportBtn = document.getElementById('pmExportBtn');
+  const exportStatus = document.getElementById('pmExportStatus');
+  const exportProgressTrack = document.getElementById('pmExportProgressTrack');
+  const exportProgressFill = document.getElementById('pmExportProgressFill');
+  const outputVideo = document.getElementById('pmOutputVideo');
+  const downloadBtn = document.getElementById('pmDownloadBtn');
+
+  const FEATURE_COUNT = 11;
+
+  let photos = []; // {id, file, url, img, width, height, features, size, confidence, lowConfidence}
+  let ordered = []; // indices into `photos`, current working order
+  let outputBlobUrl = null;
+  let nextId = 1;
+
+  function resetDownstream(){
+    orderCard.classList.add('hidden');
+    exportCard.classList.add('hidden');
+  }
+
+  dropzone.addEventListener('click', () => photosInput.click());
+  photosInput.addEventListener('change', () => {
+    const files = Array.from(photosInput.files || []).filter(f => f.type.startsWith('image/'));
+    photosInput.value = '';
+    if (!files.length) return;
+    files.forEach(file => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      const entry = { id: nextId++, file, url, img, width: 0, height: 0, features: null, size: 0, confidence: 0, lowConfidence: false };
+      img.onload = () => { entry.width = img.naturalWidth; entry.height = img.naturalHeight; };
+      img.src = url;
+      photos.push(entry);
+    });
+    renderThumbs();
+    uploadStatus.textContent = `${photos.length} photo${photos.length === 1 ? '' : 's'} loaded.`;
+    settingsCard.classList.toggle('hidden', photos.length < 2);
+    resetDownstream();
+  });
+
+  function renderThumbs(){
+    thumbGrid.innerHTML = '';
+    photos.forEach(p => {
+      const div = document.createElement('div');
+      div.className = 'pm-thumb';
+      div.innerHTML = `<img src="${p.url}" alt=""><div class="pm-remove" data-id="${p.id}">&times;</div>`;
+      thumbGrid.appendChild(div);
+    });
+  }
+
+  thumbGrid.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pm-remove');
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    const entry = photos.find(p => p.id === id);
+    if (entry) URL.revokeObjectURL(entry.url);
+    photos = photos.filter(p => p.id !== id);
+    renderThumbs();
+    uploadStatus.textContent = `${photos.length} photo${photos.length === 1 ? '' : 's'} loaded.`;
+    settingsCard.classList.toggle('hidden', photos.length < 2);
+    resetDownstream();
+  });
+
+  /* ---------------- pose model (MoveNet only — no ball detector needed here) ---------------- */
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = resolve;
+      el.onerror = () => reject(new Error('Failed to load ' + src));
+      document.head.appendChild(el);
+    });
+  }
+
+  let poseModel = null;
+  async function getPoseModel(onStatus){
+    if (!window.tf){
+      onStatus('Loading TensorFlow.js…');
+      await loadScript('https://unpkg.com/@tensorflow/tfjs@4.20.0/dist/tf.min.js');
+    }
+    if (!window.poseDetection){
+      onStatus('Loading pose detector…');
+      await loadScript('https://unpkg.com/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js');
+    }
+    if (!poseModel){
+      onStatus('Initializing pose model…');
+      poseModel = await window.poseDetection.createDetector(
+        window.poseDetection.SupportedModels.MoveNet,
+        { modelType: window.poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+      );
+    }
+    return poseModel;
+  }
+
+  /* ---------------- pose feature extraction ---------------- */
+  const MIN_KP_SCORE = 0.3;
+  function ok(k){ return k && k.score >= MIN_KP_SCORE; }
+
+  function angleAt(a, b, c){
+    // angle at vertex b (degrees), formed by rays b->a and b->c
+    const v1x = a.x - b.x, v1y = a.y - b.y;
+    const v2x = c.x - b.x, v2y = c.y - b.y;
+    const mag = Math.hypot(v1x, v1y) * Math.hypot(v2x, v2y);
+    if (mag < 1e-6) return null;
+    const dot = v1x * v2x + v1y * v2y;
+    return Math.acos(Math.max(-1, Math.min(1, dot / mag))) * 180 / Math.PI;
+  }
+
+  // Scale/position-invariant "body position" feature vector (joint angles,
+  // not raw coordinates, so the same swing phase matches across photos shot
+  // at different distances/framing) plus the player's size in frame.
+  function poseFeatures(pose, imgW, imgH){
+    const m = {};
+    pose.keypoints.forEach(k => { m[k.name] = k; });
+    const feats = [];
+    let filled = 0;
+
+    const pushAngle = (a, vertex, c) => {
+      if (ok(a) && ok(vertex) && ok(c)){
+        const ang = angleAt(a, vertex, c);
+        if (ang !== null){ feats.push(ang / 180); filled++; return; }
+      }
+      feats.push(0.5); // neutral fill for a missing/low-confidence joint
+    };
+
+    pushAngle(m.left_shoulder, m.left_elbow, m.left_wrist);
+    pushAngle(m.right_shoulder, m.right_elbow, m.right_wrist);
+    pushAngle(m.left_hip, m.left_knee, m.left_ankle);
+    pushAngle(m.right_hip, m.right_knee, m.right_ankle);
+    pushAngle(m.left_elbow, m.left_shoulder, m.left_hip);
+    pushAngle(m.right_elbow, m.right_shoulder, m.right_hip);
+    pushAngle(m.left_shoulder, m.left_hip, m.left_knee);
+    pushAngle(m.right_shoulder, m.right_hip, m.right_knee);
+
+    // torso lean: angle of the shoulder-mid -> hip-mid vector from vertical
+    if (ok(m.left_shoulder) && ok(m.right_shoulder) && ok(m.left_hip) && ok(m.right_hip)){
+      const sx = (m.left_shoulder.x + m.right_shoulder.x) / 2, sy = (m.left_shoulder.y + m.right_shoulder.y) / 2;
+      const hx = (m.left_hip.x + m.right_hip.x) / 2, hy = (m.left_hip.y + m.right_hip.y) / 2;
+      const ang = Math.atan2(hx - sx, hy - sy) * 180 / Math.PI; // 0 = upright
+      feats.push((ang + 90) / 180);
+      filled++;
+    } else feats.push(0.5);
+
+    // shoulder-line angle relative to horizontal — body rotation/tilt
+    if (ok(m.left_shoulder) && ok(m.right_shoulder)){
+      const ang = Math.atan2(m.right_shoulder.y - m.left_shoulder.y, m.right_shoulder.x - m.left_shoulder.x) * 180 / Math.PI;
+      feats.push((ang + 90) / 180);
+      filled++;
+    } else feats.push(0.5);
+
+    // arm spread relative to torso height — compact stance vs. full extension
+    if (ok(m.left_wrist) && ok(m.right_wrist) && ok(m.left_shoulder) && ok(m.right_shoulder) && ok(m.left_hip) && ok(m.right_hip)){
+      const torsoH = Math.hypot(
+        (m.left_shoulder.x + m.right_shoulder.x) / 2 - (m.left_hip.x + m.right_hip.x) / 2,
+        (m.left_shoulder.y + m.right_shoulder.y) / 2 - (m.left_hip.y + m.right_hip.y) / 2
+      ) || 1;
+      const wristDist = Math.hypot(m.left_wrist.x - m.right_wrist.x, m.left_wrist.y - m.right_wrist.y);
+      feats.push(Math.max(0, Math.min(1, wristDist / (torsoH * 2.5))));
+      filled++;
+    } else feats.push(0.5);
+
+    const ys = pose.keypoints.filter(ok).map(k => k.y);
+    const size = ys.length >= 2 ? (Math.max(...ys) - Math.min(...ys)) / imgH : 0;
+
+    return { feats, size, confidence: filled / FEATURE_COUNT };
+  }
+
+  function featureDistance(a, b){
+    let sum = 0;
+    for (let i = 0; i < FEATURE_COUNT; i++){ const d = a.feats[i] - b.feats[i]; sum += d * d; }
+    const poseDist = Math.sqrt(sum / FEATURE_COUNT);
+    const sizeDist = Math.abs(a.size - b.size);
+    return poseDist * 0.75 + sizeDist * 0.25;
+  }
+
+  /* ---------------- ordering: nearest-neighbor chain + bounded 2-opt ---------------- */
+  function buildDistanceMatrix(items){
+    const n = items.length;
+    const mat = Array.from({ length: n }, () => new Array(n).fill(0));
+    for (let i = 0; i < n; i++){
+      for (let j = i + 1; j < n; j++){
+        const d = featureDistance(items[i], items[j]);
+        mat[i][j] = d; mat[j][i] = d;
+      }
+    }
+    return mat;
+  }
+
+  function nearestNeighborOrder(mat, n){
+    const used = new Array(n).fill(false);
+    const order = [0];
+    used[0] = true;
+    for (let step = 1; step < n; step++){
+      const last = order[order.length - 1];
+      let best = -1, bestD = Infinity;
+      for (let j = 0; j < n; j++){
+        if (used[j]) continue;
+        if (mat[last][j] < bestD){ bestD = mat[last][j]; best = j; }
+      }
+      order.push(best);
+      used[best] = true;
+    }
+    return order;
+  }
+
+  // Classic open-path 2-opt: for two edges (i,i+1) and (k,k+1), reversing
+  // the segment between them can shorten the total path even after the
+  // greedy nearest-neighbor walk above committed to a locally-good-looking
+  // choice early on that turned out to box in a later step.
+  function twoOpt(order, mat, maxSweeps){
+    const n = order.length;
+    let improved = true, sweeps = 0;
+    while (improved && sweeps < maxSweeps){
+      improved = false;
+      sweeps++;
+      for (let i = 0; i < n - 2; i++){
+        for (let k = i + 1; k < n - 1; k++){
+          const a = order[i], b = order[i + 1], c = order[k], d = order[k + 1];
+          const before = mat[a][b] + mat[c][d];
+          const after = mat[a][c] + mat[b][d];
+          if (after + 1e-9 < before){
+            let lo = i + 1, hi = k;
+            while (lo < hi){ const t = order[lo]; order[lo] = order[hi]; order[hi] = t; lo++; hi--; }
+            improved = true;
+          }
+        }
+      }
+    }
+    return order;
+  }
+
+  function orderPhotos(items){
+    const n = items.length;
+    if (n < 3) return items.map((_, i) => i);
+    const mat = buildDistanceMatrix(items);
+    return twoOpt(nearestNeighborOrder(mat, n), mat, 25);
+  }
+
+  /* ---------------- analyze + order ---------------- */
+  analyzeBtn.addEventListener('click', async () => {
+    if (photos.length < 2) return;
+    analyzeBtn.disabled = true;
+    analyzeProgressTrack.classList.remove('hidden');
+    analyzeProgressFill.style.width = '0%';
+    analyzeStatus.textContent = 'Loading pose model…';
+
+    try {
+      await getPoseModel((msg) => { analyzeStatus.textContent = msg; });
+      analyzeStatus.textContent = 'Detecting poses…';
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const MAX_DIM = 480; // pose detection only needs a small frame; full-res photos stay untouched for export
+
+      for (let i = 0; i < photos.length; i++){
+        const p = photos[i];
+        const scale = Math.min(1, MAX_DIM / Math.max(p.width, p.height));
+        const cw = Math.max(1, Math.round(p.width * scale));
+        const ch = Math.max(1, Math.round(p.height * scale));
+        canvas.width = cw; canvas.height = ch;
+        ctx.drawImage(p.img, 0, 0, cw, ch);
+
+        let poses = [];
+        try { poses = await poseModel.estimatePoses(canvas); } catch (e){ /* skip photo on detector error */ }
+
+        if (poses.length){
+          const { feats, size, confidence } = poseFeatures(poses[0], cw, ch);
+          p.features = feats; p.size = size; p.confidence = confidence;
+        } else {
+          p.features = null; p.size = 0; p.confidence = 0;
+        }
+        analyzeProgressFill.style.width = Math.round(((i + 1) / photos.length) * 100) + '%';
+      }
+
+      // Photos with no/weak pose detection still need a placeholder feature
+      // vector to slot into the chain — impute the dataset mean rather than
+      // zeros, so they land wherever's least disruptive instead of skewing
+      // toward one extreme.
+      const confident = photos.filter(p => p.features && p.confidence >= 0.5);
+      const meanFeats = new Array(FEATURE_COUNT).fill(0.5);
+      let meanSize = 0;
+      if (confident.length){
+        meanFeats.fill(0);
+        confident.forEach(p => { p.features.forEach((f, i) => { meanFeats[i] += f; }); meanSize += p.size; });
+        for (let i = 0; i < FEATURE_COUNT; i++) meanFeats[i] /= confident.length;
+        meanSize /= confident.length;
+      }
+      photos.forEach(p => {
+        if (!p.features || p.confidence < 0.5){
+          p.features = meanFeats.slice();
+          if (!p.size) p.size = meanSize;
+          p.lowConfidence = true;
+        } else {
+          p.lowConfidence = false;
+        }
+      });
+
+      ordered = orderPhotos(photos.map(p => ({ feats: p.features, size: p.size })));
+      renderOrdered();
+      orderCard.classList.remove('hidden');
+      exportCard.classList.remove('hidden');
+      analyzeStatus.textContent = `Ordered ${photos.length} photos by body position.`;
+    } catch (err){
+      console.error(err);
+      analyzeStatus.textContent = `Pose analysis failed${err && err.message ? ' (' + err.message + ')' : ''}.`;
+    }
+
+    analyzeBtn.disabled = false;
+  });
+
+  function renderOrdered(){
+    orderedGrid.innerHTML = '';
+    ordered.forEach((photoIdx, pos) => {
+      const p = photos[photoIdx];
+      const div = document.createElement('div');
+      div.className = 'pm-thumb' + (p.lowConfidence ? ' pm-low-confidence' : '');
+      div.innerHTML = `
+        <img src="${p.url}" alt="">
+        <div class="pm-badge">${pos + 1}</div>
+        <div class="pm-move">
+          <button type="button" class="small pm-move-btn" data-action="left" data-pos="${pos}" ${pos === 0 ? 'disabled' : ''}>&lsaquo;</button>
+          <button type="button" class="small pm-move-btn" data-action="right" data-pos="${pos}" ${pos === ordered.length - 1 ? 'disabled' : ''}>&rsaquo;</button>
+        </div>`;
+      orderedGrid.appendChild(div);
+    });
+  }
+
+  orderedGrid.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pm-move-btn');
+    if (!btn) return;
+    const pos = Number(btn.dataset.pos);
+    const swapPos = pos + (btn.dataset.action === 'left' ? -1 : 1);
+    if (swapPos < 0 || swapPos >= ordered.length) return;
+    [ordered[pos], ordered[swapPos]] = [ordered[swapPos], ordered[pos]];
+    renderOrdered();
+  });
+
+  /* ---------------- export via WebCodecs + Mediabunny (CanvasSource) ---------------- */
+  let mediabunnyLoaded = false;
+  async function getMediabunny(){
+    if (!mediabunnyLoaded && !window.Mediabunny){
+      await loadScript('mediabunny.min.js');
+    }
+    mediabunnyLoaded = true;
+    return window.Mediabunny;
+  }
+
+  holdSlider.addEventListener('input', () => { holdVal.textContent = Number(holdSlider.value).toFixed(1); });
+  fadeSlider.addEventListener('input', () => { fadeVal.textContent = Number(fadeSlider.value).toFixed(2); });
+
+  async function buildMontage(Mediabunny, orderedPhotos, holdSeconds, fadeSeconds, onProgress){
+    const FPS = 24;
+    // Canvas sized to the average aspect ratio across all photos; each one
+    // is letterboxed (contain-fit) into it so mixed portrait/landscape
+    // bursts don't get cropped.
+    const avgAspect = orderedPhotos.reduce((s, p) => s + p.width / p.height, 0) / orderedPhotos.length;
+    let W = 960, H = Math.round(W / avgAspect);
+    W += W % 2; H += H % 2; // even dimensions required by the H.264 encoder
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    const output = new Mediabunny.Output({ format: new Mediabunny.Mp4OutputFormat(), target: new Mediabunny.BufferTarget() });
+    const source = new Mediabunny.CanvasSource(canvas, { codec: 'avc', bitrate: 6_000_000 });
+    output.addVideoTrack(source);
+    await output.start();
+
+    function drawContain(img, alpha){
+      const scale = Math.min(W / img.width, H / img.height);
+      const w = img.width * scale, h = img.height * scale;
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+      ctx.globalAlpha = 1;
+    }
+
+    const frameDur = 1 / FPS;
+    const holdFrames = Math.max(1, Math.round(holdSeconds * FPS));
+    const fadeFrames = Math.max(0, Math.round(fadeSeconds * FPS));
+    const totalFrames = orderedPhotos.length * holdFrames + (orderedPhotos.length - 1) * fadeFrames;
+    let frame = 0, t = 0;
+
+    for (let i = 0; i < orderedPhotos.length; i++){
+      if (i > 0 && fadeFrames > 0){
+        for (let f = 0; f < fadeFrames; f++){
+          const p = (f + 1) / (fadeFrames + 1);
+          ctx.fillStyle = '#1A362D'; ctx.fillRect(0, 0, W, H);
+          drawContain(orderedPhotos[i - 1].img, 1 - p);
+          drawContain(orderedPhotos[i].img, p);
+          await source.add(t, frameDur);
+          t += frameDur; frame++;
+          onProgress(frame / totalFrames);
+        }
+      }
+      for (let f = 0; f < holdFrames; f++){
+        ctx.fillStyle = '#1A362D'; ctx.fillRect(0, 0, W, H);
+        drawContain(orderedPhotos[i].img, 1);
+        await source.add(t, frameDur);
+        t += frameDur; frame++;
+        onProgress(frame / totalFrames);
+      }
+    }
+
+    await output.finalize();
+    return new Blob([output.target.buffer], { type: 'video/mp4' });
+  }
+
+  exportBtn.addEventListener('click', async () => {
+    if (!ordered.length) return;
+    if (typeof VideoEncoder === 'undefined'){
+      exportStatus.textContent = 'Exporting needs a browser with video-encoding support (Safari 16.4+, Chrome, Edge, or Firefox 130+).';
+      return;
+    }
+
+    exportBtn.disabled = true;
+    exportProgressTrack.classList.remove('hidden');
+    exportProgressFill.style.width = '0%';
+    exportStatus.textContent = 'Loading video engine…';
+
+    try {
+      const Mediabunny = await getMediabunny();
+      exportStatus.textContent = 'Rendering montage…';
+      const orderedPhotos = ordered.map(i => photos[i]);
+      const blob = await buildMontage(Mediabunny, orderedPhotos, Number(holdSlider.value), Number(fadeSlider.value), (ratio) => {
+        exportProgressFill.style.width = Math.min(99, ratio * 100).toFixed(0) + '%';
+      });
+
+      if (outputBlobUrl) URL.revokeObjectURL(outputBlobUrl);
+      outputBlobUrl = URL.createObjectURL(blob);
+      outputVideo.src = outputBlobUrl;
+      outputVideo.classList.remove('hidden');
+      downloadBtn.classList.remove('hidden');
+      exportProgressFill.style.width = '100%';
+      exportStatus.textContent = `Done — ${orderedPhotos.length} photos rendered into one montage.`;
+    } catch (err){
+      console.error(err);
+      exportStatus.textContent = `Export failed${err && err.message ? ' (' + err.message + ')' : ''}.`;
+    }
+
+    exportBtn.disabled = false;
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if (!outputBlobUrl) return;
+    const a = document.createElement('a');
+    a.href = outputBlobUrl;
+    a.download = 'pose-montage.mp4';
+    a.click();
+  });
 })();
 
 </script>
