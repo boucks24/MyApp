@@ -1032,18 +1032,37 @@
   /* ---------------- export via ffmpeg.wasm ---------------- */
   let ffmpegInstance = null;
 
+  // The single-threaded @ffmpeg/core package doesn't actually need real
+  // shared memory, but @ffmpeg/ffmpeg's loader references the
+  // SharedArrayBuffer global unconditionally while deciding how to talk to
+  // it -- and that global doesn't exist at all (not just "disabled") on a
+  // plain static host like GitHub Pages, which can't set the
+  // Cross-Origin-Opener/Embedder-Policy headers real cross-origin isolation
+  // requires. Without this shim, load() throws "Can't find variable:
+  // SharedArrayBuffer" before ever reaching real ffmpeg code.
+  if (typeof window.SharedArrayBuffer === 'undefined'){
+    window.SharedArrayBuffer = ArrayBuffer;
+  }
+
   async function getFfmpeg(onLog){
     if (ffmpegInstance) return ffmpegInstance;
     if (!window.FFmpeg){
       await loadScript('https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
     }
     const { createFFmpeg } = window.FFmpeg;
-    ffmpegInstance = createFFmpeg({
+    const instance = createFFmpeg({
       log: false,
       corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
       progress: ({ ratio }) => { if (onLog && ratio >= 0) onLog(ratio); }
     });
-    await ffmpegInstance.load();
+    // Only commit to the module-level cache once load() actually succeeds --
+    // caching it beforehand meant a failed load() (e.g. the
+    // SharedArrayBuffer error above) left ffmpegInstance permanently set to
+    // a never-loaded instance, so every subsequent export attempt skipped
+    // load() entirely and failed instantly with ffmpeg.wasm's own "not
+    // ready, make sure you have completed load()" instead of retrying.
+    await instance.load();
+    ffmpegInstance = instance;
     return ffmpegInstance;
   }
 
