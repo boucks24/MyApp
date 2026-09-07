@@ -49,6 +49,13 @@
   }
   .dropzone.drag{border-color:var(--ball); background:#132621;}
   .dropzone strong{color:var(--line);}
+  /* Visually hidden rather than display:none -- some mobile browsers are
+     unreliable about firing 'change' on a file input that's display:none at
+     the moment the native picker hands the file back. */
+  .visually-hidden-file{
+    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+  }
 
   video{width:100%; border-radius:10px; margin-top:12px; display:block; background:#000;}
 
@@ -230,7 +237,8 @@
       <div><strong>Tap to choose</strong> a video from your phone</div>
       <div style="margin-top:4px;">MP4 or MOV, ideally under a few minutes for a first try</div>
     </div>
-    <input type="file" id="fileInput" accept="video/*" style="display:none;">
+    <input type="file" id="fileInput" accept="video/*" class="visually-hidden-file">
+    <div class="status-line" id="uploadStatus"></div>
     <video id="previewVideo" class="hidden" controls playsinline></video>
   </div>
 
@@ -313,8 +321,8 @@
           <div><strong>Tap to choose</strong> a .fit file</div>
         </div>
       </div>
-      <input type="file" id="syncVideoInput" accept="video/*" style="display:none;">
-      <input type="file" id="syncFitInput" accept=".fit,application/octet-stream" style="display:none;">
+      <input type="file" id="syncVideoInput" accept="video/*" class="visually-hidden-file">
+      <input type="file" id="syncFitInput" accept=".fit,application/octet-stream" class="visually-hidden-file">
       <div id="syncVideoTag" class="rm-file-tag hidden"></div>
       <div id="syncFitTag" class="rm-file-tag hidden"></div>
       <div class="status-line" id="syncStatus"></div>
@@ -361,7 +369,7 @@
       <div class="dropzone" id="rmDropzone">
         <div><strong>Tap to choose</strong> .fit file(s), or drag them here</div>
       </div>
-      <input type="file" id="rmFileInput" accept=".fit,application/octet-stream" multiple style="display:none;">
+      <input type="file" id="rmFileInput" accept=".fit,application/octet-stream" multiple class="visually-hidden-file">
       <div class="status-line" id="rmErrBanner"></div>
     </div>
 
@@ -493,6 +501,7 @@
 
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('fileInput');
+  const uploadStatus = document.getElementById('uploadStatus');
   const previewVideo = document.getElementById('previewVideo');
   const settingsCard = document.getElementById('settingsCard');
   const resultsCard = document.getElementById('resultsCard');
@@ -532,7 +541,14 @@
 
   /* ---------------- upload ---------------- */
   dropzone.addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+  fileInput.addEventListener('change', () => {
+    // A picker that closes with no file (a slow/failed iCloud download on
+    // iOS can do this) used to leave the page looking stuck with zero
+    // feedback -- surface it instead of silently doing nothing.
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+    else uploadStatus.textContent = 'No video came through from that picker -- try again, or pick a different file.';
+    fileInput.value = '';
+  });
   ['dragover'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
   ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, () => dropzone.classList.remove('drag')));
   dropzone.addEventListener('drop', e => {
@@ -542,6 +558,7 @@
 
   function handleFile(file){
     currentFile = file;
+    uploadStatus.textContent = `Loading "${file.name}"…`;
     const url = URL.createObjectURL(file);
     previewVideo.src = url;
     previewVideo.classList.remove('hidden');
@@ -549,7 +566,8 @@
     resultsCard.classList.add('hidden');
     exportCard.classList.add('hidden');
     analyzeStatus.textContent = '';
-    previewVideo.onloadedmetadata = () => { videoDuration = previewVideo.duration; };
+    previewVideo.onloadedmetadata = () => { videoDuration = previewVideo.duration; uploadStatus.textContent = ''; };
+    previewVideo.onerror = () => { uploadStatus.textContent = `Couldn't load "${file.name}" -- it may be an unsupported format or a corrupted file.`; };
   }
 
   [motionSlider, audioSlider, minLenSlider, padSlider, mlSlider, mlIntervalSlider].forEach(s => {
