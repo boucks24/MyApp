@@ -299,7 +299,7 @@
     <h2>4. Export</h2>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:14px;">
       <input type="checkbox" id="preciseCutsToggle" style="width:18px;height:18px;accent-color:var(--ball);">
-      Frame-accurate cuts (re-encodes — much slower, but exact; turn this on if your source video is HEVC/H.265, e.g. an iPhone's default format, so the exported clip plays everywhere)
+      Frame-accurate cuts (re-encodes to H.264 — slower, but exact cut points instead of the nearest keyframe, and guaranteed to play everywhere even if your source is HEVC/H.265)
     </label>
     <button class="primary" id="exportBtn">Export clipped video</button>
     <div class="status-line" id="exportStatus"></div>
@@ -1029,103 +1029,156 @@
     });
   }
 
-  /* ---------------- export via ffmpeg.wasm ---------------- */
-  let ffmpegInstance = null;
-
-  // The single-threaded @ffmpeg/core package doesn't actually need real
-  // shared memory, but @ffmpeg/ffmpeg's loader references the
-  // SharedArrayBuffer global unconditionally while deciding how to talk to
-  // it -- and that global doesn't exist at all (not just "disabled") on a
-  // plain static host like GitHub Pages, which can't set the
-  // Cross-Origin-Opener/Embedder-Policy headers real cross-origin isolation
-  // requires. Without this shim, load() throws "Can't find variable:
-  // SharedArrayBuffer" before ever reaching real ffmpeg code.
-  if (typeof window.SharedArrayBuffer === 'undefined'){
-    window.SharedArrayBuffer = ArrayBuffer;
+  /* ---------------- export via WebCodecs + Mediabunny ----------------
+     Replaced ffmpeg.wasm entirely: no WASM heap ceiling (so no more "bad
+     memory" on longer videos), no SharedArrayBuffer/cross-origin-isolation
+     workaround needed, and it streams packet-by-packet through the
+     browser's own (often hardware) codecs instead of loading the whole
+     file into a fixed-size arena. Mediabunny (vendored, mediabunny.min.js,
+     MPL-2.0) supplies MP4 demux/mux, since WebCodecs itself has no
+     container support. */
+  let mediabunnyLoaded = false;
+  async function getMediabunny(){
+    if (!mediabunnyLoaded && !window.Mediabunny){
+      await loadScript('mediabunny.min.js');
+    }
+    mediabunnyLoaded = true;
+    return window.Mediabunny;
   }
 
-  async function getFfmpeg(onLog){
-    if (ffmpegInstance) return ffmpegInstance;
-    if (!window.FFmpeg){
-      await loadScript('https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
-    }
-    const { createFFmpeg } = window.FFmpeg;
-    const instance = createFFmpeg({
-      log: false,
-      corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
-      progress: ({ ratio }) => { if (onLog && ratio >= 0) onLog(ratio); }
-    });
-    // Only commit to the module-level cache once load() actually succeeds --
-    // caching it beforehand meant a failed load() (e.g. the
-    // SharedArrayBuffer error above) left ffmpegInstance permanently set to
-    // a never-loaded instance, so every subsequent export attempt skipped
-    // load() entirely and failed instantly with ffmpeg.wasm's own "not
-    // ready, make sure you have completed load()" instead of retrying.
-    await instance.load();
-    ffmpegInstance = instance;
-    return ffmpegInstance;
+  // Fast/no-transcode path can't truncate mid-GOP: packets iterate in
+  // DECODE order, which legitimately differs from presentation order when
+  // B-frames are present, so cutting partway through a GOP can hand the
+  // muxer a timestamp the encode's own reordering makes look out of order.
+  // Round the end boundary OUT to the start of the next GOP (the start is
+  // already rounded DOWN to a keyframe) so every GOP touched is whole.
+  async function wholeGopEndBoundary(sink, endTimestamp){
+    const gopStart = await sink.getKeyPacket(endTimestamp);
+    if (!gopStart) return undefined; // nothing at/after this point -> run to end of track
+    // .packets()'s end-boundary param must be an EncodedPacket or omitted
+    // entirely; a "no next keyframe" null must become undefined for
+    // "run to end of track" to actually take effect.
+    return (await sink.getNextKeyPacket(gopStart)) ?? undefined;
   }
 
-  // ffmpegInstance (and its virtual FS) is cached and reused across export
-  // attempts -- without deleting these files afterwards, every export (even
-  // a failed or re-run one) permanently pins more of the WASM heap for the
-  // rest of the page's life, since MEMFS entries never free themselves.
-  // That's what turns "export a video" into "bad memory" after a retry or
-  // two, well before the video itself is actually too big to handle.
-  function cleanupFfmpegFs(ffmpeg, segCount){
-    const names = ['input.mp4', 'list.txt', 'output.mp4'];
-    for (let i = 0; i < segCount; i++) names.push(`seg${i}.mp4`);
-    for (const name of names){
-      try { ffmpeg.FS('unlink', name); } catch (e) { /* never written this run */ }
+  // Cuts+joins `shots` (each {start,end} in seconds) out of `file` into one
+  // MP4 Blob. `precise`=false copies encoded packets as-is (fast, lossless,
+  // snaps to keyframes); `precise`=true decodes and re-encodes to H.264 for
+  // exact cut points at the cost of speed. Shared by both modes: a running
+  // per-track `lastMaxTs` that only ever gates the *next* shot's starting
+  // cursor (never individual packets/samples within a shot, which would
+  // corrupt normal B-frame reordering) against the true previous-shot max,
+  // computed from the next GOP's own keyframe timestamp rather than by
+  // summing packet durations (some encodes report a short/estimated
+  // duration on a GOP's last packet).
+  async function joinShots(Mediabunny, file, shots, precise, onProgress){
+    const input = new Mediabunny.Input({ formats: Mediabunny.ALL_FORMATS, source: new Mediabunny.BlobSource(file) });
+    const videoTrack = await input.getPrimaryVideoTrack();
+    if (!videoTrack) throw new Error('No video track found in this file.');
+    if (!(await videoTrack.canDecode()) && precise) {
+      throw new Error('This video’s format can’t be decoded in this browser for frame-accurate cuts.');
     }
+    const audioTrack = await input.getPrimaryAudioTrack();
+
+    const output = new Mediabunny.Output({ format: new Mediabunny.Mp4OutputFormat(), target: new Mediabunny.BufferTarget() });
+
+    const decoderConfig = await videoTrack.getDecoderConfig();
+    const audioDecoderConfig = audioTrack ? await audioTrack.getDecoderConfig() : null;
+
+    const vSource = precise
+      ? new Mediabunny.VideoSampleSource({ codec: 'avc', bitrate: 4_000_000 })
+      : new Mediabunny.EncodedVideoPacketSource(await videoTrack.getCodec());
+    const vSink = precise ? new Mediabunny.VideoSampleSink(videoTrack) : new Mediabunny.EncodedPacketSink(videoTrack);
+    output.addVideoTrack(vSource);
+
+    let aSource = null, aSink = null;
+    if (audioTrack) {
+      aSource = precise
+        ? new Mediabunny.AudioSampleSource({ codec: 'aac', bitrate: 128_000 })
+        : new Mediabunny.EncodedAudioPacketSource(await audioTrack.getCodec());
+      aSink = precise ? new Mediabunny.AudioSampleSink(audioTrack) : new Mediabunny.EncodedPacketSink(audioTrack);
+      output.addAudioTrack(aSource);
+    }
+
+    await output.start();
+
+    async function fastJoin(sink, source, shot, cursor, state){
+      const EPS = 1e-6;
+      if (cursor <= state.lastMaxTs) cursor = state.lastMaxTs + EPS;
+      const startPacket = await sink.getKeyPacket(shot.start) ?? await sink.getFirstPacket();
+      const endPacket = await wholeGopEndBoundary(sink, shot.end);
+      if (!startPacket) return cursor;
+      const base = startPacket.timestamp;
+      let shotEnd = endPacket ? cursor + (endPacket.timestamp - base) : cursor;
+      for await (const p of sink.packets(startPacket, endPacket)) {
+        const ts = cursor + (p.timestamp - base);
+        await source.add(p.clone({ timestamp: ts }), state.first ? { decoderConfig: state.decoderConfig } : undefined);
+        state.first = false;
+        shotEnd = Math.max(shotEnd, ts + p.duration);
+      }
+      state.lastMaxTs = shotEnd;
+      return shotEnd;
+    }
+
+    async function preciseJoin(sink, source, shot, cursor, state){
+      const EPS = 1e-6;
+      if (cursor <= state.lastMaxTs) cursor = state.lastMaxTs + EPS;
+      let base = null, shotEnd = cursor;
+      for await (const s of sink.samples(shot.start, shot.end)) {
+        if (base === null) base = s.timestamp;
+        const ts = cursor + (s.timestamp - base);
+        s.setTimestamp(ts);
+        await source.add(s);
+        s.close();
+        shotEnd = Math.max(shotEnd, ts + s.duration);
+      }
+      state.lastMaxTs = shotEnd;
+      return shotEnd;
+    }
+
+    let vCursor = 0, aCursor = 0;
+    const vState = { first: true, lastMaxTs: -Infinity, decoderConfig };
+    const aState = { first: true, lastMaxTs: -Infinity, decoderConfig: audioDecoderConfig };
+    const totalKept = shots.reduce((sum, s) => sum + (s.end - s.start), 0) || 1;
+    let doneSoFar = 0;
+
+    for (const shot of shots) {
+      vCursor = precise ? await preciseJoin(vSink, vSource, shot, vCursor, vState)
+                        : await fastJoin(vSink, vSource, shot, vCursor, vState);
+      if (audioTrack) {
+        aCursor = precise ? await preciseJoin(aSink, aSource, shot, aCursor, aState)
+                          : await fastJoin(aSink, aSource, shot, aCursor, aState);
+      }
+      doneSoFar += shot.end - shot.start;
+      if (onProgress) onProgress(Math.min(1, doneSoFar / totalKept));
+    }
+
+    await output.finalize();
+    return new Blob([output.target.buffer], { type: 'video/mp4' });
   }
 
   exportBtn.addEventListener('click', async () => {
     const included = shots.filter(s => s.include);
     if (!included.length || !currentFile) return;
 
+    if (typeof VideoDecoder === 'undefined' || typeof VideoEncoder === 'undefined') {
+      exportStatus.textContent = 'Exporting needs a browser with video-encoding support (Safari 16.4+, Chrome, Edge, or Firefox 130+).';
+      return;
+    }
+
     exportBtn.disabled = true;
     exportProgressTrack.classList.remove('hidden');
     exportProgressFill.style.width = '0%';
-    exportStatus.textContent = 'Loading video engine (first time only, ~20MB)…';
+    exportStatus.textContent = 'Loading video engine…';
 
-    let ffmpeg = null;
     try {
-      ffmpeg = await getFfmpeg((ratio) => {
-        exportProgressFill.style.width = Math.min(95, ratio * 100).toFixed(0) + '%';
-      });
-      const { fetchFile } = window.FFmpeg;
-
-      exportStatus.textContent = 'Preparing video…';
-      ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(currentFile));
-
+      const Mediabunny = await getMediabunny();
+      exportStatus.textContent = 'Cutting and joining shots…';
       const precise = preciseCutsToggle.checked;
-      const listLines = [];
+      const blob = await joinShots(Mediabunny, currentFile, included, precise, (ratio) => {
+        exportProgressFill.style.width = Math.min(99, ratio * 100).toFixed(0) + '%';
+      });
 
-      for (let i = 0; i < included.length; i++){
-        const s = included[i];
-        const outName = `seg${i}.mp4`;
-        exportStatus.textContent = `Cutting shot ${i+1} of ${included.length}…`;
-        const duration = Math.max(0.1, s.end - s.start);
-        const args = precise
-          ? ['-ss', String(s.start), '-i', 'input.mp4', '-t', String(duration), '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', outName]
-          : ['-ss', String(s.start), '-i', 'input.mp4', '-t', String(duration), '-c', 'copy', outName];
-        await ffmpeg.run(...args);
-        listLines.push(`file '${outName}'`);
-        exportProgressFill.style.width = (5 + (i+1)/included.length * 70).toFixed(0) + '%';
-      }
-
-      // Free the (often large) source file before the join step, which is
-      // the point of highest memory pressure -- it's already been read into
-      // every segment and isn't needed again.
-      try { ffmpeg.FS('unlink', 'input.mp4'); } catch (e) { /* ignore */ }
-
-      ffmpeg.FS('writeFile', 'list.txt', new TextEncoder().encode(listLines.join('\n')));
-      exportStatus.textContent = 'Joining shots together…';
-      await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'output.mp4');
-
-      const data = ffmpeg.FS('readFile', 'output.mp4');
-      const blob = new Blob([data.buffer], { type: 'video/mp4' });
       if (outputBlobUrl) URL.revokeObjectURL(outputBlobUrl);
       outputBlobUrl = URL.createObjectURL(blob);
 
@@ -1137,12 +1190,7 @@
     } catch (err){
       console.error(err);
       const detail = err && err.message ? ` (${err.message})` : '';
-      const isMemory = err && /memory/i.test(err.message || '');
-      exportStatus.textContent = isMemory
-        ? `Export failed${detail} — the video engine ran out of memory. Try fewer shots per export, "Frame-accurate cuts" off, or reloading the page first.`
-        : `Export failed${detail} — try "Frame-accurate cuts" off, or a shorter video.`;
-    } finally {
-      if (ffmpeg) cleanupFfmpegFs(ffmpeg, included.length);
+      exportStatus.textContent = `Export failed${detail} — try "Frame-accurate cuts" off, or a shorter video.`;
     }
 
     exportBtn.disabled = false;
