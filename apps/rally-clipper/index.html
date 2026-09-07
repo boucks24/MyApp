@@ -1066,6 +1066,20 @@
     return ffmpegInstance;
   }
 
+  // ffmpegInstance (and its virtual FS) is cached and reused across export
+  // attempts -- without deleting these files afterwards, every export (even
+  // a failed or re-run one) permanently pins more of the WASM heap for the
+  // rest of the page's life, since MEMFS entries never free themselves.
+  // That's what turns "export a video" into "bad memory" after a retry or
+  // two, well before the video itself is actually too big to handle.
+  function cleanupFfmpegFs(ffmpeg, segCount){
+    const names = ['input.mp4', 'list.txt', 'output.mp4'];
+    for (let i = 0; i < segCount; i++) names.push(`seg${i}.mp4`);
+    for (const name of names){
+      try { ffmpeg.FS('unlink', name); } catch (e) { /* never written this run */ }
+    }
+  }
+
   exportBtn.addEventListener('click', async () => {
     const included = shots.filter(s => s.include);
     if (!included.length || !currentFile) return;
@@ -1075,8 +1089,9 @@
     exportProgressFill.style.width = '0%';
     exportStatus.textContent = 'Loading video engine (first time only, ~20MB)…';
 
+    let ffmpeg = null;
     try {
-      const ffmpeg = await getFfmpeg((ratio) => {
+      ffmpeg = await getFfmpeg((ratio) => {
         exportProgressFill.style.width = Math.min(95, ratio * 100).toFixed(0) + '%';
       });
       const { fetchFile } = window.FFmpeg;
@@ -1100,6 +1115,11 @@
         exportProgressFill.style.width = (5 + (i+1)/included.length * 70).toFixed(0) + '%';
       }
 
+      // Free the (often large) source file before the join step, which is
+      // the point of highest memory pressure -- it's already been read into
+      // every segment and isn't needed again.
+      try { ffmpeg.FS('unlink', 'input.mp4'); } catch (e) { /* ignore */ }
+
       ffmpeg.FS('writeFile', 'list.txt', new TextEncoder().encode(listLines.join('\n')));
       exportStatus.textContent = 'Joining shots together…';
       await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'output.mp4');
@@ -1117,7 +1137,12 @@
     } catch (err){
       console.error(err);
       const detail = err && err.message ? ` (${err.message})` : '';
-      exportStatus.textContent = `Export failed${detail} — try "Frame-accurate cuts" off, or a shorter video.`;
+      const isMemory = err && /memory/i.test(err.message || '');
+      exportStatus.textContent = isMemory
+        ? `Export failed${detail} — the video engine ran out of memory. Try fewer shots per export, "Frame-accurate cuts" off, or reloading the page first.`
+        : `Export failed${detail} — try "Frame-accurate cuts" off, or a shorter video.`;
+    } finally {
+      if (ffmpeg) cleanupFfmpegFs(ffmpeg, included.length);
     }
 
     exportBtn.disabled = false;
