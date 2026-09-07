@@ -1055,13 +1055,18 @@
     return ffmpegInstance;
   }
 
-  // ffmpeg always prints input stream info to stderr even when asked to do
-  // nothing else, so a no-output "probe" run is enough to feed the logger
-  // above -- it always exits non-zero (no output specified), which is
-  // expected and not a real failure.
+  // ffmpeg always prints input stream info to stderr, so decoding 0.1s to a
+  // null sink is enough to feed the logger above with zero real work.
+  // IMPORTANT: this must be a normal, successful (exit-0) invocation -- an
+  // earlier version ran a deliberately-erroring `-i input.mp4` with no
+  // output at all to get the same log line, but ffmpeg.wasm's single WASM
+  // instance doesn't reliably survive a non-zero exit: the *next* run() (the
+  // real cut) would go on to ignore -ss/-t and just copy the whole input
+  // through, which is exactly the "1 shot found but exported the entire
+  // video" bug this replaced.
   async function probeIsHevc(ffmpeg){
     lastInputWasHevc = false;
-    try { await ffmpeg.run('-i', 'input.mp4'); } catch (err) { /* expected -- no output file given */ }
+    await ffmpeg.run('-i', 'input.mp4', '-t', '0.1', '-f', 'null', '-');
     return lastInputWasHevc;
   }
 
