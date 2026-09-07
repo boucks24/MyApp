@@ -299,7 +299,7 @@
     <h2>4. Export</h2>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:14px;">
       <input type="checkbox" id="preciseCutsToggle" style="width:18px;height:18px;accent-color:var(--ball);">
-      Frame-accurate cuts (re-encodes — much slower, but exact; also happens automatically for an HEVC/H.265 source, so the clip plays everywhere)
+      Frame-accurate cuts (re-encodes — much slower, but exact; turn this on if your source video is HEVC/H.265, e.g. an iPhone's default format, so the exported clip plays everywhere)
     </label>
     <button class="primary" id="exportBtn">Export clipped video</button>
     <div class="status-line" id="exportStatus"></div>
@@ -1031,7 +1031,6 @@
 
   /* ---------------- export via ffmpeg.wasm ---------------- */
   let ffmpegInstance = null;
-  let lastInputWasHevc = false; // set by the logger below whenever ffmpeg reports an HEVC input stream
 
   async function getFfmpeg(onLog){
     if (ffmpegInstance) return ffmpegInstance;
@@ -1041,33 +1040,11 @@
     const { createFFmpeg } = window.FFmpeg;
     ffmpegInstance = createFFmpeg({
       log: false,
-      // Not for visible logging (log:false above suppresses that) -- this is
-      // the only way to read ffmpeg's own stderr banner, which is how we
-      // detect an HEVC source (iPhone's default "High Efficiency" format):
-      // ffmpeg.wasm's stream-copy export would otherwise silently re-mux the
-      // HEVC bitstream as-is, producing a clip that plays fine on Apple
-      // devices but often not elsewhere.
-      logger: ({ message }) => { if (/Video:\s*hevc/i.test(message)) lastInputWasHevc = true; },
       corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
       progress: ({ ratio }) => { if (onLog && ratio >= 0) onLog(ratio); }
     });
     await ffmpegInstance.load();
     return ffmpegInstance;
-  }
-
-  // ffmpeg always prints input stream info to stderr, so decoding 0.1s to a
-  // null sink is enough to feed the logger above with zero real work.
-  // IMPORTANT: this must be a normal, successful (exit-0) invocation -- an
-  // earlier version ran a deliberately-erroring `-i input.mp4` with no
-  // output at all to get the same log line, but ffmpeg.wasm's single WASM
-  // instance doesn't reliably survive a non-zero exit: the *next* run() (the
-  // real cut) would go on to ignore -ss/-t and just copy the whole input
-  // through, which is exactly the "1 shot found but exported the entire
-  // video" bug this replaced.
-  async function probeIsHevc(ffmpeg){
-    lastInputWasHevc = false;
-    await ffmpeg.run('-i', 'input.mp4', '-t', '0.1', '-f', 'null', '-');
-    return lastInputWasHevc;
   }
 
   exportBtn.addEventListener('click', async () => {
@@ -1088,11 +1065,7 @@
       exportStatus.textContent = 'Preparing video…';
       ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(currentFile));
 
-      const isHevc = await probeIsHevc(ffmpeg);
-      const precise = preciseCutsToggle.checked || isHevc;
-      if (isHevc && !preciseCutsToggle.checked){
-        exportStatus.textContent = 'Detected an HEVC (H.265) source -- re-encoding to H.264 so the exported clip plays everywhere…';
-      }
+      const precise = preciseCutsToggle.checked;
       const listLines = [];
 
       for (let i = 0; i < included.length; i++){
@@ -1124,7 +1097,8 @@
       exportStatus.textContent = `Done — ${included.length} shots joined into one clip.`;
     } catch (err){
       console.error(err);
-      exportStatus.textContent = 'Export failed — try "Frame-accurate cuts" off, or a shorter video.';
+      const detail = err && err.message ? ` (${err.message})` : '';
+      exportStatus.textContent = `Export failed${detail} — try "Frame-accurate cuts" off, or a shorter video.`;
     }
 
     exportBtn.disabled = false;
