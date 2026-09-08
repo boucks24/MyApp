@@ -130,7 +130,6 @@
   .pm-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
   .pm-thumb .pm-badge{position:absolute; top:3px; left:3px; background:rgba(0,0,0,0.6); color:var(--ball); font-size:10px; font-weight:700; padding:2px 5px; border-radius:6px; font-family:monospace;}
   .pm-thumb .pm-remove{position:absolute; top:3px; right:3px; width:18px; height:18px; border-radius:50%; background:rgba(0,0,0,0.6); color:var(--line); display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1; cursor:pointer;}
-  .pm-thumb.pm-low-confidence{outline:2px solid var(--clay); outline-offset:-2px;}
   .pm-thumb .pm-move{position:absolute; left:3px; right:3px; bottom:3px; display:flex; justify-content:space-between; gap:4px;}
   .pm-thumb .pm-move-btn{padding:2px 7px; font-size:12px; border-radius:5px; background:rgba(0,0,0,0.6); color:var(--line);}
   .pm-thumb .pm-move-btn:disabled{opacity:0.3;}
@@ -528,7 +527,7 @@
 
     <div class="card hidden" id="pmOrderCard">
       <h2>3. Ordered sequence</h2>
-      <div class="note" style="margin:0 0 10px; padding:0; border:none;">Use the arrows to nudge a photo left/right — photos outlined in orange had no confident pose detected and were placed by best guess.</div>
+      <div class="note" style="margin:0 0 10px; padding:0; border:none;">Photos with no confident pose, or whose pose didn't match the rest of the batch, are dropped automatically — see the status above for how many. Use the arrows to nudge the remaining order left/right. When the video is built, each photo is rotated, scaled and shifted so its pose lands in the same spot as the last one — matching body position takes priority over keeping the whole frame in view.</div>
       <div class="pm-thumb-grid" id="pmOrderedGrid"></div>
     </div>
 
@@ -2940,7 +2939,7 @@ el('rmPlayBtn').addEventListener('click', ()=>{
 
   const FEATURE_COUNT = 11;
 
-  let photos = []; // {id, file, url, img, width, height, features, size, confidence, lowConfidence}
+  let photos = []; // {id, file, url, img, width, height, features, size, confidence, anchors}
   let ordered = []; // indices into `photos`, current working order
   let outputBlobUrl = null;
   let nextId = 1;
@@ -2958,7 +2957,7 @@ el('rmPlayBtn').addEventListener('click', ()=>{
     files.forEach(file => {
       const url = URL.createObjectURL(file);
       const img = new Image();
-      const entry = { id: nextId++, file, url, img, width: 0, height: 0, features: null, size: 0, confidence: 0, lowConfidence: false };
+      const entry = { id: nextId++, file, url, img, width: 0, height: 0, features: null, size: 0, confidence: 0, anchors: null };
       img.onload = () => { entry.width = img.naturalWidth; entry.height = img.naturalHeight; };
       img.src = url;
       photos.push(entry);
@@ -3096,6 +3095,23 @@ el('rmPlayBtn').addEventListener('click', ()=>{
     return { feats, size, confidence: filled / FEATURE_COUNT };
   }
 
+  // Hip-center/shoulder-center anchor points, normalized to the analysis
+  // frame's own width/height (so they transfer as-is to the full-res image's
+  // own pixel space, or any canvas, by multiplying back out later) — kept
+  // separate from poseFeatures' angle vector, which is deliberately position
+  // invariant and so useless for actually placing a photo on the canvas.
+  // Returns null when either center can't be formed, which is treated as
+  // "no usable pose" alongside a low-confidence/undetected one.
+  function poseAnchors(pose, imgW, imgH){
+    const m = {};
+    pose.keypoints.forEach(k => { m[k.name] = k; });
+    if (!ok(m.left_shoulder) || !ok(m.right_shoulder) || !ok(m.left_hip) || !ok(m.right_hip)) return null;
+    return {
+      shoulder: { x: (m.left_shoulder.x + m.right_shoulder.x) / 2 / imgW, y: (m.left_shoulder.y + m.right_shoulder.y) / 2 / imgH },
+      hip: { x: (m.left_hip.x + m.right_hip.x) / 2 / imgW, y: (m.left_hip.y + m.right_hip.y) / 2 / imgH }
+    };
+  }
+
   function featureDistance(a, b){
     let sum = 0;
     for (let i = 0; i < FEATURE_COUNT; i++){ const d = a.feats[i] - b.feats[i]; sum += d * d; }
@@ -3197,40 +3213,65 @@ el('rmPlayBtn').addEventListener('click', ()=>{
         if (poses.length){
           const { feats, size, confidence } = poseFeatures(poses[0], cw, ch);
           p.features = feats; p.size = size; p.confidence = confidence;
+          p.anchors = poseAnchors(poses[0], cw, ch);
         } else {
-          p.features = null; p.size = 0; p.confidence = 0;
+          p.features = null; p.size = 0; p.confidence = 0; p.anchors = null;
         }
         analyzeProgressFill.style.width = Math.round(((i + 1) / photos.length) * 100) + '%';
       }
 
-      // Photos with no/weak pose detection still need a placeholder feature
-      // vector to slot into the chain — impute the dataset mean rather than
-      // zeros, so they land wherever's least disruptive instead of skewing
-      // toward one extreme.
-      const confident = photos.filter(p => p.features && p.confidence >= 0.5);
-      const meanFeats = new Array(FEATURE_COUNT).fill(0.5);
-      let meanSize = 0;
-      if (confident.length){
-        meanFeats.fill(0);
-        confident.forEach(p => { p.features.forEach((f, i) => { meanFeats[i] += f; }); meanSize += p.size; });
-        for (let i = 0; i < FEATURE_COUNT; i++) meanFeats[i] /= confident.length;
-        meanSize /= confident.length;
-      }
-      photos.forEach(p => {
-        if (!p.features || p.confidence < 0.5){
-          p.features = meanFeats.slice();
-          if (!p.size) p.size = meanSize;
-          p.lowConfidence = true;
-        } else {
-          p.lowConfidence = false;
-        }
-      });
+      // Drop anything that isn't a confident, alignable pose -- rather than
+      // imputing a placeholder and guessing where it goes, a photo with no
+      // (or too weak, or unanchorable) pose just doesn't belong in a
+      // sequence built entirely from body position.
+      const CONFIDENCE_THRESHOLD = 0.5;
+      let usable = photos.filter(p => p.features && p.confidence >= CONFIDENCE_THRESHOLD && p.anchors);
+      const noPoseCount = photos.length - usable.length;
 
-      ordered = orderPhotos(photos.map(p => ({ feats: p.features, size: p.size })));
-      renderOrdered();
-      orderCard.classList.remove('hidden');
-      exportCard.classList.remove('hidden');
-      analyzeStatus.textContent = `Ordered ${photos.length} photos by body position.`;
+      // Beyond "no pose at all": a confidently-detected pose that's still
+      // wildly unlike every other photo (a spectator, a different sport, an
+      // angle a 2D model misreads) doesn't fit the sequence either -- drop
+      // whichever photos' nearest neighbour is much farther than typical
+      // for this batch. Needs a few photos to make "typical" meaningful.
+      let outlierCount = 0;
+      if (usable.length >= 4){
+        const items = usable.map(p => ({ feats: p.features, size: p.size }));
+        const mat = buildDistanceMatrix(items);
+        const nnDist = items.map((_, i) => {
+          let best = Infinity;
+          for (let j = 0; j < items.length; j++){ if (j !== i) best = Math.min(best, mat[i][j]); }
+          return best;
+        });
+        const sorted = [...nnDist].sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        const threshold = Math.max(median * 2.5, 0.05);
+        const keep = nnDist.map(d => d <= threshold);
+        outlierCount = keep.filter(k => !k).length;
+        usable = usable.filter((_, i) => keep[i]);
+      }
+
+      const usableSet = new Set(usable);
+      photos.forEach(p => { if (!usableSet.has(p)) URL.revokeObjectURL(p.url); });
+      photos = usable;
+      renderThumbs();
+      uploadStatus.textContent = `${photos.length} photo${photos.length === 1 ? '' : 's'} loaded.`;
+
+      const removedBits = [];
+      if (noPoseCount) removedBits.push(`${noPoseCount} no pose detected`);
+      if (outlierCount) removedBits.push(`${outlierCount} didn't match the others`);
+      const removedNote = removedBits.length ? ` — removed ${removedBits.join(', ')}.` : '.';
+
+      if (photos.length < 2){
+        orderCard.classList.add('hidden');
+        exportCard.classList.add('hidden');
+        analyzeStatus.textContent = `Not enough usable photos${removedNote} Need at least 2 with a clear pose.`;
+      } else {
+        ordered = orderPhotos(photos.map(p => ({ feats: p.features, size: p.size })));
+        renderOrdered();
+        orderCard.classList.remove('hidden');
+        exportCard.classList.remove('hidden');
+        analyzeStatus.textContent = `Ordered ${photos.length} photos by body position${removedNote}`;
+      }
     } catch (err){
       console.error(err);
       analyzeStatus.textContent = `Pose analysis failed${err && err.message ? ' (' + err.message + ')' : ''}.`;
@@ -3244,7 +3285,7 @@ el('rmPlayBtn').addEventListener('click', ()=>{
     ordered.forEach((photoIdx, pos) => {
       const p = photos[photoIdx];
       const div = document.createElement('div');
-      div.className = 'pm-thumb' + (p.lowConfidence ? ' pm-low-confidence' : '');
+      div.className = 'pm-thumb';
       div.innerHTML = `
         <img src="${p.url}" alt="">
         <div class="pm-badge">${pos + 1}</div>
@@ -3281,9 +3322,9 @@ el('rmPlayBtn').addEventListener('click', ()=>{
 
   async function buildMontage(Mediabunny, orderedPhotos, holdSeconds, fadeSeconds, onProgress){
     const FPS = 24;
-    // Canvas sized to the average aspect ratio across all photos; each one
-    // is letterboxed (contain-fit) into it so mixed portrait/landscape
-    // bursts don't get cropped.
+    // Canvas sized to the average aspect ratio across all photos -- just a
+    // reasonable default frame size, since alignment (below) no longer
+    // guarantees any particular photo fits inside it uncropped.
     const avgAspect = orderedPhotos.reduce((s, p) => s + p.width / p.height, 0) / orderedPhotos.length;
     let W = 960, H = Math.round(W / avgAspect);
     W += W % 2; H += H % 2; // even dimensions required by the H.264 encoder
@@ -3297,12 +3338,40 @@ el('rmPlayBtn').addEventListener('click', ()=>{
     output.addVideoTrack(source);
     await output.start();
 
-    function drawContain(img, alpha){
-      const scale = Math.min(W / img.width, H / img.height);
-      const w = img.width * scale, h = img.height * scale;
+    // Every photo aligns to this same fixed on-canvas hip/shoulder position
+    // rather than to whichever photo precedes it -- since the target never
+    // moves, each pose lands exactly where the last one did (which is the
+    // point), without small per-step errors drifting over a long sequence
+    // the way chaining photo-to-photo would.
+    const targetHip = { x: W * 0.5, y: H * 0.62 };
+    const targetShoulder = { x: W * 0.5, y: H * 0.32 };
+
+    // Aligns photo `p`'s body to the fixed target via a similarity transform
+    // (rotate + uniform scale + translate) built from its hip->shoulder
+    // vector -- the one anchor pair every surviving photo is guaranteed to
+    // have (anchor-less photos were already filtered out during analysis).
+    // Letterboxing is gone: matching body position now takes priority over
+    // keeping the whole frame in view, so parts of a photo will commonly
+    // land outside the canvas or leave a background gap (papered over by
+    // the fillRect below) -- an accepted tradeoff for a sequence that reads
+    // as one continuous motion instead of a slideshow of separately-framed
+    // shots.
+    function drawAligned(p, alpha){
+      const hip = { x: p.anchors.hip.x * p.width, y: p.anchors.hip.y * p.height };
+      const shoulder = { x: p.anchors.shoulder.x * p.width, y: p.anchors.shoulder.y * p.height };
+      const vsx = shoulder.x - hip.x, vsy = shoulder.y - hip.y;
+      const vtx = targetShoulder.x - targetHip.x, vty = targetShoulder.y - targetHip.y;
+      const scale = Math.hypot(vtx, vty) / (Math.hypot(vsx, vsy) || 1);
+      const angle = Math.atan2(vty, vtx) - Math.atan2(vsy, vsx);
+
+      ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
-      ctx.globalAlpha = 1;
+      ctx.translate(targetHip.x, targetHip.y);
+      ctx.rotate(angle);
+      ctx.scale(scale, scale);
+      ctx.translate(-hip.x, -hip.y);
+      ctx.drawImage(p.img, 0, 0);
+      ctx.restore();
     }
 
     const frameDur = 1 / FPS;
@@ -3316,8 +3385,8 @@ el('rmPlayBtn').addEventListener('click', ()=>{
         for (let f = 0; f < fadeFrames; f++){
           const p = (f + 1) / (fadeFrames + 1);
           ctx.fillStyle = '#1A362D'; ctx.fillRect(0, 0, W, H);
-          drawContain(orderedPhotos[i - 1].img, 1 - p);
-          drawContain(orderedPhotos[i].img, p);
+          drawAligned(orderedPhotos[i - 1], 1 - p);
+          drawAligned(orderedPhotos[i], p);
           await source.add(t, frameDur);
           t += frameDur; frame++;
           onProgress(frame / totalFrames);
@@ -3325,7 +3394,7 @@ el('rmPlayBtn').addEventListener('click', ()=>{
       }
       for (let f = 0; f < holdFrames; f++){
         ctx.fillStyle = '#1A362D'; ctx.fillRect(0, 0, W, H);
-        drawContain(orderedPhotos[i].img, 1);
+        drawAligned(orderedPhotos[i], 1);
         await source.add(t, frameDur);
         t += frameDur; frame++;
         onProgress(frame / totalFrames);
