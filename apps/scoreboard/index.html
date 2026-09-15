@@ -7,139 +7,154 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
-<title>Scoreboard — live &amp; upcoming</title>
+<title>Scoreboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0B1220;
-    --panel:#121B2E;
-    --panel-2:#182640;
-    --line:#233252;
+    --bg:#0A101C;
+    --panel:#111A2C;
+    --panel-2:#17233C;
+    --line:#22314F;
+    --line-hi:#2F4269;
     --ink:#EAF0FB;
-    --ink-soft:#8FA0C2;
+    --ink-soft:#8C9DBF;
+    --ink-dim:#65759A;
     --accent:#3DDC97;
     --accent-ink:#06281C;
     --live:#FF5A5F;
+    --warn:#E0AE52;
     --win:#3DDC97;
     --font-display:'Bebas Neue', system-ui, sans-serif;
-    --font-body:'Inter', system-ui, -apple-system, sans-serif;
+    --font-body:'Archivo', system-ui, -apple-system, sans-serif;
+    --font-mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ease:cubic-bezier(.16,1,.3,1);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;}
+  html{-webkit-text-size-adjust:100%;}
   body{
+    margin:0;
     background:var(--bg);
     color:var(--ink);
     font-family:var(--font-body);
     -webkit-font-smoothing:antialiased;
-    min-height:100vh;
+    min-height:100dvh;
     touch-action:manipulation;
   }
   ::selection{ background:var(--accent); color:var(--accent-ink); }
 
   .wrap{
-    max-width:880px;
+    max-width:1000px;
     margin:0 auto;
-    padding:calc(28px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(60px, env(safe-area-inset-bottom))
+    padding:calc(20px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(60px, env(safe-area-inset-bottom))
             max(16px, env(safe-area-inset-left));
   }
 
   .back-link{
-    display:inline-flex;
-    align-items:center;
-    gap:4px;
-    color:var(--ink-soft);
-    font-size:12.5px;
-    font-weight:700;
-    text-decoration:none;
-    margin-bottom:14px;
-    padding:8px 14px 8px 11px;
-    border-radius:999px;
-    border:1px solid var(--line);
-    background:var(--panel);
-    min-height:36px;
-    touch-action:manipulation;
+    display:inline-flex; align-items:center; gap:5px;
+    color:var(--ink-soft); font-size:12.5px; font-weight:600; text-decoration:none;
+    margin-bottom:14px; padding:8px 14px 8px 11px; border-radius:999px;
+    border:1px solid var(--line); background:var(--panel); min-height:36px; touch-action:manipulation;
+    transition:color .18s var(--ease), background .18s var(--ease);
   }
   .back-link .back-arrow{ font-size:16px; line-height:1; }
   .back-link:hover, .back-link:active{ color:var(--ink); background:var(--panel-2); }
+  .back-link:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 
   header.top{
-    display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap;
-    padding-bottom:16px; border-bottom:1px solid var(--line); margin-bottom:18px;
+    display:flex; align-items:flex-end; justify-content:space-between; gap:12px 16px; flex-wrap:wrap;
+    padding-bottom:16px; border-bottom:1px solid var(--line); margin-bottom:16px;
   }
   header.top h1{
-    font-family:var(--font-display); font-weight:400; letter-spacing:0.02em;
-    font-size:40px; line-height:1; margin:0;
+    font-family:var(--font-display); font-weight:400; letter-spacing:0.015em;
+    font-size:clamp(38px,9vw,56px); line-height:.92; margin:0;
   }
-  header.top .sub{ color:var(--ink-soft); font-size:13px; margin-top:4px; }
-  .refresh-row{ display:flex; align-items:center; gap:10px; }
-  .refresh-status{ font-size:11.5px; color:var(--ink-soft); white-space:nowrap; }
-  .refresh-btn{
+  header.top .sub{ color:var(--ink-soft); font-size:13px; margin-top:5px; max-width:44ch; line-height:1.5; }
+  .refresh-row{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .refresh-status{ font-size:11.5px; color:var(--ink-dim); white-space:nowrap; font-family:var(--font-mono); }
+  .refresh-btn, .sort-select{
     font-family:var(--font-body); font-weight:600; font-size:13px;
     background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
-    padding:9px 14px; border-radius:8px; cursor:pointer;
+    padding:9px 13px; border-radius:8px; cursor:pointer; min-height:38px;
+    transition:background .16s var(--ease), border-color .16s var(--ease);
   }
-  .refresh-btn:active{ transform:scale(0.97); }
-  .refresh-btn.spinning{ opacity:0.6; pointer-events:none; }
-  .sort-select{
-    font-family:var(--font-body); font-weight:600; font-size:13px;
-    background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
-    padding:9px 10px; border-radius:8px; cursor:pointer;
-  }
+  .refresh-btn:hover, .sort-select:hover{ background:#1E2C4A; border-color:var(--line-hi); }
+  .refresh-btn:focus-visible, .sort-select:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .refresh-btn:active{ transform:translateY(1px); }
+  .refresh-btn.spinning{ opacity:0.55; pointer-events:none; }
 
-  .chip-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; }
+  .chip-row{ display:flex; flex-wrap:wrap; gap:7px; margin-bottom:22px; }
   .chip{
-    font-size:12.5px; font-weight:600; padding:7px 12px; border-radius:999px;
+    font-size:12.5px; font-weight:600; padding:8px 13px; border-radius:999px;
     background:var(--panel); border:1px solid var(--line); color:var(--ink-soft);
     cursor:pointer; user-select:none;
+    transition:background .16s var(--ease), color .16s var(--ease), border-color .16s var(--ease);
   }
+  .chip:hover{ border-color:var(--line-hi); color:var(--ink); }
+  .chip:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
   .chip.on{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
 
-  section.feed{ margin-bottom:26px; }
+  section.feed{ margin-bottom:28px; }
   section.feed.hidden{ display:none; }
-  .feed-head{ display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .feed-head{ display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; margin-bottom:10px; padding-bottom:7px; border-bottom:1px solid var(--line); }
   .feed-head h2{
     font-family:var(--font-display); font-weight:400; letter-spacing:0.02em;
-    font-size:22px; margin:0; color:var(--ink);
+    font-size:24px; margin:0; color:var(--ink);
   }
-  .feed-head .count{ color:var(--ink-soft); font-size:12.5px; }
+  .feed-head .count{ color:var(--ink-dim); font-size:12px; font-family:var(--font-mono); white-space:nowrap; margin-left:auto; }
   .feed-error{
     font-size:12.5px; color:var(--live); background:rgba(255,90,95,0.08);
-    border:1px solid rgba(255,90,95,0.3); border-radius:8px; padding:9px 12px;
+    border:1px solid rgba(255,90,95,0.28); border-radius:8px; padding:9px 12px;
   }
-  .feed-empty{ color:var(--ink-soft); font-size:13px; padding:6px 0; }
+  .feed-empty{ color:var(--ink-dim); font-size:13px; padding:8px 0; }
   .feed-note{
-    font-size:11.5px; color:#D9A441; background:rgba(217,164,65,0.08);
-    border:1px solid rgba(217,164,65,0.3); border-radius:8px; padding:7px 10px; margin-bottom:8px;
+    font-size:11.5px; color:var(--warn); background:rgba(224,174,82,0.08);
+    border:1px solid rgba(224,174,82,0.28); border-radius:8px; padding:8px 11px; margin-bottom:9px; line-height:1.5;
   }
 
-  .match-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:10px; }
+  .match-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(255px,1fr)); gap:9px; }
   .match-card{
-    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 13px;
+    transition:border-color .18s var(--ease), background .18s var(--ease);
   }
-  .match-card.state-in{ border-color:var(--live); }
+  .match-card:hover{ border-color:var(--line-hi); }
+  /* Live matches get the only saturated edge on the page, so a glance finds
+     them without reading a word. */
+  .match-card.state-in{ border-color:rgba(255,90,95,.55); background:linear-gradient(180deg, rgba(255,90,95,.05), transparent 60%), var(--panel); }
   .match-meta{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
-  .badge{ font-size:10.5px; font-weight:700; letter-spacing:0.04em; padding:2px 7px; border-radius:5px; }
+  .badge{ font-size:10px; font-weight:700; letter-spacing:0.06em; padding:3px 7px; border-radius:5px; text-transform:uppercase; }
   .badge.pre{ background:var(--panel-2); color:var(--ink-soft); }
-  .badge.in{ background:var(--live); color:#2A0002; }
-  .badge.post{ background:var(--panel-2); color:var(--ink-soft); }
-  .match-time{ font-size:11.5px; color:var(--ink-soft); text-align:right; }
-  .match-tourney{ font-size:11.5px; color:var(--ink-soft); margin-bottom:6px; }
-  .participants{ display:flex; flex-direction:column; gap:4px; }
+  .badge.in{ background:var(--live); color:#2A0002; display:inline-flex; align-items:center; gap:5px; }
+  /* Real semantic state (match is live right now), which is the one case the
+     skill allows a status dot for. */
+  .badge.in::before{
+    content:""; width:5px; height:5px; border-radius:50%; background:#2A0002;
+    animation:livepulse 1.6s ease-in-out infinite;
+  }
+  @keyframes livepulse{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+  .badge.post{ background:var(--panel-2); color:var(--ink-dim); }
+  .match-time{ font-size:11.5px; color:var(--ink-dim); text-align:right; font-family:var(--font-mono); }
+  .match-tourney{ font-size:11.5px; color:var(--ink-soft); margin-bottom:7px; line-height:1.4; }
+  .participants{ display:flex; flex-direction:column; gap:5px; }
   .participant{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
   .participant.winner .p-name{ color:var(--ink); font-weight:700; }
   .participant.winner .p-score{ color:var(--win); }
-  .p-identity{ display:flex; align-items:center; gap:6px; min-width:0; flex:1 1 auto; }
+  .p-identity{ display:flex; align-items:center; gap:7px; min-width:0; flex:1 1 auto; }
   .p-photo{ width:22px; height:22px; border-radius:50%; object-fit:cover; flex:0 0 auto; background:var(--panel-2); }
   .p-flag{ width:18px; height:12px; object-fit:cover; border-radius:2px; flex:0 0 auto; box-shadow:0 0 0 1px rgba(255,255,255,0.12); }
   .p-name{ font-size:14px; color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
-  .p-score{ font-family:var(--font-display); font-size:18px; letter-spacing:0.02em; min-width:22px; text-align:right; }
-  .p-sets{ font-size:11px; color:var(--ink-soft); margin-left:6px; }
-  .p-rank{ font-size:11px; color:var(--accent); font-weight:700; }
-  .match-venue{ font-size:11px; color:var(--ink-soft); margin-top:8px; border-top:1px solid var(--line); padding-top:6px; }
+  /* Tabular mono so scores line up down the column and never reflow as they tick. */
+  .p-score{ font-family:var(--font-mono); font-weight:700; font-size:16px; font-variant-numeric:tabular-nums; min-width:24px; text-align:right; letter-spacing:-0.02em; }
+  .p-sets{ font-size:11px; color:var(--ink-dim); margin-left:6px; font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+  .p-rank{ font-size:10.5px; color:var(--accent); font-weight:700; font-family:var(--font-mono); }
+  .match-venue{ font-size:11px; color:var(--ink-dim); margin-top:9px; border-top:1px solid var(--line); padding-top:7px; line-height:1.4; }
 
-  .note{ font-size:11.5px; color:var(--ink-soft); line-height:1.5; margin-top:28px; }
+  .note{ font-size:11.5px; color:var(--ink-dim); line-height:1.65; margin-top:30px; padding-top:16px; border-top:1px solid var(--line); max-width:64ch; }
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important; transition:none !important;}
+  }
 </style>
 </head>
 <body>
@@ -149,7 +164,7 @@
   <header class="top">
     <div>
       <h1>Scoreboard</h1>
-      <div class="sub">Tennis Grand Slam &amp; 500+, AFL, rugby union, cricket — live and upcoming</div>
+      <div class="sub">Live and upcoming: tennis Grand Slam and 500+, AFL, rugby union, cricket.</div>
     </div>
     <div class="refresh-row">
       <span class="refresh-status" id="refreshStatus">Loading…</span>
@@ -165,28 +180,11 @@
   <div id="feeds"></div>
 
   <p class="note">
-    Scores come from ESPN's public feeds, fetched directly from your browser (this page has no server of its own).
-    Those feeds are unofficial, undocumented, and can change or go down without notice — if a section stops loading,
-    that's ESPN's endpoint, not something saved on this device. ATP and WTA are fetched separately (a tour's own
-    single-gender events only appear under its own endpoint) but merged into one Tennis list and deduped, since a
-    Grand Slam's payload already carries both genders together. ESPN's tennis "events" are whole tournaments spanning
-    weeks, not single matches — <code>extractMatchesFromTournamentEvent()</code> pulls each singles-draw match out of
-    a tournament's <code>groupings[]</code> (doubles/mixed/wheelchair/juniors are skipped, since they have no ATP/WTA
-    singles ranking to filter by) and drops anything outside the live/upcoming window so finished early rounds don't
-    flood the list. What's left is filtered to Grand Slam, Masters/1000 and tour-500 events — an explicit
-    <code>major: true</code> flag covers Slams, a name-keyword list (<code>TENNIS_500PLUS_KEYWORDS</code>) covers the
-    rest — then to matches with at least one player ranked top 20 (<code>curatedRank.current</code>, embedded right
-    on each competitor in the scoreboard payload — no separate rankings API needed) or Australian (by
-    <code>athlete.flag</code>, any rank). Both of those tennis filters fail open: if the tier or ranking/nationality
-    filter would have matched nothing despite matches actually being on, it shows everything unfiltered at that stage
-    instead and says so inline — a filter matching zero real matches is treated as the filter being broken, not the
-    schedule being empty. Non-tennis sources are requested 2 months ahead; tennis stays on its own shorter window
-    since a tournament payload already spans its own multi-week event. Rugby union covers
-    Super Rugby Pacific (Australian Super Rugby teams)
-    and the Rugby Championship (Wallabies internationals) by numeric ESPN league ID. Cricket uses a different,
-    cross-domain "personalised header" endpoint filtered to matches involving Australia — Big Bash/WBBL aren't
-    wired up, their league ID wasn't verifiable when this was built. Review each season and adjust
-    <code>SOURCES</code>/<code>TENNIS_500PLUS_KEYWORDS</code> as calendars and endpoints shift.
+    Scores come from ESPN's public feeds, fetched straight from your browser, so there is no server
+    and nothing is stored anywhere but this device. Those feeds are unofficial and undocumented: if a
+    section stops loading, that is the endpoint, not your data. Tennis is filtered to Grand Slam,
+    Masters and 500-level events featuring a top-20 or Australian player, and both filters fail open,
+    showing everything unfiltered with a note rather than a misleadingly empty list.
   </p>
 </div>
 
@@ -378,7 +376,7 @@ async function fetchTennis(source){
     // The keyword filter matched nothing even though tournaments exist —
     // more likely a shape mismatch than an actual empty week. Fail open.
     tierRaw = rawTournaments;
-    tierNote = 'Grand Slam/500+ filter matched nothing this refresh — showing all current matches, unfiltered by tournament tier.';
+    tierNote = 'Grand Slam/500+ filter matched nothing this refresh, so these are all current matches, unfiltered by tournament tier.';
   }
   let flattenedMatches = tierRaw.flatMap(t => extractMatchesFromTournamentEvent(t.ev, t.tour));
 
@@ -412,7 +410,7 @@ async function fetchTennis(source){
     // Same fail-open reasoning as the tier filter: no top-20/Australian
     // player found is more likely curatedRank being absent from this
     // refresh than every single current match genuinely qualifying nobody.
-    return { events: tierEvents, note: tierNote || 'No top-20 or Australian player found this refresh — showing all Grand Slam/500+ matches, unfiltered by ranking/nationality.' };
+    return { events: tierEvents, note: tierNote || 'No top-20 or Australian player found this refresh, so these are all Grand Slam/500+ matches, unfiltered by ranking and nationality.' };
   }
   return { events: ranked, note: tierNote };
 }
@@ -460,11 +458,11 @@ async function fetchCricketAustralia(){
 // tournament payload already covers its own multi-week span.
 const NON_TENNIS_DAYS_AHEAD = 60;
 const SOURCES = [
-  { id:'tennis', label:'Tennis — Grand Slam & 500+ (ATP & WTA)', fetch: fetchTennis },
+  { id:'tennis', label:'Tennis: Grand Slam & 500+ (ATP & WTA)', fetch: fetchTennis },
   { id:'afl', label:'AFL', url: withDates(`${ESPN_BASE}/australian-football/afl/scoreboard`, NON_TENNIS_DAYS_AHEAD) },
   { id:'super-rugby', label:'Super Rugby Pacific', url: withDates(`${ESPN_BASE}/rugby/242041/scoreboard`, NON_TENNIS_DAYS_AHEAD) },
   { id:'rugby-championship', label:'Rugby Championship (Wallabies)', url: withDates(`${ESPN_BASE}/rugby/244293/scoreboard`, NON_TENNIS_DAYS_AHEAD) },
-  { id:'cricket-aus', label:'Cricket — Australia', fetch: fetchCricketAustralia },
+  { id:'cricket-aus', label:'Cricket: Australia', fetch: fetchCricketAustralia },
 ];
 
 const STORAGE_KEY = 'scoreboard.hiddenSources';
