@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="5/3/1 BBB">
 <title>5/3/1 BBB</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#15161A;
@@ -23,17 +24,22 @@
     --moss:#4F8B4A;      /* 10kg plate green - press */
     --good:#5FA85A;
     --font-display:'Oswald', system-ui, -apple-system, sans-serif;
-    --font-body:'Inter', system-ui, -apple-system, sans-serif;
+    --font-body:'Archivo', system-ui, -apple-system, sans-serif;
+    /* Tabular figures: weights, reps and the rest clock all change in place,
+       and proportional numerals make them jitter as they tick. */
+    --font-mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --num:var(--font-mono);
+    --ease:cubic-bezier(.16,1,.3,1);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--chalk);font-family:var(--font-body);}
   body{
     padding-top:env(safe-area-inset-top);
     padding-bottom:env(safe-area-inset-bottom);
-    min-height:100vh;
+    min-height:100dvh;
     overscroll-behavior-y:none;
   }
-  #app{max-width:560px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;position:relative;}
+  #app{max-width:560px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column;position:relative;}
 
   header.topbar{
     display:flex;align-items:center;gap:12px;
@@ -64,7 +70,7 @@
   .row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);}
   .row:last-child{border-bottom:none;}
   .row .label{color:var(--muted);font-size:13px;}
-  .row .value{font-family:var(--font-display);font-size:16px;font-weight:600;}
+  .row .value{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:15px;font-weight:700;letter-spacing:-0.02em;}
 
   label.field{display:block;margin-bottom:14px;}
   label.field span{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
@@ -109,7 +115,7 @@
   .cp-cell.cp-head{background:transparent;border:none;min-height:auto;cursor:default;}
   .cp-cell.cp-done{background:var(--good);border-color:var(--good);color:#0d1a0c;}
   .cp-cell.cp-current{border-color:var(--iron);box-shadow:0 0 0 1px var(--iron) inset;}
-  .cp-weight{font-family:var(--font-display);font-size:13px;font-weight:700;line-height:1.1;}
+  .cp-weight{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:700;line-height:1.1;letter-spacing:-0.03em;}
   .cp-reps{font-size:9.5px;line-height:1.1;opacity:0.85;}
   .cp-next{font-size:10px;font-weight:700;letter-spacing:0.02em;color:var(--iron);}
   .cp-cell.cp-done .cp-next{color:#0d1a0c;}
@@ -191,7 +197,7 @@
   .set-row:last-child{border-bottom:none;}
   .set-row .set-left{display:flex;flex-direction:column;}
   .set-row .pct{font-size:12px;color:var(--muted);}
-  .set-row .weight{font-family:var(--font-display);font-size:22px;font-weight:600;}
+  .set-row .weight{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:21px;font-weight:700;letter-spacing:-0.03em;}
   .set-row .target{font-size:12px;color:var(--muted);margin-top:2px;}
   .set-row .plate-line{font-size:11.5px;color:var(--steel);margin-top:6px;font-weight:600;}
   .set-row .last-time{font-size:11px;color:var(--muted);margin-top:3px;font-style:italic;}
@@ -200,7 +206,7 @@
   .last-time{font-size:11px;color:var(--muted);margin-top:4px;font-style:italic;}
   .set-row input.reps{
     width:56px;text-align:center;background:var(--panel-2);border:1px solid var(--line);
-    color:var(--chalk);padding:10px 4px;font-size:16px;font-family:var(--font-display);
+    color:var(--chalk);padding:10px 4px;font-size:16px;font-family:var(--num);font-variant-numeric:tabular-nums;
   }
   .set-right{display:flex;flex-direction:row;align-items:center;gap:10px;flex-shrink:0;}
   .done-tick{
@@ -224,7 +230,7 @@
   .rest-timer.overtime{background:var(--iron);}
   .rest-timer.hidden{display:none;}
   .rest-timer .rt-label{font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;opacity:0.85;}
-  .rest-timer .rt-time{font-family:var(--font-display);font-size:24px;font-weight:600;flex:1;}
+  .rest-timer .rt-time{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:24px;font-weight:700;flex:1;letter-spacing:-0.02em;}
   .rest-timer .rt-skip{
     background:rgba(255,255,255,0.18);border:none;color:#fff;
     padding:9px 16px;font-family:var(--font-body);font-weight:600;font-size:13px;cursor:pointer;
@@ -232,7 +238,7 @@
 
   .weight-edit{display:flex;align-items:baseline;gap:5px;}
   .weight-edit input, .bbb-weight-edit input{
-    font-family:var(--font-display);font-weight:600;color:var(--chalk);
+    font-family:var(--num);font-variant-numeric:tabular-nums;font-weight:700;color:var(--chalk);
     background:transparent;border:none;border-bottom:1px dashed var(--muted);
     padding:2px 0;-webkit-appearance:none;appearance:none;
   }
@@ -244,8 +250,8 @@
   .bbb-counter{display:flex;gap:8px;margin-top:10px;}
   .bbb-dot{
     flex:1;height:40px;border:1px solid var(--line);background:var(--panel-2);
-    display:flex;align-items:center;justify-content:center;font-family:var(--font-display);
-    font-size:14px;color:var(--muted);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;font-family:var(--num);font-variant-numeric:tabular-nums;
+    font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;
   }
   .bbb-dot.done{background:var(--good);border-color:var(--good);color:#0d1a0c;}
 
@@ -258,19 +264,28 @@
     z-index:20;
   }
   nav.tabs button{
+    position:relative;
     flex:1;background:none;border:none;color:var(--muted);
-    font-family:var(--font-body);font-size:11px;font-weight:600;letter-spacing:0.02em;
-    padding:12px 4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;
+    font-family:var(--font-body);font-size:12px;font-weight:600;letter-spacing:0.02em;
+    padding:15px 4px 14px;cursor:pointer;display:flex;flex-direction:column;align-items:center;
+    transition:color .18s var(--ease);
   }
-  nav.tabs button .ic{width:18px;height:18px;border:1.5px solid var(--muted);}
+  /* The tab marks itself with a rule on the edge it belongs to, rather than
+     four identical empty squares that named nothing. */
+  nav.tabs button::before{
+    content:"";position:absolute;top:0;left:0;right:0;height:2px;
+    background:var(--iron);transform:scaleX(0);transition:transform .22s var(--ease);
+  }
+  nav.tabs button:hover{color:var(--chalk);}
   nav.tabs button.active{color:var(--chalk);}
-  nav.tabs button.active .ic{border-color:var(--iron);background:var(--iron);}
+  nav.tabs button.active::before{transform:scaleX(1);}
+  nav.tabs button:focus-visible{outline:2px solid var(--iron);outline-offset:-3px;}
 
   .history-item{border-bottom:1px solid var(--line);padding:14px 0;}
   .history-item:last-child{border-bottom:none;}
   .history-item .hi-top{display:flex;justify-content:space-between;align-items:baseline;}
-  .history-item .hi-lift{font-family:var(--font-display);font-weight:600;font-size:15px;}
-  .history-item .hi-date{font-size:11px;color:var(--muted);}
+  .history-item .hi-lift{font-family:var(--font-display);font-weight:600;font-size:15px;letter-spacing:.01em;}
+  .history-item .hi-date{font-size:11px;color:var(--muted);font-family:var(--num);}
   .history-item .hi-detail{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.5;}
   .history-item .hi-pr{color:var(--good);font-weight:600;}
 
@@ -281,7 +296,7 @@
     position:fixed;inset:0;background:rgba(10,10,10,0.7);z-index:60;
     display:flex;align-items:flex-end;
   }
-  .modal{background:var(--panel);border-top:1px solid var(--line);width:100%;padding:22px 20px calc(24px + env(safe-area-inset-bottom));max-height:88vh;overflow-y:auto;}
+  .modal{background:var(--panel);border-top:1px solid var(--line);width:100%;padding:22px 20px calc(24px + env(safe-area-inset-bottom));max-height:88dvh;overflow-y:auto;}
   .modal h2{font-family:var(--font-display);font-size:18px;margin:0 0 6px;}
   .modal p.desc{color:var(--muted);font-size:13px;margin:0 0 16px;}
 
@@ -294,7 +309,7 @@
   .chart-card:active{transform:scale(0.98);}
   .chart-card .view-log-hint{margin-left:auto;color:var(--muted);font-size:11px;font-weight:600;flex-shrink:0;}
   .chart-empty{color:var(--muted);font-size:12px;padding:8px 0 2px;line-height:1.5;}
-  .chart-latest{font-family:var(--font-display);font-size:22px;font-weight:600;margin-top:6px;}
+  .chart-latest{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:22px;font-weight:700;margin-top:6px;letter-spacing:-0.02em;}
   .chart-latest .u{color:var(--muted);font-size:11px;font-family:var(--font-body);font-weight:500;margin-left:6px;}
 
   label.btn{margin:0;text-align:center;}
@@ -305,6 +320,23 @@
   }
   .sync-banner .sb-title{font-family:var(--font-display);font-size:14px;font-weight:600;margin-bottom:4px;}
   .sync-banner .sb-desc{color:var(--muted);font-size:12px;margin-bottom:12px;line-height:1.5;}
+
+  /* Every control was mouse/touch only: no keyboard affordance anywhere. */
+  .btn:focus-visible, .cp-cell:focus-visible, .cp-navbtn:focus-visible, .cp-gear:focus-visible,
+  .lift-chip:focus-visible, .subtab:focus-visible, .done-tick:focus-visible, .bbb-dot:focus-visible,
+  .pd-lift-row:focus-visible, .pd-week-row:focus-visible, .history-toggle-btn:focus-visible,
+  .rest-timer .rt-skip:focus-visible, header.topbar .back:focus-visible, .chart-card:focus-visible{
+    outline:2px solid var(--steel);outline-offset:2px;
+  }
+  .btn{transition:opacity .14s var(--ease), background .16s var(--ease);}
+  .btn:hover{opacity:.92;}
+  .lift-chip{transition:background .16s var(--ease), color .16s var(--ease), border-color .16s var(--ease);}
+  .lift-chip:hover:not(.active){color:var(--chalk);border-color:var(--muted);}
+  .cp-cell{transition:border-color .16s var(--ease), background .16s var(--ease);}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important;transition:none !important;}
+  }
 
   ::selection{background:var(--iron);color:#fff;}
 </style>
@@ -368,7 +400,7 @@
     return Math.round(w / inc) * inc;
   }
   function fmtW(w){
-    if (w === null || w === undefined || isNaN(w)) return '—';
+    if (w === null || w === undefined || isNaN(w)) return '-';
     const n = Math.round(w * 100) / 100;
     return (n % 1 === 0 ? n.toFixed(0) : n.toFixed(1)) + settings.unit;
   }
@@ -698,9 +730,9 @@
   function tabs(active){
     return `
       <nav class="tabs">
-        <button data-action="go" data-route="531home" class="${active==='531home'?'active':''}"><span class="ic"></span>Train</button>
-        <button data-action="go" data-route="history" class="${active==='history'?'active':''}"><span class="ic"></span>History</button>
-        <button data-action="go" data-route="setup" class="${active==='setup'?'active':''}"><span class="ic"></span>Setup</button>
+        <button data-action="go" data-route="531home" class="${active==='531home'?'active':''}">Train</button>
+        <button data-action="go" data-route="history" class="${active==='history'?'active':''}">History</button>
+        <button data-action="go" data-route="setup" class="${active==='setup'?'active':''}">Setup</button>
       </nav>
     `;
   }
@@ -744,7 +776,7 @@
 
         <div class="card">
           <h2>Boring But Big</h2>
-          <p class="sub" style="color:var(--muted);font-size:12px;margin:-6px 0 14px;">Done as the opposite lift — squat day supplements with deadlift, bench day with press, and vice versa.</p>
+          <p class="sub" style="color:var(--muted);font-size:12px;margin:-6px 0 14px;">Done as the opposite lift: squat day supplements with deadlift, bench day with press, and vice versa.</p>
           <label class="field">
             <span>Supplemental work: 5×10 at</span>
             <select id="f-bbb">
@@ -784,7 +816,7 @@
       return `<div class="cp-weight">${fmtW(top.weight)}</div>${repsLine ? `<div class="cp-reps">${repsLine}</div>` : ''}`;
     }
     if (isCurrent) return `<div class="cp-next">Next</div>`;
-    return `<div class="cp-empty">—</div>`;
+    return `<div class="cp-empty">-</div>`;
   }
 
   function renderCycleProgress(){
@@ -837,7 +869,7 @@
             </div>
           </div>
           <div class="row"><span class="label">Top set</span><span class="value">${fmtW(w.mainSets[2].weight)} × ${w.mainSets[2].repsLabel}</span></div>
-          <div class="row"><span class="label">BBB — ${LIFT_LABEL[w.bbbLift]}</span><span class="value">${fmtW(w.bbbWeight)} × 5×10</span></div>
+          <div class="row"><span class="label">BBB: ${LIFT_LABEL[w.bbbLift]}</span><span class="value">${fmtW(w.bbbWeight)} × 5×10</span></div>
         </div>
         <button class="btn" data-action="startWorkout">Start workout</button>
         <button class="btn ghost" data-action="pickDay">Choose a different day</button>
@@ -941,7 +973,7 @@
         </div>
 
         <div class="card">
-          <h2>Boring But Big — ${LIFT_LABEL[w.bbbLift]}</h2>
+          <h2>Boring But Big: ${LIFT_LABEL[w.bbbLift]}</h2>
           <div class="row">
             <span class="label">5 sets × 10 reps</span>
             <span class="value bbb-weight-edit"><input type="number" inputmode="decimal" step="${settings.increment || 2.5}" id="bbbWeightInput" value="${sw.bbb}"> ${settings.unit}</span>
@@ -1056,7 +1088,6 @@
         ${historySubtabs()}
         <main>
           <div class="empty">
-            <div class="big">—</div>
             <div>No workouts logged yet.<br>Finish a session to see it here.</div>
           </div>
         </main>
@@ -1068,7 +1099,7 @@
 
     let body;
     if (!filtered.length){
-      body = `<div class="empty"><div class="big">—</div><div>No ${LIFT_LABEL[historyLiftFilter]} workouts logged yet.</div></div>`;
+      body = `<div class="empty"><div>No ${LIFT_LABEL[historyLiftFilter]} workouts logged yet.</div></div>`;
     } else if (historyLiftFilter === 'all'){
       body = settings.order.map(l => {
         const items = history.filter(h => h.lift === l);
@@ -1114,7 +1145,7 @@
   function prTargetLine(lift, weight){
     const best = bestE1rmForLift(lift);
     if (best == null){
-      return `<div class="pr-target">First logged AMRAP for ${LIFT_LABEL[lift]} — this sets your baseline est. 1RM.</div>`;
+      return `<div class="pr-target">First logged AMRAP for ${LIFT_LABEL[lift]}. This sets your baseline est. 1RM.</div>`;
     }
     const reps = repsNeededForPr(weight, best);
     if (reps == null) return '';
@@ -1210,7 +1241,7 @@
     const h = history[editingHistoryIdx];
     if (!h) return '';
     const setsHtml = h.mainSets.map((s,i)=>`
-      <label class="field"><span>${s.pct != null ? s.pct + '% set' : 'Logged set'}${s.amrap ? ' · AMRAP' : ''} — weight</span><input type="number" inputmode="decimal" id="eh-w-${i}" value="${s.weight}"></label>
+      <label class="field"><span>${s.pct != null ? s.pct + '% set' : 'Logged set'}${s.amrap ? ' (AMRAP)' : ''} weight</span><input type="number" inputmode="decimal" id="eh-w-${i}" value="${s.weight}"></label>
       ${s.amrap ? `<label class="field"><span>Reps achieved</span><input type="number" inputmode="numeric" id="eh-r-${i}" value="${s.actualReps ?? ''}"></label>` : ''}
     `).join('');
     return `
@@ -1303,7 +1334,7 @@
       <div class="modal-back">
         <div class="modal">
           <h2>Start a new cycle?</h2>
-          <p class="desc">This jumps straight to Cycle ${state.cycle + 1}, Week 1, Day 1 — any workouts not yet logged in cycle ${state.cycle} are skipped.</p>
+          <p class="desc">This jumps straight to Cycle ${state.cycle + 1}, Week 1, Day 1. Any workouts not yet logged in cycle ${state.cycle} are skipped.</p>
           <div class="btn-row">
             <button class="btn secondary" data-action="cancelStartCycle">Cancel</button>
             <button class="btn" data-action="confirmStartCycle">Start new cycle</button>
@@ -1318,7 +1349,7 @@
       <div class="modal-back">
         <div class="modal">
           <h2>Discard this workout?</h2>
-          <p class="desc">Leaving now won't save any progress on this session — sets marked done and any weight edits will be lost.</p>
+          <p class="desc">Leaving now won't save any progress on this session. Sets marked done and any weight edits will be lost.</p>
           <div class="btn-row">
             <button class="btn secondary" data-action="cancelDiscardWorkout">Keep training</button>
             <button class="btn danger" data-action="confirmDiscardWorkout">Discard</button>
