@@ -7,314 +7,316 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Court Allocator">
 <title>Court Allocator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700&display=swap');
-
   :root{
-    --court: #244A3D;
-    --court-dark: #1A362D;
-    --line: #F4F1E8;
-    --clay: #C1622E;
-    --ball: #D7E05B;
-    --ink: #16211D;
+    --court:#244A3D;
+    --deep:#12241E;
+    --court-lift:#2A5546;
+    --line:#F4F1E8;
+    --clay:#C1622E;
+    --ball:#D7E05B;
+    --ink:#16211D;
+    --r:14px;
+    --ease:cubic-bezier(.16,1,.3,1);
   }
-
-  * { box-sizing: border-box; }
-
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{-webkit-text-size-adjust:100%;}
   body{
     margin:0;
-    background: var(--court-dark);
-    background-image:
-      radial-gradient(circle at 50% -10%, rgba(215,224,91,0.08), transparent 60%);
-    font-family: 'Archivo', sans-serif;
-    color: var(--line);
-    min-height: 100vh;
-    padding: calc(28px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 60px max(16px, env(safe-area-inset-left));
+    background:#163027;
+    background-image:radial-gradient(130% 70% at 50% 0%, #1F4034 0%, #132520 62%);
+    background-attachment:fixed;
+    font-family:'Archivo',system-ui,-apple-system,sans-serif;
+    color:var(--line);
+    min-height:100dvh;
+    padding:calc(20px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left));
   }
-
-  .wrap{ max-width: 460px; margin: 0 auto; }
+  .wrap{max-width:480px;margin:0 auto;}
 
   .back-link{
-    display:inline-flex;
-    align-items:center;
-    gap:4px;
-    color: rgba(244,241,232,0.75);
-    font-size: 12.5px;
-    font-weight: 700;
-    text-decoration: none;
-    margin-bottom: 16px;
-    padding:8px 14px 8px 11px;
+    display:inline-flex;align-items:center;gap:5px;
+    color:rgba(244,241,232,.8);
+    font-size:12.5px;font-weight:700;
+    text-decoration:none;
+    margin-bottom:22px;
+    padding:9px 15px 9px 12px;
     border-radius:999px;
-    border:1px solid rgba(244,241,232,0.18);
-    background: var(--court);
-    min-height:36px;
+    border:1px solid rgba(244,241,232,.2);
+    background:rgba(36,74,61,.75);
+    min-height:38px;
     touch-action:manipulation;
+    transition:background .18s var(--ease), color .18s var(--ease);
   }
-  .back-link .back-arrow{ font-size:16px; line-height:1; }
-  .back-link:hover, .back-link:active{ color: var(--line); background:#2A5546; }
+  .back-link .back-arrow{font-size:16px;line-height:1;}
+  .back-link:hover,.back-link:active{color:var(--line);background:var(--court-lift);}
+  .back-link:focus-visible{outline:2px solid var(--ball);outline-offset:2px;}
 
-  header{ text-align:center; margin-bottom: 26px; }
-
-  .eyebrow{
-    font-size: 12px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--ball);
-    font-weight: 700;
-    margin-bottom: 6px;
-  }
-
+  header{margin-bottom:22px;}
   h1{
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 30px;
-    line-height: 1;
-    margin: 0 0 4px;
-    letter-spacing: -0.01em;
+    font-family:'Archivo Black',sans-serif;
+    font-size:clamp(34px,10vw,46px);
+    line-height:.94;
+    margin:0;
+    letter-spacing:-0.02em;
+    text-transform:uppercase;
   }
-
   .sub{
-    color: rgba(244,241,232,0.6);
-    font-size: 13.5px;
+    color:rgba(244,241,232,.62);
+    font-size:14px;
+    margin-top:9px;
+    max-width:36ch;
   }
 
+  /* ---------- the tap target: the page's one hero moment ---------- */
   .result-card{
-    background: var(--court);
-    border: 1px solid rgba(244,241,232,0.12);
-    border-radius: 18px;
-    padding: 40px 20px;
-    text-align: center;
-    margin-bottom: 14px;
-    position: relative;
-    overflow: hidden;
-    cursor: pointer;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-    transition: transform 0.1s ease, background 0.15s ease;
+    position:relative;
+    display:block;
+    width:100%;
+    background:var(--court);
+    border:1px solid rgba(244,241,232,.14);
+    border-radius:var(--r);
+    padding:30px 20px 26px;
+    text-align:center;
+    margin-bottom:12px;
+    overflow:hidden;
+    cursor:pointer;
+    user-select:none;
+    isolation:isolate;
+    transition:background .16s var(--ease), transform .12s var(--ease);
   }
-  .result-card:active{ transform: scale(0.97); }
-  .result-card:hover{ background: #2A5546; }
-  .result-card:focus-visible{ outline: 2px solid var(--ball); outline-offset: 3px; }
-  .result-card.disabled{
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-  .result-card::after{
+  /* Court lines, drawn to scale: baseline, service line, centre mark.
+     Replaces the old decorative corner circle with the real geometry. */
+  /* Court plan watermark: an inset baseline rectangle with the centre mark,
+     drawn as an outline so it never sits across the card's own text. */
+  .result-card::before{
     content:"";
     position:absolute;
-    right: -30px; top: -30px;
-    width: 120px; height: 120px;
-    border: 2px solid rgba(244,241,232,0.06);
-    border-radius: 50%;
+    left:14px;right:14px;top:12px;bottom:12px;
+    z-index:-1;
+    border:1px solid rgba(244,241,232,.09);
+    border-radius:6px;
+    background:linear-gradient(to right,
+      transparent calc(50% - 1px),
+      rgba(244,241,232,.09) calc(50% - 1px),
+      rgba(244,241,232,.09) calc(50% + 1px),
+      transparent calc(50% + 1px));
+    pointer-events:none;
   }
+  .result-card:hover{background:var(--court-lift);}
+  .result-card:active{transform:scale(.985);}
+  .result-card:focus-visible{outline:2px solid var(--ball);outline-offset:3px;}
+  .result-card.disabled{cursor:not-allowed;opacity:.5;}
 
   .result-label{
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: rgba(244,241,232,0.5);
-    margin-bottom: 10px;
+    font-size:11px;font-weight:700;
+    letter-spacing:.16em;text-transform:uppercase;
+    color:rgba(244,241,232,.5);
+    margin-bottom:6px;
   }
-
   .result-value{
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 64px;
-    line-height: 1;
-    color: var(--ball);
-    letter-spacing: -0.01em;
-    transition: transform 0.15s ease;
+    font-family:'Archivo Black',sans-serif;
+    font-size:clamp(68px,22vw,104px);
+    line-height:.9;
+    color:var(--ball);
+    letter-spacing:-0.03em;
+    display:block;
   }
-  .result-value.pop{ animation: pop 0.32s ease; }
+  .result-value.pop{animation:pop .34s var(--ease);}
   @keyframes pop{
-    0%{ transform: scale(0.85); opacity: 0.4; }
-    60%{ transform: scale(1.05); }
-    100%{ transform: scale(1); opacity: 1; }
+    0%{transform:scale(.82);opacity:.35;}
+    62%{transform:scale(1.04);}
+    100%{transform:scale(1);opacity:1;}
   }
-
   .result-sub{
-    margin-top: 10px;
-    font-size: 13px;
-    color: rgba(244,241,232,0.55);
+    margin-top:10px;
+    font-size:13px;
+    color:rgba(244,241,232,.6);
+    min-height:19px;
   }
 
   button{
-    width: 100%;
-    background: var(--ball);
-    color: var(--ink);
-    border: none;
-    border-radius: 10px;
-    padding: 16px;
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 16px;
-    letter-spacing: 0.02em;
-    cursor: pointer;
-    transition: transform 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+    width:100%;
+    background:var(--ball);
+    color:var(--ink);
+    border:none;
+    border-radius:10px;
+    padding:16px;
+    font-family:'Archivo Black',sans-serif;
+    font-size:16px;
+    letter-spacing:.01em;
+    cursor:pointer;
+    touch-action:manipulation;
+    transition:background .14s var(--ease), transform .12s var(--ease);
   }
-  button:active{ transform: scale(0.98); }
-  button:hover{ background: #e2ea82; }
-  button:focus-visible{ outline: 2px solid var(--line); outline-offset: 2px; }
-  button:disabled{
-    background: rgba(215,224,91,0.25);
-    color: rgba(22,33,29,0.5);
-    cursor: not-allowed;
-  }
+  button:active{transform:translateY(1px);}
+  button:hover{background:#E3EB85;}
+  button:focus-visible{outline:2px solid var(--line);outline-offset:2px;}
+  button:disabled{background:rgba(215,224,91,.25);color:rgba(22,33,29,.5);cursor:not-allowed;}
 
-  .tap-hint{
-    margin-top: 14px;
-    font-size: 11.5px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    font-weight: 700;
-    color: rgba(244,241,232,0.4);
+  .actions{display:flex;gap:8px;margin-bottom:22px;}
+  .link-btn{
+    flex:1 1 0;
+    background:transparent;
+    border:1px solid rgba(244,241,232,.16);
+    color:rgba(244,241,232,.72);
+    font-family:'Archivo',sans-serif;
+    font-weight:600;
+    font-size:12.5px;
+    letter-spacing:.01em;
+    padding:11px 8px;
+    border-radius:9px;
+    text-decoration:none;
   }
+  .link-btn:hover{color:var(--line);background:rgba(244,241,232,.06);border-color:rgba(244,241,232,.3);}
 
-  .reset-link{
-    display:block;
-    width: 100%;
-    background: none;
-    border: none;
-    color: rgba(244,241,232,0.5);
-    font-family: 'Archivo', sans-serif;
-    font-weight: 600;
-    font-size: 12.5px;
-    text-align:center;
-    padding: 10px;
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 2px;
+  /* ---------- court map ---------- */
+  .grid{display:flex;flex-direction:column;gap:9px;margin-top:4px;}
+  .court{
+    display:grid;
+    grid-template-columns:44px 1fr;
+    align-items:stretch;
+    gap:10px;
   }
-  .reset-link:hover{ color: var(--line); }
-
-  .grid{
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 8px;
-    margin-top: 20px;
+  .court-no{
+    font-family:'Archivo Black',sans-serif;
+    font-size:19px;
+    color:rgba(244,241,232,.55);
+    display:flex;align-items:center;justify-content:flex-end;
+    letter-spacing:-0.01em;
   }
-
-  .slot{
-    background: var(--court);
-    border-radius: 10px;
-    padding: 10px 6px;
-    text-align: center;
-    border: 1px solid rgba(244,241,232,0.1);
+  .court.full .court-no{color:var(--clay);}
+  .court-sides{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    background:var(--court);
+    border:1px solid rgba(244,241,232,.14);
+    border-radius:10px;
+    overflow:hidden;
+    /* the net */
+    column-gap:2px;
+    background-image:linear-gradient(var(--line),var(--line));
+    background-size:2px 100%;
+    background-position:center;
+    background-repeat:no-repeat;
   }
-  .slot-name{
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 14px;
-    margin-bottom: 6px;
-  }
-  .slot-pips{
+  .side{
+    position:relative;
+    padding:11px 8px;
     display:flex;
-    justify-content:center;
-    gap: 4px;
+    flex-direction:column;
+    align-items:center;
+    gap:5px;
+    background:var(--court);
+    overflow:hidden;
   }
-  .pip{
-    width: 8px; height:8px; border-radius:50%;
-    background: rgba(244,241,232,0.15);
+  /* Fill rises from the baseline as the side takes players. */
+  .side::before{
+    content:"";
+    position:absolute;left:0;right:0;bottom:0;
+    height:calc(var(--fill,0) * 100%);
+    background:rgba(215,224,91,.17);
+    transition:height .4s var(--ease);
   }
-  .pip.filled{ background: var(--ball); }
-  .slot.full .slot-name{ color: var(--clay); }
+  .side-name{
+    position:relative;
+    font-family:'Archivo Black',sans-serif;
+    font-size:14px;
+    letter-spacing:.02em;
+  }
+  .side-count{
+    position:relative;
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:.08em;
+    color:rgba(244,241,232,.52);
+  }
+  .side.full .side-name{color:var(--ball);}
+  .side.full .side-count{color:var(--ball);}
 
   .full-note{
     text-align:center;
-    color: var(--ball);
-    font-size: 13px;
-    margin-top: 16px;
-    font-weight: 700;
+    color:var(--clay);
+    font-size:13px;
+    margin-top:16px;
+    font-weight:700;
     display:none;
   }
 
+  /* ---------- setup ---------- */
   .setup-card{
-    background: var(--court);
-    border: 1px solid rgba(244,241,232,0.12);
-    border-radius: 18px;
-    padding: 24px 20px;
+    background:var(--court);
+    border:1px solid rgba(244,241,232,.14);
+    border-radius:var(--r);
+    padding:24px 20px;
   }
-
-  .setup-label{
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: rgba(244,241,232,0.6);
-    margin-bottom: 8px;
-    display: block;
-  }
-
-  input[type="number"]{
-    width: 100%;
-    background: var(--court-dark);
-    border: 1px solid rgba(244,241,232,0.15);
-    border-radius: 10px;
-    color: var(--line);
-    font-family: 'Archivo Black', sans-serif;
-    font-size: 28px;
-    text-align: center;
-    padding: 14px;
-    margin-bottom: 14px;
-  }
-  input[type="number"]::placeholder{ color: rgba(244,241,232,0.3); }
-  input[type="number"]:focus{ outline: 2px solid var(--ball); outline-offset: 1px; }
-
-  .setup-note{
-    font-size: 12.5px;
-    color: rgba(244,241,232,0.5);
-    text-align: center;
-    margin-top: 10px;
-    line-height: 1.5;
-  }
-
-  .change-link{
+  label{
+    font-size:11px;font-weight:700;
+    letter-spacing:.1em;text-transform:uppercase;
+    color:rgba(244,241,232,.62);
+    margin-bottom:9px;
     display:block;
-    width: 100%;
-    background: none;
-    border: none;
-    color: rgba(244,241,232,0.5);
-    font-family: 'Archivo', sans-serif;
-    font-weight: 600;
-    font-size: 12.5px;
-    text-align:center;
-    padding: 4px 10px 10px;
-    cursor: pointer;
-    text-decoration: underline;
-    text-underline-offset: 2px;
   }
-  .change-link:hover{ color: var(--line); }
+  input[type="number"]{
+    width:100%;
+    background:var(--deep);
+    border:1px solid rgba(244,241,232,.16);
+    border-radius:10px;
+    color:var(--line);
+    font-family:'Archivo Black',sans-serif;
+    font-size:30px;
+    text-align:center;
+    padding:15px;
+    margin-bottom:14px;
+  }
+  input[type="number"]::placeholder{color:rgba(244,241,232,.38);}
+  input[type="number"]:focus{outline:2px solid var(--ball);outline-offset:1px;}
+  .setup-note{
+    font-size:12.5px;
+    color:rgba(244,241,232,.55);
+    text-align:center;
+    margin-top:12px;
+    line-height:1.55;
+  }
 
-  .hidden{ display: none !important; }
+  .hidden{display:none !important;}
 
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important;transition:none !important;}
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <a class="back-link" href="../../"><span class="back-arrow">‹</span>Shelf</a>
+  <a class="back-link" href="../../"><span class="back-arrow">&lsaquo;</span>Shelf</a>
   <header>
-    <div class="eyebrow">Social Tennis</div>
     <h1>Court Allocator</h1>
-    <div class="sub" id="headerSub">Tap for a random spot</div>
+    <p class="sub" id="headerSub">Tap for a random spot</p>
   </header>
 
   <div class="setup-card" id="setupCard">
     <label for="playerCount">How many players today?</label>
-    <input type="number" id="playerCount" min="4" max="16" step="1" placeholder="e.g. 10">
+    <input type="number" id="playerCount" min="4" max="16" step="1" placeholder="e.g. 10" inputmode="numeric">
     <button id="startBtn">Set courts</button>
-    <div class="setup-note" id="setupNote">Courts 16 · 15 · 14 · 13 — up to 4 players per court</div>
+    <p class="setup-note" id="setupNote">Courts 16, 15, 14 and 13. Up to 4 players per court.</p>
   </div>
 
   <div id="playArea" class="hidden">
     <div class="result-card" id="resultCard" role="button" tabindex="0" aria-label="Tap to get your court">
       <div class="result-label">Your spot</div>
-      <div class="result-value" id="resultValue">TAP</div>
+      <strong class="result-value" id="resultValue">TAP</strong>
       <div class="result-sub" id="resultSub">Tap this card to get your court</div>
     </div>
 
-    <button class="reset-link" id="resetBtn">Reset all courts</button>
-    <button class="change-link" id="changeBtn">Change player count</button>
-
-    <div class="full-note" id="fullNote">All courts are full for this round.</div>
+    <div class="actions">
+      <button class="link-btn" id="resetBtn">Reset courts</button>
+      <button class="link-btn" id="changeBtn">Change player count</button>
+    </div>
 
     <div class="grid" id="grid"></div>
+    <div class="full-note" id="fullNote">All courts are full for this round.</div>
   </div>
 </div>
 
@@ -354,8 +356,11 @@
       slots = {};
       COURTS.forEach(c => SIDES.forEach(s => slots[c + s] = 0));
 
-      const label = COURTS.slice().sort((a, b) => b - a).join(' · ');
-      headerSub.textContent = `Tap for a random spot — court${COURTS.length > 1 ? 's' : ''} ${label}`;
+      const sorted = COURTS.slice().sort((a, b) => b - a);
+      const label = sorted.length > 1
+        ? sorted.slice(0, -1).join(', ') + ' and ' + sorted[sorted.length - 1]
+        : String(sorted[0]);
+      headerSub.textContent = `Tap for a random spot. Court${COURTS.length > 1 ? 's' : ''} ${label}.`;
 
       resultValue.textContent = 'TAP';
       resultSub.textContent = 'Tap this card to get your court';
@@ -366,25 +371,29 @@
       renderGrid();
     }
 
+    // One row per court, each split at the net into its two sides. Each side
+    // fills from the baseline up as it takes players, so the whole session is
+    // readable at a glance from across the court.
     function renderGrid(){
       grid.innerHTML = '';
       COURTS.forEach(c => {
-        SIDES.forEach(s => {
-          const key = c + s;
-          const count = slots[key];
-          const full = count >= CAPACITY;
-          const div = document.createElement('div');
-          div.className = 'slot' + (full ? ' full' : '');
-          div.innerHTML = `
-            <div class="slot-name">${key}</div>
-            <div class="slot-pips">
-              ${Array.from({length: CAPACITY}).map((_, i) =>
-                `<span class="pip${i < count ? ' filled' : ''}"></span>`
-              ).join('')}
-            </div>
-          `;
-          grid.appendChild(div);
-        });
+        const courtFull = SIDES.every(s => slots[c + s] >= CAPACITY);
+        const row = document.createElement('div');
+        row.className = 'court' + (courtFull ? ' full' : '');
+        row.innerHTML = `
+          <div class="court-no">${c}</div>
+          <div class="court-sides">
+            ${SIDES.map(s => {
+              const count = slots[c + s];
+              const full = count >= CAPACITY;
+              return `<div class="side${full ? ' full' : ''}" style="--fill:${count / CAPACITY}">
+                <span class="side-name">${s}</span>
+                <span class="side-count">${count}/${CAPACITY}</span>
+              </div>`;
+            }).join('')}
+          </div>
+        `;
+        grid.appendChild(row);
       });
 
       const allFull = Object.values(slots).every(v => v >= CAPACITY);
@@ -417,7 +426,7 @@
 
       const court = pick.slice(0, -1);
       const side = pick.slice(-1);
-      resultSub.textContent = `Court ${court}, side ${side} — go grab a spot!`;
+      resultSub.textContent = `Court ${court}, side ${side}. Go grab a spot.`;
 
       renderGrid();
 
@@ -425,7 +434,7 @@
         const stillAvailable = Object.keys(slots).some(k => slots[k] < CAPACITY);
         resultValue.textContent = 'TAP';
         resultSub.textContent = stillAvailable
-          ? 'Next player — tap this card'
+          ? 'Next player, tap this card'
           : 'All courts are full';
       }, REVERT_DELAY);
     }
