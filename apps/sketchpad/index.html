@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#FAF6EC">
@@ -13,52 +13,73 @@
 <style>
   :root{
     --paper:#FAF6EC;
+    --paper-deep:#F3EDDD;
     --panel:#FFFFFF;
     --line:#E5DCC6;
+    --line-soft:#EFE8D6;
     --ink:#2B2620;
     --ink-soft:#8B826C;
     --accent:#3E6FF2;
     --accent-deep:#2E56D1;
     --accent-ink:#FFFFFF;
-    --danger:#E0553F;
+    --danger:#C9472F;
     --font-display:'Caveat', cursive;
     --font-body:'Nunito', system-ui, -apple-system, sans-serif;
+    --r:12px;
+    --ease:cubic-bezier(.16,1,.3,1);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;}
+  html{-webkit-text-size-adjust:100%;}
   body{
+    margin:0;
     background:var(--paper); color:var(--ink); font-family:var(--font-body);
-    min-height:100vh; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+    min-height:100dvh;
+    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
     -webkit-font-smoothing:antialiased;
   }
-  .wrap{max-width:760px; margin:0 auto; padding:20px max(16px, env(safe-area-inset-right)) 40px max(16px, env(safe-area-inset-left));}
+  .wrap{max-width:860px; margin:0 auto; padding:18px max(16px, env(safe-area-inset-right)) 44px max(16px, env(safe-area-inset-left));}
 
   .back-link{
-    display:inline-flex; align-items:center; gap:4px;
-    color:var(--ink-soft); font-size:12.5px; font-weight:700; text-decoration:none; margin-bottom:10px;
+    display:inline-flex; align-items:center; gap:5px;
+    color:var(--ink-soft); font-size:12.5px; font-weight:700; text-decoration:none; margin-bottom:12px;
     padding:8px 14px 8px 11px; border-radius:999px; border:1px solid var(--line);
     background:var(--panel); min-height:36px; touch-action:manipulation;
+    transition:color .18s var(--ease), background .18s var(--ease);
   }
   .back-link .back-arrow{font-size:16px; line-height:1;}
-  .back-link:hover, .back-link:active{color:var(--ink); background:var(--paper);}
+  .back-link:hover, .back-link:active{color:var(--ink); background:var(--paper-deep);}
+  .back-link:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
 
-  header{margin-bottom:16px;}
-  h1{font-family:var(--font-display); font-weight:700; font-size:44px; line-height:1; margin:0; color:var(--ink);}
-  header p{margin:4px 0 0; color:var(--ink-soft); font-size:14px; max-width:52ch;}
+  header{margin-bottom:18px; display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;}
+  h1{font-family:var(--font-display); font-weight:700; font-size:clamp(40px,9vw,58px); line-height:.9; margin:0; color:var(--ink);}
+  header p{margin:0; color:var(--ink-soft); font-size:14px; max-width:40ch; line-height:1.5;}
 
+  /* ---------- toolbar: one panel, three banded rows ---------- */
   .toolbar{
-    display:flex; flex-wrap:wrap; gap:10px; align-items:center;
-    background:var(--panel); border:1px solid var(--line); border-radius:14px;
-    padding:12px; margin-bottom:14px;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--r);
+    margin-bottom:14px; overflow:hidden;
+  }
+  .tool-row{
+    display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    padding:11px 12px;
+  }
+  .tool-row + .tool-row{border-top:1px solid var(--line-soft);}
+  .row-label{
+    font-size:10.5px; font-weight:800; color:var(--ink-soft);
+    text-transform:uppercase; letter-spacing:.09em;
+    flex:0 0 46px;
   }
   .tool-group{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
-  .divider{width:1px; align-self:stretch; background:var(--line); margin:2px 2px;}
+  .spacer{flex:1 1 auto;}
 
   .swatch{
     width:28px; height:28px; border-radius:50%; border:2px solid rgba(0,0,0,0.08);
     cursor:pointer; padding:0; flex:0 0 auto; position:relative;
+    transition:transform .14s var(--ease);
   }
+  .swatch:hover{transform:scale(1.1);}
   .swatch.active{box-shadow:0 0 0 2px var(--panel), 0 0 0 4px var(--accent);}
+  .swatch:focus-visible{outline:2px solid var(--accent); outline-offset:3px;}
   .custom-swatch{
     display:flex; align-items:center; justify-content:center; overflow:hidden;
     background:conic-gradient(from 90deg,#ff004c,#ff9a00,#ffe500,#3cff00,#00fff2,#0033ff,#a600ff,#ff004c);
@@ -70,32 +91,47 @@
   .custom-swatch input[type=color]::-webkit-color-swatch-wrapper{padding:0;}
   .custom-swatch input[type=color]::-webkit-color-swatch{border:none;}
 
-  .tool-btn{
+  /* Segmented control: brushes are one mutually-exclusive choice, so they
+     read as one control rather than three loose buttons. */
+  .segmented{display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:var(--paper);}
+  .segmented .tool-btn{border:none; border-radius:0; background:transparent;}
+  .segmented .tool-btn + .tool-btn{border-left:1px solid var(--line);}
+
+  .tool-btn, .icon-btn{
     font-family:var(--font-body); font-weight:700; font-size:13px;
     background:var(--paper); border:1px solid var(--line); color:var(--ink);
     padding:9px 14px; border-radius:9px; cursor:pointer; min-height:38px;
+    touch-action:manipulation;
+    transition:background .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease);
   }
+  .tool-btn:hover, .icon-btn:hover:not(:disabled){background:var(--paper-deep);}
+  .tool-btn:focus-visible, .icon-btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
+  .tool-btn:active:not(.active), .icon-btn:active:not(:disabled){transform:translateY(1px);}
   .tool-btn.active{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
-
-  .size-group{gap:8px;}
-  .size-group label{font-size:12.5px; font-weight:700; color:var(--ink-soft); display:flex; align-items:center; gap:6px; white-space:nowrap;}
-  .size-group input[type=range]{width:100px; accent-color:var(--accent);}
-  .size-dot{width:14px; height:14px; border-radius:50%; background:var(--ink); flex:0 0 auto;}
-
-  .icon-btn{
-    font-family:var(--font-body); font-weight:700; font-size:13px;
-    background:var(--paper); border:1px solid var(--line); color:var(--ink);
-    padding:9px 13px; border-radius:9px; cursor:pointer; min-height:38px;
-  }
-  .icon-btn:disabled{opacity:0.4; cursor:not-allowed;}
+  .segmented .tool-btn.active{box-shadow:inset 0 0 0 1px var(--accent);}
+  .icon-btn:disabled{opacity:0.38; cursor:not-allowed;}
   .icon-btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
-  .icon-btn.danger{color:var(--danger); border-color:rgba(224,85,63,0.35);}
+  .icon-btn.primary:hover:not(:disabled){background:var(--accent-deep);}
+  .icon-btn.danger{color:var(--danger); border-color:rgba(201,71,47,0.32);}
+  .icon-btn.danger:hover:not(:disabled){background:rgba(201,71,47,0.07);}
 
-  .saved-row{display:flex; align-items:center; gap:10px; margin:-2px 0 14px; flex-wrap:wrap;}
+  .size-group{gap:9px;}
+  .size-group label{font-size:12.5px; font-weight:700; color:var(--ink-soft); display:flex; align-items:center; gap:6px; white-space:nowrap;}
+  .size-group input[type=range]{width:120px; accent-color:var(--accent);}
+  .size-group input[type=range]:focus-visible{outline:2px solid var(--accent); outline-offset:3px;}
+  /* Live preview of the actual nib size, capped so the row never jumps. */
+  .size-dot{
+    width:14px; height:14px;
+    border-radius:50%; background:var(--ink); flex:0 0 auto;
+    transition:width .12s var(--ease), height .12s var(--ease);
+  }
+  .size-well{width:34px; height:34px; display:flex; align-items:center; justify-content:center; flex:0 0 auto;}
+
   .saved-row.hidden{display:none;}
   .saved-label{
-    font-size:11.5px; font-weight:800; color:var(--ink-soft);
-    text-transform:uppercase; letter-spacing:0.06em;
+    font-size:10.5px; font-weight:800; color:var(--ink-soft);
+    text-transform:uppercase; letter-spacing:.09em;
+    flex:0 0 46px;
   }
 
   .camera-overlay{
@@ -126,77 +162,87 @@
   .camera-actions .icon-btn{flex:1;}
 
   .canvas-wrap{
-    background:var(--panel); border:1px solid var(--line); border-radius:16px;
-    padding:8px; box-shadow:0 1px 2px rgba(43,38,32,0.04), 0 8px 24px rgba(43,38,32,0.06);
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--r);
+    padding:8px;
+    box-shadow:0 1px 2px rgba(43,38,32,0.04), 0 10px 30px rgba(43,38,32,0.07);
   }
   #board{
-    width:100%; height:auto; display:block; border-radius:10px;
+    width:100%; height:auto; display:block; border-radius:8px;
     touch-action:none; cursor:crosshair;
   }
 
-  .hint{font-size:12px; color:var(--ink-soft); margin-top:12px; line-height:1.6;}
+  .hint{font-size:12.5px; color:var(--ink-soft); margin-top:14px; line-height:1.6; max-width:68ch;}
 
-  @media (max-width:480px){
-    h1{font-size:36px;}
-    .toolbar{padding:10px;}
-    .divider{display:none;}
+  @media (max-width:560px){
+    .row-label, .saved-label{flex-basis:100%;}
+    .size-group input[type=range]{width:100%; min-width:120px;}
+    .size-group{flex:1 1 auto;}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important; transition:none !important;}
   }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <a class="back-link" href="../../"><span class="back-arrow">‹</span>Shelf</a>
+  <a class="back-link" href="../../"><span class="back-arrow">&lsaquo;</span>Shelf</a>
   <header>
     <h1>Sketchpad</h1>
-    <p>A blank page for doodling, sketching an idea, or just messing around with colour. Saves automatically on this device.</p>
+    <p>A blank page for doodling. Saves automatically on this device.</p>
   </header>
 
   <div class="toolbar">
-    <div class="tool-group" id="colorGroup"></div>
-    <label class="swatch custom-swatch" title="Custom colour">
-      <input type="color" id="colorPicker" value="#2B2620" aria-label="Custom colour">
-    </label>
-    <button class="icon-btn" id="cameraBtn" title="Pick a colour with your camera">Camera</button>
-
-    <div class="divider"></div>
-
-    <div class="tool-group" id="brushTypeGroup">
-      <button class="tool-btn active" data-brush="flat" title="Flat brush — chisel edge held across your stroke">Flat</button>
-      <button class="tool-btn" data-brush="round" title="Round brush — bristly, even coverage">Round</button>
-      <button class="tool-btn" data-brush="spray" title="Spray — scattered, airbrush-like">Spray</button>
+    <div class="tool-row">
+      <span class="row-label">Colour</span>
+      <div class="tool-group" id="colorGroup"></div>
+      <label class="swatch custom-swatch" title="Pick any colour">
+        <input type="color" id="colorPicker" value="#2B2620" aria-label="Custom colour">
+      </label>
+      <span class="spacer"></span>
+      <button class="icon-btn" id="cameraBtn" title="Sample a colour through the camera">Camera</button>
     </div>
-    <div class="tool-group">
+
+    <div class="tool-row saved-row hidden" id="savedRow">
+      <span class="saved-label">Saved</span>
+      <div class="tool-group" id="savedColorGroup"></div>
+    </div>
+
+    <div class="tool-row">
+      <span class="row-label">Brush</span>
+      <div class="tool-group segmented" id="brushTypeGroup">
+        <button class="tool-btn active" data-brush="flat" title="Chisel edge held across your stroke">Flat</button>
+        <button class="tool-btn" data-brush="round" title="Bristly, even coverage">Round</button>
+        <button class="tool-btn" data-brush="spray" title="Scattered, airbrush-like">Spray</button>
+      </div>
       <button class="tool-btn" id="eraserBtn" data-tool="eraser">Eraser</button>
+      <span class="spacer"></span>
+      <div class="tool-group size-group">
+        <span class="size-well"><span class="size-dot" id="sizeDot"></span></span>
+        <label for="sizeSlider">Size <span id="sizeVal">6</span></label>
+        <input type="range" id="sizeSlider" min="1" max="40" value="6">
+      </div>
     </div>
 
-    <div class="divider"></div>
-
-    <div class="tool-group size-group">
-      <div class="size-dot" id="sizeDot"></div>
-      <label for="sizeSlider">Size <span id="sizeVal">6</span></label>
-      <input type="range" id="sizeSlider" min="1" max="40" value="6">
+    <div class="tool-row">
+      <span class="row-label">Page</span>
+      <div class="tool-group">
+        <button class="icon-btn" id="undoBtn" disabled>Undo</button>
+        <button class="icon-btn" id="redoBtn" disabled>Redo</button>
+      </div>
+      <span class="spacer"></span>
+      <div class="tool-group">
+        <button class="icon-btn danger" id="clearBtn">Clear</button>
+        <button class="icon-btn primary" id="saveBtn">Save PNG</button>
+      </div>
     </div>
-
-    <div class="divider"></div>
-
-    <div class="tool-group actions">
-      <button class="icon-btn" id="undoBtn" disabled>Undo</button>
-      <button class="icon-btn" id="redoBtn" disabled>Redo</button>
-      <button class="icon-btn danger" id="clearBtn">Clear</button>
-      <button class="icon-btn primary" id="saveBtn">Save PNG</button>
-    </div>
-  </div>
-
-  <div class="saved-row hidden" id="savedRow">
-    <span class="saved-label">Saved</span>
-    <div class="tool-group" id="savedColorGroup"></div>
   </div>
 
   <div class="canvas-wrap">
     <canvas id="board"></canvas>
   </div>
 
-  <p class="hint">Draw with a finger, stylus, or mouse. Flat holds a chisel edge crosswise to your stroke, Round lays down bristly coverage, Spray scatters like an airbrush — all three thin out the faster you move, like real paint running low. Undo/redo step through your last strokes; Clear wipes the page. The camera button samples a colour from whatever it's pointed at instead of typing in a hex code. Nothing leaves your device — there's no upload, just this browser's local storage and camera.</p>
+  <p class="hint">Draw with a finger, stylus, or mouse. All three brushes thin out the faster you move, the way real paint runs low. Nothing leaves your device: the drawing lives in this browser's local storage, and the camera is only ever sampled for colour.</p>
 </div>
 
 <div class="camera-overlay hidden" id="cameraOverlay">
@@ -207,7 +253,7 @@
     </div>
     <div class="camera-preview-row">
       <div class="camera-swatch" id="cameraSwatch"></div>
-      <div class="camera-hex" id="cameraHex">—</div>
+      <div class="camera-hex" id="cameraHex">No reading yet</div>
     </div>
     <div class="camera-status" id="cameraStatus"></div>
     <div class="camera-actions">
@@ -602,7 +648,7 @@
     cameraUseBtn.disabled = true;
     liveCameraHex = null;
     cameraSwatch.style.background = 'transparent';
-    cameraHex.textContent = '—';
+    cameraHex.textContent = 'No reading yet';
     cameraStatus.textContent = 'Starting camera…';
     try {
       cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
