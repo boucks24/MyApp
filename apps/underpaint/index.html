@@ -7,24 +7,31 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="mobile-web-app-capable" content="yes">
-<title>Underpaint — mixing, palettes &amp; simplified studies</title>
+<title>Underpaint</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@400;500;600;700&family=Karla:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --canvas:#1C1A17;
-    --surface:#26231F;
-    --surface-2:#332E28;
-    --ink:#F1EAE0;
-    --ink-soft:#B3A99B;
-    --line:#413B33;
-    --line-soft:#332E28;
+    /* Near-neutral dark greys, only faintly warm. This app exists to judge
+       colour (mix against target, palette pulled from a photo), and the old
+       ochre-tinted surfaces cast onto every swatch sitting on them. The ochre
+       survives as the interactive accent, where it carries the brand without
+       touching the colour being judged. */
+    --canvas:#191918;
+    --surface:#232322;
+    --surface-2:#2D2D2B;
+    --ink:#EDEBE8;
+    --ink-soft:#A8A59E;
+    --line:#3B3B38;
+    --line-soft:#2D2D2B;
     --accent:#D69A3D;
     --accent-deep:#B87F27;
-    --accent-ink:#1C1A17;
-    --surface-hover:#3A342C;
+    --accent-ink:#191918;
+    --surface-hover:#353532;
     --shadow: 0 1px 0 rgba(0,0,0,0.3);
+    --font-mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ease:cubic-bezier(.16,1,.3,1);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html{ -webkit-text-size-adjust:100%; }
@@ -34,9 +41,21 @@
     color:var(--ink);
     font-family:'Karla', sans-serif;
     -webkit-font-smoothing:antialiased;
-    min-height:100vh;
+    min-height:100dvh;
     touch-action:manipulation;
   }
+  /* Keyboard affordance: none of these controls had a visible focus state. */
+  .btn-primary:focus-visible, .btn-secondary:focus-visible, .tab-btn:focus-visible,
+  .mode-btn:focus-visible, .add-btn:focus-visible, .copy-btn:focus-visible,
+  .back-link:focus-visible, .dropzone:focus-visible, input:focus-visible,
+  select:focus-visible, .swap-label:focus-within{
+    outline:2px solid var(--accent); outline-offset:2px;
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
+
   ::selection{ background:var(--accent); color:var(--accent-ink); }
 
   .wrap{
@@ -181,6 +200,11 @@
     border-bottom:1px solid var(--line-soft);
   }
   .paint-row:last-of-type{ border-bottom:none; }
+  /* Name takes the slack so the stepper and remove button form clean columns
+     instead of landing wherever the name happens to end. */
+  .paint-name{ flex:1 1 0; min-width:0; font-size:12.5px; color:var(--ink-soft); line-height:1.3; }
+  .paint-row .parts-wrap{ flex:0 0 auto; }
+  .paint-row .row-remove{ flex:0 0 auto; }
   .swap-label{
     display:inline-flex;
     cursor:pointer;
@@ -199,7 +223,7 @@
   }
   .hex-field{
     width:96px;
-    font-family:'Karla', monospace;
+    font-family:var(--font-mono);font-variant-numeric:tabular-nums;
     font-size:16px;
     border:1px solid var(--line);
     background:var(--surface-2);
@@ -238,7 +262,7 @@
   .parts-value{
     min-width:34px;
     text-align:center;
-    font-family:'Karla', monospace;
+    font-family:var(--font-mono);font-variant-numeric:tabular-nums;
     font-size:15px;
     font-weight:600;
     color:var(--ink);
@@ -286,12 +310,12 @@
     margin-bottom:16px;
   }
   .mix-hex{
-    font-family:'Karla', monospace;
+    font-family:var(--font-mono);font-variant-numeric:tabular-nums;
     font-size:18px;
     font-weight:600;
     letter-spacing:0.02em;
   }
-  .mix-rgb{ font-size:13.5px; color:var(--ink-soft); margin-top:2px; }
+  .mix-rgb{ font-size:13px; color:var(--ink-soft); margin-top:3px; font-variant-numeric:tabular-nums; }
   .copy-btn{
     margin-top:14px;
     background:var(--accent);
@@ -307,6 +331,7 @@
   }
   .copy-btn:hover{ background:var(--accent-deep); }
   .note{
+    text-align:left;
     font-size:13px;
     color:var(--ink-soft);
     margin-top:16px;
@@ -344,7 +369,7 @@
     font-size:13.5px; font-weight:600; color:var(--ink-soft);
     margin-bottom:10px;
   }
-  .field-row label span.val{ color:var(--ink); font-family:'Karla', monospace; }
+  .field-row label span.val{ color:var(--ink); font-family:var(--font-mono);font-variant-numeric:tabular-nums; }
   input[type=range]{
     -webkit-appearance:none; appearance:none;
     width:100%;
@@ -400,7 +425,7 @@
     border:1px solid rgba(0,0,0,0.12);
   }
   .chip-info{ display:flex; flex-direction:column; }
-  .chip-hex{ font-family:'Karla', monospace; font-size:14px; font-weight:600; }
+  .chip-hex{ font-family:var(--font-mono);font-variant-numeric:tabular-nums; font-size:14px; font-weight:600; }
   .chip-pct{ font-size:12px; color:var(--ink-soft); }
   .chip-copied{
     position:absolute; right:12px; top:50%; transform:translateY(-50%);
@@ -530,7 +555,7 @@
         <div class="mix-compare-row">
           <div style="text-align:center;">
             <div class="mix-swatch" id="mixSwatch"></div>
-            <div class="mix-hex" id="mixName">—</div>
+            <div class="mix-hex" id="mixName">No mix yet</div>
             <div class="mix-rgb" id="mixRgb">Add a paint to see the mix</div>
             <button class="copy-btn" id="mixCopyBtn">Copy hex</button>
           </div>
@@ -541,7 +566,7 @@
             </label>
             <div class="mix-hex" id="targetName">Umber</div>
             <div class="mix-rgb">Target colour</div>
-            <button class="btn-secondary" id="targetRandomBtn">🎲 Random target</button>
+            <button class="btn-secondary" id="targetRandomBtn">Random target</button>
           </div>
         </div>
 
@@ -557,7 +582,7 @@
         </div>
         <div class="status-line" id="targetStatus" style="text-align:center;"></div>
 
-        <p class="note">This uses a simplified Kubelka-Munk pigment model — the same absorption/scattering theory behind tools like Mixbox — rather than each paint's exact measured reflectance data, so treat the result as a strong starting point, not a guarantee — always test small. Oil is mixed at full strength; gouache dries a little lighter and flatter as its chalk fillers set; watercolour is modelled as a transparent wash diluted with paper-white rather than mixed with white paint. Colour names are estimated from the nearest common colour, not an exact match.</p>
+        <p class="note">This uses a simplified Kubelka-Munk pigment model, the absorption and scattering theory behind tools like Mixbox, rather than each paint's exact measured reflectance data. Treat the result as a strong starting point and always test small. Oil is mixed at full strength; gouache dries a little lighter and flatter as its chalk fillers set; watercolour is modelled as a transparent wash diluted with paper-white. Colour names are the nearest common match, not exact.</p>
       </div>
     </div>
   </section>
@@ -590,7 +615,7 @@
   <!-- ===================== VECTOR ===================== -->
   <section class="panel" id="panel-vector">
     <h2 class="tool-title">Simplify to vector</h2>
-    <p class="tool-sub">Flattens a photo into a small number of solid colour shapes and traces them into an SVG, with a colour-swatch legend added underneath — handy for a value study, a stencil, or a simplified block-in. Updates live as you adjust the sliders.</p>
+    <p class="tool-sub">Flattens a photo into a small number of solid colour shapes and traces them into an SVG, with a colour-swatch legend added underneath. Handy for a value study, a stencil, or a simplified block-in. Updates live as you adjust the sliders.</p>
     <div class="grid2">
       <div class="card">
         <div class="dropzone" id="vectorDropzone">
@@ -625,7 +650,7 @@
     </div>
   </section>
 
-  <footer class="app-footer">Everything runs in your browser — images aren't uploaded anywhere.</footer>
+  <footer class="app-footer">Everything runs in your browser. Images aren't uploaded anywhere.</footer>
 </div>
 
 <script>
@@ -1012,13 +1037,13 @@ function renderPaintRows(){
   paints.forEach((p, i)=>{
     const row = document.createElement('div');
     row.className = 'paint-row';
-    const label = p.hex.toUpperCase() + (p.name ? ' — '+p.name : '');
+    const label = p.hex.toUpperCase() + (p.name ? ', '+p.name : '');
     row.innerHTML = `
       <label class="swap-label" title="${label}">
         <span class="blob" style="background:${p.hex}"></span>
         <input type="color" value="${p.hex}" data-idx="${i}" class="colorPicker" aria-label="Paint colour, ${label}">
       </label>
-      ${p.name ? `<span style="font-size:12px; color:var(--ink-soft); min-width:64px;">${p.name}</span>` : ''}
+      <span class="paint-name">${p.name || ''}</span>
       <div class="parts-wrap">
         <div class="parts-stepper">
           <button type="button" class="stepper-btn" data-idx="${i}" data-dir="-1" aria-label="Decrease parts">−</button>
@@ -1036,7 +1061,7 @@ function renderPaintRows(){
     const empty = document.createElement('p');
     empty.className = 'tool-sub';
     empty.style.margin = '4px 0 0';
-    empty.textContent = 'No paints yet — add one, or pick a palette above.';
+    empty.textContent = 'No paints yet. Add one, or pick a palette above.';
     paintRowsEl.appendChild(empty);
   }
 
@@ -1144,7 +1169,7 @@ function computeMix(){
     lastMixHex = null;
     swatch.style.background = 'var(--line)';
     swatch.title = '';
-    nameEl.textContent = '—';
+    nameEl.textContent = 'No mix yet';
     rgbEl.textContent = 'Add at least one paint';
     autoCheckMatch(null);
     return;
@@ -1172,7 +1197,7 @@ function autoCheckMatch(mixHex){
   }
   const pct = matchPct(labDist(rgbToLab(hexToRgb(mixHex)), rgbToLab(hexToRgb(targetHex))));
   if (pct>=95){
-    targetStatus.textContent = `✓ Match — ${pct}% to target.`;
+    targetStatus.textContent = `Match: ${pct}% to target.`;
     targetStatus.classList.add('match');
     autoMatchShown = true;
   } else if (autoMatchShown){
@@ -1207,10 +1232,10 @@ function matchPct(distance){
 }
 
 function matchVerdict(pct){
-  if (pct>=95) return "Excellent — that's essentially a match.";
-  if (pct>=85) return 'Very close — a trained eye might spot a difference.';
+  if (pct>=95) return "Excellent, that's essentially a match.";
+  if (pct>=85) return 'Very close. A trained eye might spot a difference.';
   if (pct>=65) return 'In the right family, but adjust the ratio.';
-  return 'Off — try different paints or parts.';
+  return 'Off. Try different paints or parts.';
 }
 
 function setTargetHex(hex){
@@ -1263,7 +1288,7 @@ document.getElementById('solveMixBtn').addEventListener('click', ()=>{
   paints.forEach((p,i)=> p.parts = result.weights[i]);
   renderPaintRows(); computeMix();
   const pct = matchPct(result.distance);
-  targetStatus.textContent = `Recipe applied — about ${pct}% match to the target. Fine-tune the parts if you like.`;
+  targetStatus.textContent = `Recipe applied, about ${pct}% match to the target. Fine-tune the parts if you like.`;
   targetStatus.classList.toggle('match', pct>=95);
   autoMatchShown = pct>=95;
 });
@@ -1376,7 +1401,7 @@ function scheduleVectorRender(){
     try {
       runVectorize();
     } catch(err){
-      vecStatus.textContent = 'Something went wrong simplifying that image — try a smaller detail level.';
+      vecStatus.textContent = 'Something went wrong simplifying that image. Try a smaller detail level.';
       console.error(err);
     }
   }, 300);
@@ -1643,7 +1668,7 @@ function runVectorize(){
   vecSvgHolder.innerHTML = svgString;
   vecSvgHolder.style.display = 'block';
   vecDownloadRow.style.display = 'flex';
-  vecStatus.textContent = `Done — ${outW}×${outH} output, ${colorsRgb.length} colours.`;
+  vecStatus.textContent = `Done: ${outW}×${outH} output, ${colorsRgb.length} colours.`;
 }
 
 vecDownloadSvgBtn.addEventListener('click', ()=>{
