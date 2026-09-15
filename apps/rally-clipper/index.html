@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tennis Analysis">
 <title>Tennis Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;500;600;700&display=swap');
   :root{
     --court:#244A3D;
     --court-dark:#1A362D;
@@ -17,27 +19,34 @@
     --ball:#D7E05B;
     --ink:#16211D;
     --muted:rgba(244,241,232,0.55);
+    --court-lift:#2A5546;
+    /* Timecodes, durations and the live scrub readouts all change in place.
+       Tabular figures stop them shuffling width as they tick. */
+    --font-mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --ease:cubic-bezier(.16,1,.3,1);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   body{
-    margin:0; background:var(--court-dark); color:var(--line);
+    margin:0; background:#163027; color:var(--line);
+    background-image:radial-gradient(130% 70% at 50% 0%, #1F4034 0%, #132520 62%);
+    background-attachment:fixed;
     font-family:'Archivo', sans-serif;
-    min-height:100vh;
-    padding:calc(28px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 60px max(16px, env(safe-area-inset-left));
+    min-height:100dvh;
+    padding:calc(22px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 56px max(16px, env(safe-area-inset-left));
   }
   .wrap{max-width:520px; margin:0 auto;}
   .back-link{
     display:inline-flex; align-items:center; gap:4px;
     color:rgba(244,241,232,0.75); font-size:12.5px; font-weight:700; text-decoration:none; margin-bottom:14px;
     padding:8px 14px 8px 11px; border-radius:999px; border:1px solid rgba(244,241,232,0.18);
-    background:var(--court); min-height:36px; touch-action:manipulation;
+    background:rgba(36,74,61,0.75); min-height:38px; touch-action:manipulation;
+    transition:background .18s var(--ease), color .18s var(--ease);
   }
   .back-link .back-arrow{font-size:16px; line-height:1;}
   .back-link:hover, .back-link:active{color:var(--line); background:#2A5546;}
-  header{text-align:center; margin-bottom:24px;}
-  .eyebrow{font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:var(--ball); font-weight:700; margin-bottom:6px;}
-  h1{font-family:'Archivo Black', sans-serif; font-size:28px; line-height:1; margin:0 0 4px; letter-spacing:-0.01em;}
-  .sub{color:var(--muted); font-size:13.5px; line-height:1.5;}
+  header{margin-bottom:22px;}
+  h1{font-family:'Archivo Black', sans-serif; font-size:clamp(30px,8.5vw,42px); line-height:.96; margin:0 0 8px; letter-spacing:-0.02em; text-transform:uppercase;}
+  .sub{color:var(--muted); font-size:13.5px; line-height:1.55; max-width:46ch;}
 
   .card{background:var(--court); border:1px solid rgba(244,241,232,0.12); border-radius:16px; padding:18px; margin-bottom:14px;}
   .card h2{font-family:'Archivo Black', sans-serif; font-size:15px; margin:0 0 12px; letter-spacing:0.01em;}
@@ -62,13 +71,13 @@
   .field-row{margin-bottom:18px;}
   .field-row:last-child{margin-bottom:0;}
   .field-row label{display:flex; justify-content:space-between; font-size:13px; font-weight:600; color:var(--muted); margin-bottom:8px;}
-  .field-row label span.val{color:var(--line); font-family:monospace;}
+  .field-row label span.val{color:var(--line); font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
   input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:28px; background:transparent;}
   input[type=range]::-webkit-slider-runnable-track{height:5px; border-radius:3px; background:rgba(244,241,232,0.2);}
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:22px; height:22px; margin-top:-9px; border-radius:50%; background:var(--ball); border:2px solid var(--court);}
   input[type=number]{
     width:100%; background:var(--court-dark); border:1px solid rgba(244,241,232,0.15); border-radius:8px;
-    color:var(--line); font-family:monospace; font-size:15px; text-align:center; padding:10px;
+    color:var(--line); font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:15px; text-align:center; padding:10px;
   }
 
   button{
@@ -94,10 +103,10 @@
     background:var(--court-dark); border:1px solid rgba(244,241,232,0.12); border-radius:10px;
     padding:12px; margin-bottom:8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
   }
-  .shot-item .idx{font-family:'Archivo Black', sans-serif; font-size:13px; color:var(--ball); width:22px;}
+  .shot-item .idx{font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; color:var(--ball); width:24px; flex:0 0 auto;}
   .shot-item .times{display:flex; gap:6px; align-items:center; flex:1; min-width:180px;}
   .shot-item .times input{width:64px; padding:6px; font-size:13px;}
-  .shot-item .dur{font-size:11px; color:var(--muted); width:100%;}
+  .shot-item .dur{font-size:11px; color:var(--muted); width:100%; font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
   .shot-item input[type=checkbox]{width:20px; height:20px; accent-color:var(--ball);}
 
   .summary{display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin-bottom:10px;}
@@ -106,7 +115,18 @@
   .note{font-size:12px; color:var(--muted); line-height:1.6; margin-top:12px; border-top:1px solid rgba(244,241,232,0.12); padding-top:12px;}
   .hidden{display:none !important;}
 
-  .tool-tabs{display:flex; gap:8px; justify-content:center; margin-top:16px;}
+  /* Each label stays on one line; the row scrolls instead of every pill
+     wrapping to two lines at phone width. */
+  .tool-tabs{
+    display:flex; gap:8px; margin-top:18px;
+    overflow-x:auto; scrollbar-width:none;
+    scroll-snap-type:x proximity;
+    margin-inline:calc(-1 * max(16px, env(safe-area-inset-left)));
+    padding-inline:max(16px, env(safe-area-inset-left));
+    padding-bottom:2px;
+  }
+  .tool-tabs::-webkit-scrollbar{display:none;}
+  .tool-tab-btn{flex:0 0 auto; white-space:nowrap; scroll-snap-align:start;}
   .tool-tab-btn{
     width:auto; background:transparent; border:1px solid rgba(244,241,232,0.2); color:var(--muted);
     padding:9px 14px; font-family:'Archivo', sans-serif; font-weight:700; font-size:13px; border-radius:999px;
@@ -128,7 +148,7 @@
   .pm-thumb-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(72px,1fr)); gap:6px; margin-top:12px;}
   .pm-thumb{position:relative; aspect-ratio:1; border-radius:8px; overflow:hidden; background:var(--court-dark);}
   .pm-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
-  .pm-thumb .pm-badge{position:absolute; top:3px; left:3px; background:rgba(0,0,0,0.6); color:var(--ball); font-size:10px; font-weight:700; padding:2px 5px; border-radius:6px; font-family:monospace;}
+  .pm-thumb .pm-badge{position:absolute; top:3px; left:3px; background:rgba(0,0,0,0.6); color:var(--ball); font-size:10px; font-weight:700; padding:2px 5px; border-radius:6px; font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
   .pm-thumb .pm-remove{position:absolute; top:3px; right:3px; width:18px; height:18px; border-radius:50%; background:rgba(0,0,0,0.6); color:var(--line); display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1; cursor:pointer;}
   .pm-thumb .pm-move{position:absolute; left:3px; right:3px; bottom:3px; display:flex; justify-content:space-between; gap:4px;}
   .pm-thumb .pm-move-btn{padding:2px 7px; font-size:12px; border-radius:5px; background:rgba(0,0,0,0.6); color:var(--line);}
@@ -152,7 +172,7 @@
   .rm-stats-grid{display:none; grid-template-columns:repeat(3,1fr); gap:8px; margin:14px 0;}
   .rm-stats-grid.show{display:grid;}
   .rm-stat-card{background:var(--rm-panel); border:1px solid var(--rm-line); border-radius:10px; padding:10px 10px 9px;}
-  .rm-stat-card .v{font-family:'Archivo Black', sans-serif; font-size:16px; font-weight:700;}
+  .rm-stat-card .v{font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:16px; font-weight:700; letter-spacing:-0.02em;}
   .rm-stat-card .v small{font-size:11px; font-weight:600; color:var(--rm-muted);}
   .rm-stat-card .l{font-size:10px; color:var(--rm-muted); text-transform:uppercase; letter-spacing:.04em; margin-top:2px;}
 
@@ -207,14 +227,14 @@
   .rm-readout{display:none; justify-content:space-between; gap:6px; margin:10px 0 2px; flex-wrap:wrap; background:var(--rm-panel); border:1px solid var(--rm-line); border-radius:10px; padding:8px 12px;}
   .rm-readout.show{display:flex;}
   .rm-readout .ritem{font-size:11.5px; color:var(--rm-muted);}
-  .rm-readout .ritem b{color:var(--rm-text); font-family:'Archivo Black', sans-serif; font-size:13px; font-weight:700; display:block;}
+  .rm-readout .ritem b{color:var(--rm-text); font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:13.5px; font-weight:700; display:block; letter-spacing:-0.02em;}
   .rm-play-btn{width:30px; height:30px; background:var(--rm-accent); border:none; color:var(--ink); border-radius:20px; font-size:13px; cursor:pointer; flex:0 0 auto; padding:0;}
 
   .rm-chart-block{display:none; margin:14px 0;}
   .rm-chart-block.show{display:block;}
   .rm-chart-head{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;}
   .rm-chart-head .t{font-size:12px; font-weight:700; color:var(--rm-muted); text-transform:uppercase; letter-spacing:.04em;}
-  .rm-chart-head .v{font-family:'Archivo Black', sans-serif; font-size:13px; font-weight:700;}
+  .rm-chart-head .v{font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; letter-spacing:-0.02em;}
   .rm-chart-block canvas{display:block; width:100%; height:110px; border-radius:8px; background:var(--rm-panel); border:1px solid var(--rm-line); touch-action:none;}
 
   .rm-wellness-card{display:none;}
@@ -224,13 +244,31 @@
   .rm-nudge-row button:active{background:var(--rm-panel2);}
   .rm-sync-readout{font-size:13px; color:var(--rm-muted); margin-top:10px; line-height:1.5;}
   .rm-sync-readout b{color:var(--rm-text);}
+
+  /* Keyboard affordance: nothing in this app had a visible focus state. */
+  button:focus-visible, .back-link:focus-visible, .dropzone:focus-visible,
+  input:focus-visible, select:focus-visible, .rm-file-row:focus-visible,
+  .timeline .seg:focus-visible{
+    outline:2px solid var(--ball); outline-offset:2px;
+  }
+  input[type=range]:focus-visible{ outline:2px solid var(--ball); outline-offset:4px; }
+  .back-link:hover{ background:var(--court-lift); }
+  button.secondary:hover, .chip-btn:hover:not(.active), .tool-tab-btn:hover:not(.active){
+    background:var(--court-lift);
+  }
+  .dropzone:hover{ border-color:rgba(215,224,91,0.5); }
+  .shot-item{ transition:border-color .16s var(--ease); }
+  .shot-item:hover{ border-color:rgba(244,241,232,0.25); }
+
+  @media (prefers-reduced-motion:reduce){
+    *{ animation:none !important; transition:none !important; }
+  }
 </style>
 </head>
 <body>
 <div class="wrap">
   <a class="back-link" href="../../"><span class="back-arrow">‹</span>Shelf</a>
   <header>
-    <div class="eyebrow">Tennis</div>
     <h1>Tennis Analysis</h1>
     <div class="sub">Find the rallies in a match video, sync a video against your watch's .fit data, explore a route/wellness file on its own, or build a montage from a batch of photos.</div>
     <nav class="tool-tabs">
@@ -280,7 +318,7 @@
         </span>
       </label>
       <div style="font-size:12px; color:var(--muted); line-height:1.5; margin:4px 0 10px;">
-        Uses TensorFlow.js to spot the ball and a player's swinging wrist frame-by-frame, as a second opinion alongside motion/sound. Downloads ~15–20MB of models on first use and is considerably slower — a general-purpose model, not one trained on tennis, so treat it as a rough extra signal rather than a reliable ball tracker.
+        Uses TensorFlow.js to spot the ball and a player's swinging wrist frame-by-frame, as a second opinion alongside motion/sound. Downloads roughly 15-20MB of models on first use and is considerably slower. It is a general-purpose model, not one trained on tennis, so treat it as a rough extra signal rather than a reliable ball tracker.
       </div>
       <div id="mlWeightRow" class="hidden">
         <label>Ball &amp; swing weight <span class="val" id="mlVal">50</span></label>
@@ -310,7 +348,7 @@
     <h2>4. Export</h2>
     <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:14px;">
       <input type="checkbox" id="preciseCutsToggle" style="width:18px;height:18px;accent-color:var(--ball);">
-      Frame-accurate cuts (re-encodes to H.264 — slower, but exact cut points instead of the nearest keyframe, and guaranteed to play everywhere even if your source is HEVC/H.265)
+      Frame-accurate cuts (re-encodes to H.264: slower, but exact cut points instead of the nearest keyframe, and guaranteed to play everywhere even if your source is HEVC/H.265)
     </label>
     <button class="primary" id="exportBtn">Export clipped video</button>
     <div class="status-line" id="exportStatus"></div>
@@ -323,7 +361,7 @@
   <section class="tool-panel" id="panel-sync">
     <div class="card">
       <h2>1. Load video + .fit file</h2>
-      <div class="note" style="margin:0 0 12px; padding:0; border:none;">Lines up your match footage with the HR/pace/elevation your watch recorded, so scrubbing the video shows what your body was doing at that instant. There's no camera/GPS matching involved — sync starts from each file's own timestamp and you fine-tune it by eye below.</div>
+      <div class="note" style="margin:0 0 12px; padding:0; border:none;">Lines up your match footage with the HR/pace/elevation your watch recorded, so scrubbing the video shows what your body was doing at that instant. There's no camera or GPS matching involved: sync starts from each file's own timestamp and you fine-tune it by eye below.</div>
       <div class="rm-dual-drop">
         <div class="dropzone" id="syncVideoDrop">
           <div><strong>Tap to choose</strong> a video</div>
@@ -355,7 +393,7 @@
     </div>
 
     <div class="card hidden" id="syncStatsCard">
-      <h2>3. Play the video — charts track along</h2>
+      <h2>3. Play the video, charts track along</h2>
       <div class="rm-stats-grid show" id="syncStatsGrid"></div>
       <div class="rm-chart-block show" id="syncChartHrBlock">
         <div class="rm-chart-head"><span class="t">Heart rate</span><span class="v" id="syncChartHrV"></span></div>
@@ -376,7 +414,7 @@
   <section class="tool-panel" id="panel-fit">
     <div class="card">
       <h2>Load .fit file(s)</h2>
-      <div class="note" style="margin:0 0 12px; padding:0; border:none;">Recorded activities (a run, ride, or match with GPS on) show up as a route on a map or an isometric ride-along, with elevation/pace/HR charts — pick multiple to compare routes. A daily wellness/health export (no GPS, just background steps/HR/stress) shows a separate summary below instead.</div>
+      <div class="note" style="margin:0 0 12px; padding:0; border:none;">Recorded activities (a run, ride, or match with GPS on) show up as a route on a map or an isometric ride-along, with elevation, pace and HR charts. Pick multiple to compare routes. A daily wellness/health export (no GPS, just background steps/HR/stress) shows a separate summary below instead.</div>
       <div class="dropzone" id="rmDropzone">
         <div><strong>Tap to choose</strong> .fit file(s), or drag them here</div>
       </div>
@@ -385,13 +423,13 @@
     </div>
 
     <div class="card rm-wellness-card" id="rmWellnessCard">
-      <h2>Daily wellness — <span id="rmWellnessFileName"></span></h2>
+      <h2>Daily wellness: <span id="rmWellnessFileName"></span></h2>
       <div class="rm-stats-grid show" id="rmWellnessStats"></div>
       <div class="rm-chart-block show" id="rmWellnessStressBlock">
         <div class="rm-chart-head"><span class="t">Stress score through the day</span><span class="v" id="rmWellnessStressV"></span></div>
         <canvas id="rmWellnessStressChart"></canvas>
       </div>
-      <div class="note">This is a background health export, not a recorded activity — no GPS/route. Resting heart rate is usually just one or two readings a day (shown as a stat above, not a chart); stress is sampled roughly every minute, so it's the one series worth charting. Garmin's other daily-summary fields (steps, floors, detailed calories) aren't reliably documented outside their own SDK, so this stays to the field decoded with real confidence rather than guess at scale factors for the rest.</div>
+      <div class="note">This is a background health export, not a recorded activity, so there is no GPS route. Resting heart rate is usually just one or two readings a day (shown as a stat above, not a chart); stress is sampled roughly every minute, so it's the one series worth charting. Garmin's other daily-summary fields (steps, floors, detailed calories) aren't reliably documented outside their own SDK, so this stays to the field decoded with real confidence rather than guess at scale factors for the rest.</div>
     </div>
 
     <div class="rm-file-list" id="rmFileList">
@@ -464,9 +502,9 @@
     </div>
     <div class="rm-iso-wrap" id="rmIsoWrap">
       <canvas id="rmIsoCanvas"></canvas>
-      <div class="rm-iso-hint">Drag to rotate — follows the focused activity's marker</div>
+      <div class="rm-iso-hint">Drag to rotate. Follows the focused activity's marker</div>
     </div>
-    <div class="rm-map-empty" id="rmMapEmpty">No GPS data in this file — showing charts only.</div>
+    <div class="rm-map-empty" id="rmMapEmpty">No GPS data in this file, so charts only.</div>
 
     <div class="rm-readout" id="rmReadout">
       <button class="rm-play-btn" id="rmPlayBtn" type="button">&#9654;</button>
@@ -510,7 +548,7 @@
       <h2>1. Upload photos</h2>
       <div class="dropzone" id="pmDropzone">
         <div><strong>Tap to choose</strong> tennis photos from your phone</div>
-        <div style="margin-top:4px;">Pick as many as you like — burst shots work well</div>
+        <div style="margin-top:4px;">Pick as many as you like. Burst shots work well</div>
       </div>
       <input type="file" id="pmPhotosInput" accept="image/*" multiple class="visually-hidden-file">
       <div class="status-line" id="pmUploadStatus"></div>
@@ -519,7 +557,7 @@
 
     <div class="card hidden" id="pmSettingsCard">
       <h2>2. Order by body position</h2>
-      <div class="note" style="margin:0 0 14px; padding:0; border:none;">Runs pose detection (TensorFlow.js MoveNet, the same model Shot Finder's ball/swing tracking uses) on each photo, then chains them so similar limb angles and player size sit next to each other — aiming for a sequence that reads as one continuous, fluid motion rather than a random slideshow. Works best with one clear player per photo; a 2D pose model can't tell front from back, so treat the order as a strong starting point, not gospel.</div>
+      <div class="note" style="margin:0 0 14px; padding:0; border:none;">Runs pose detection (TensorFlow.js MoveNet, the same model Shot Finder's ball/swing tracking uses) on each photo, then chains them so similar limb angles and player size sit next to each other, aiming for a sequence that reads as one continuous, fluid motion rather than a random slideshow. Works best with one clear player per photo; a 2D pose model can't tell front from back, so treat the order as a strong starting point, not gospel.</div>
       <button class="primary" id="pmAnalyzeBtn">Analyze &amp; order photos</button>
       <div class="status-line" id="pmAnalyzeStatus"></div>
       <div class="progress-track hidden" id="pmAnalyzeProgressTrack"><div class="progress-fill" id="pmAnalyzeProgressFill"></div></div>
@@ -527,7 +565,7 @@
 
     <div class="card hidden" id="pmOrderCard">
       <h2>3. Ordered sequence</h2>
-      <div class="note" style="margin:0 0 10px; padding:0; border:none;">Photos with no confident pose, or whose pose didn't match the rest of the batch, are dropped automatically — see the status above for how many. Use the arrows to nudge the remaining order left/right. When the video is built, each photo is rotated, scaled and shifted so its pose lands in the same spot as the last one — matching body position takes priority over keeping the whole frame in view.</div>
+      <div class="note" style="margin:0 0 10px; padding:0; border:none;">Photos with no confident pose, or whose pose didn't match the rest of the batch, are dropped automatically. See the status above for how many. Use the arrows to nudge the remaining order left/right. When the video is built, each photo is rotated, scaled and shifted so its pose lands in the same spot as the last one, because matching body position takes priority over keeping the whole frame in view.</div>
       <div class="pm-thumb-grid" id="pmOrderedGrid"></div>
     </div>
 
@@ -948,7 +986,7 @@
         }, (msg) => { analyzeStatus.textContent = msg; });
       } catch(e){
         console.error('ML analysis failed', e);
-        analyzeStatus.textContent = 'Ball/swing tracking failed to load — continuing with motion + sound only.';
+        analyzeStatus.textContent = 'Ball/swing tracking failed to load. Continuing with motion and sound only.';
         mlSamples = [];
       }
     }
@@ -969,7 +1007,7 @@
     analyzeProgressFill.style.width = '100%';
     analyzeStatus.textContent = shots.length
       ? `Found ${shots.length} likely shot${shots.length===1?'':'s'}. Review below before exporting.`
-      : 'No clear shots detected — try lowering sensitivity or check a different clip.';
+      : 'No clear shots detected. Try lowering sensitivity or check a different clip.';
 
     renderResults();
     analyzeBtn.disabled = false;
@@ -1011,7 +1049,7 @@
       const seg = document.createElement('div');
       seg.className = 'seg' + (s.include ? '' : ' off');
       seg.style.width = ((s.end - s.start) / videoDuration * 100) + '%';
-      seg.title = `${fmtTime(s.start)} – ${fmtTime(s.end)}`;
+      seg.title = `${fmtTime(s.start)} to ${fmtTime(s.end)}`;
       seg.addEventListener('click', () => {
         previewVideo.currentTime = s.start;
         previewVideo.play();
@@ -1241,11 +1279,11 @@
       outputVideo.classList.remove('hidden');
       downloadBtn.classList.remove('hidden');
       exportProgressFill.style.width = '100%';
-      exportStatus.textContent = `Done — ${included.length} shots joined into one clip.`;
+      exportStatus.textContent = `Done: ${included.length} shots joined into one clip.`;
     } catch (err){
       console.error(err);
       const detail = err && err.message ? ` (${err.message})` : '';
-      exportStatus.textContent = `Export failed${detail} — try "Frame-accurate cuts" off, or a shorter video.`;
+      exportStatus.textContent = `Export failed${detail}. Try "Frame-accurate cuts" off, or a shorter video.`;
     }
 
     exportBtn.disabled = false;
@@ -1641,9 +1679,9 @@ function fmtDur(s){
   if (h>0) return h+':'+String(m).padStart(2,'0')+':'+String(sec).padStart(2,'0');
   return m+':'+String(sec).padStart(2,'0');
 }
-function fmtEle(m){ if (m===null) return '—'; return unit==='metric' ? Math.round(m)+' m' : Math.round(m*3.28084)+' ft'; }
+function fmtEle(m){ if (m===null) return '-'; return unit==='metric' ? Math.round(m)+' m' : Math.round(m*3.28084)+' ft'; }
 function fmtSpeedOrPace(mps, sportEnum){
-  if (mps===null || mps<=0.05) return '—';
+  if (mps===null || mps<=0.05) return '-';
   if (PACE_SPORTS.has(sportEnum)) {
     const secPerUnit = unit==='metric' ? 1000/mps : 1609.344/mps;
     const mm = Math.floor(secPerUnit/60), ss = Math.round(secPerUnit%60);
@@ -1799,7 +1837,7 @@ function findIdxForTime(t, targetT){
         if (!parsed.records.length){
           const wellness = summarizeWellness(parsed);
           statusEl.textContent = wellness
-            ? `"${file.name}" looks like a daily wellness export, not a recorded activity — pick a workout .fit file instead (the Fit Analysis tab can show wellness files on their own).`
+            ? `"${file.name}" looks like a daily wellness export, not a recorded activity. Pick a workout .fit file instead (the Fit Analysis tab can show wellness files on their own).`
             : `Couldn't find any recorded activity data in "${file.name}".`;
           return;
         }
@@ -2462,7 +2500,7 @@ let wellnessChart = null;
 
 function renderWellness(fileName, w){
   el('rmWellnessFileName').textContent = fileName;
-  const dayLabel = w.dayStart ? new Date(w.dayStart).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}) : '—';
+  const dayLabel = w.dayStart ? new Date(w.dayStart).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}) : '-';
   let cards = '';
   cards += statCard('Day', dayLabel);
   if (w.restingHr!=null) cards += statCard('Resting HR', w.restingHr, 'bpm');
@@ -2559,7 +2597,7 @@ function renderFileList(){
   const showPagination = activities.length > FILES_PER_PAGE;
   el('rmFilePagination').style.display = showPagination ? 'flex' : 'none';
   if (showPagination){
-    el('rmFilePageInfo').textContent = `${startI+1}–${Math.min(startI+FILES_PER_PAGE, activities.length)} of ${activities.length}`;
+    el('rmFilePageInfo').textContent = `${startI+1}-${Math.min(startI+FILES_PER_PAGE, activities.length)} of ${activities.length}`;
     el('rmFilePrevBtn').disabled = filePage===0;
     el('rmFileNextBtn').disabled = filePage>=totalPages-1;
   }
@@ -2784,9 +2822,9 @@ function onChartHover(idx, targetT){
 
   el('rmRoDist').textContent = fmtDist(a.dist[idx]);
   el('rmRoTime').textContent = fmtDur((a.t[idx]-a.t[0])/1000);
-  el('rmRoEle').textContent = a.hasEle ? fmtEle(a.ele[idx]) : '—';
+  el('rmRoEle').textContent = a.hasEle ? fmtEle(a.ele[idx]) : '-';
   el('rmRoSpeed').textContent = fmtSpeedOrPace(a.speed[idx], a.sport);
-  el('rmRoHr').textContent = (a.hasHr && a.hr[idx]!==null) ? Math.round(a.hr[idx]) : '—';
+  el('rmRoHr').textContent = (a.hasHr && a.hr[idx]!==null) ? Math.round(a.hr[idx]) : '-';
 
   el('rmChartEleV').textContent = a.hasEle ? fmtEle(a.ele[idx]) : '';
   el('rmChartSpeedV').textContent = fmtSpeedOrPace(a.speed[idx], a.sport);
@@ -3259,7 +3297,7 @@ el('rmPlayBtn').addEventListener('click', ()=>{
       const removedBits = [];
       if (noPoseCount) removedBits.push(`${noPoseCount} no pose detected`);
       if (outlierCount) removedBits.push(`${outlierCount} didn't match the others`);
-      const removedNote = removedBits.length ? ` — removed ${removedBits.join(', ')}.` : '.';
+      const removedNote = removedBits.length ? `, removed ${removedBits.join(', ')}.` : '.';
 
       if (photos.length < 2){
         orderCard.classList.add('hidden');
@@ -3431,7 +3469,7 @@ el('rmPlayBtn').addEventListener('click', ()=>{
       outputVideo.classList.remove('hidden');
       downloadBtn.classList.remove('hidden');
       exportProgressFill.style.width = '100%';
-      exportStatus.textContent = `Done — ${orderedPhotos.length} photos rendered into one montage.`;
+      exportStatus.textContent = `Done: ${orderedPhotos.length} photos rendered into one montage.`;
     } catch (err){
       console.error(err);
       exportStatus.textContent = `Export failed${err && err.message ? ' (' + err.message + ')' : ''}.`;
