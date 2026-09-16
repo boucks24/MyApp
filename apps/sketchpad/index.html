@@ -50,9 +50,9 @@
   .back-link:hover, .back-link:active{color:var(--ink); background:var(--paper-deep);}
   .back-link:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
 
-  header{margin-bottom:18px; display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;}
+  header{margin-bottom:18px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px;}
   h1{font-family:var(--font-display); font-weight:700; font-size:clamp(40px,9vw,58px); line-height:.9; margin:0; color:var(--ink);}
-  header p{margin:0; color:var(--ink-soft); font-size:14px; max-width:40ch; line-height:1.5;}
+  header p{margin:0 auto; color:var(--ink-soft); font-size:14px; max-width:40ch; line-height:1.5;}
 
   /* ---------- toolbar: one panel, three banded rows ---------- */
   .toolbar{
@@ -171,7 +171,7 @@
     touch-action:none; cursor:crosshair;
   }
 
-  .hint{font-size:12.5px; color:var(--ink-soft); margin-top:14px; line-height:1.6; max-width:68ch;}
+  .hint{font-size:12.5px; color:var(--ink-soft); margin:14px auto 0; line-height:1.6; max-width:68ch; text-align:center;}
 
   @media (max-width:560px){
     .row-label, .saved-label{flex-basis:100%;}
