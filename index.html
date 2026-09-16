@@ -8,6 +8,11 @@
 <meta name="apple-mobile-web-app-title" content="App Shelf">
 <meta name="theme-color" content="#131418">
 <title>App Shelf</title>
+<meta name="description" content="A personal shelf of small, self-contained tools: lift tracking, tennis analysis, colour mixing, live scores and more.">
+<meta property="og:title" content="App Shelf">
+<meta property="og:description" content="A personal shelf of small, self-contained tools.">
+<meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -20,11 +25,24 @@
     --muted:#8A8D96;
     --muted-dim:#63666E;
     --iron:#C1442B;
+    --z-chrome:10;
+    --z-grain:60;
     --font-display:'Oswald', system-ui, -apple-system, sans-serif;
     --font-body:'Space Grotesk', system-ui, -apple-system, sans-serif;
     --ease:cubic-bezier(.16,1,.3,1);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  /* Fixed, pointer-events-none grain so the flat radial tints read as a
+     surface rather than a gradient. Never on a scrolling element: that
+     repaints every frame. */
+  body::after{
+    content:"";
+    position:fixed; inset:0;
+    z-index:var(--z-grain);
+    pointer-events:none;
+    opacity:.04;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
   html{-webkit-text-size-adjust:100%;}
   html,body{margin:0; height:100%;}
   body{
@@ -78,14 +96,15 @@
   }
   .panel-link:focus-visible{outline:2px solid var(--accent); outline-offset:14px; border-radius:18px;}
 
+  /* Sentence case, not another row of caps: the name above it is already
+     the shouting element. */
   .kicker{
-    font-size:10.5px;
-    font-weight:700;
-    letter-spacing:.14em;
-    text-transform:uppercase;
+    font-size:11.5px;
+    font-weight:500;
+    letter-spacing:.01em;
     color:var(--muted-dim);
-    margin:0 0 14px;
-    min-height:13px;
+    margin:0 0 12px;
+    min-height:14px;
   }
   .kicker.recent{color:var(--accent);}
 
@@ -93,35 +112,43 @@
     font-family:var(--font-display);
     font-weight:700;
     font-size:clamp(34px,10vw,66px);
-    line-height:.96;
-    letter-spacing:-0.01em;
+    line-height:.94;
+    /* Display sizes need real negative tracking; -0.01em did nothing at 66px. */
+    letter-spacing:-0.03em;
     text-transform:uppercase;
+    text-wrap:balance;
     margin:0;
   }
   .desc{
     color:var(--muted);
+    font-weight:400;
     font-size:clamp(13.5px,3.4vw,16px);
-    line-height:1.55;
-    margin:12px auto 0;
+    line-height:1.6;
+    margin:14px auto 0;
     max-width:40ch;
+    text-wrap:pretty;
   }
   .cta{
     margin-top:26px;
     display:inline-flex;
     align-items:center;
     gap:8px;
-    font-size:12.5px;
-    font-weight:700;
-    letter-spacing:.08em;
-    text-transform:uppercase;
+    font-size:14px;
+    font-weight:600;
+    letter-spacing:.005em;
     color:var(--chalk);
     border:1px solid var(--line);
-    background:rgba(29,31,37,.7);
+    background:color-mix(in srgb, var(--panel) 78%, transparent);
     border-radius:999px;
     padding:12px 22px;
     transition:background .2s var(--ease), border-color .2s var(--ease), transform .16s var(--ease);
   }
-  .panel-link:hover .cta{background:var(--accent); border-color:var(--accent); color:var(--accent-ink,#fff);}
+  .panel-link:hover .cta{
+    border-color:var(--accent);
+    color:var(--accent);
+    /* Shadow carries the panel's hue rather than generic black. */
+    box-shadow:0 6px 24px -8px var(--accent), inset 0 0 0 1px var(--accent);
+  }
   .panel-link:active .cta{transform:scale(.97);}
 
   /* ---------- the art stage ---------- */
@@ -235,22 +262,32 @@
     transform:translateY(-50%);
     display:flex;
     flex-direction:column;
-    gap:10px;
-    z-index:10;
+    gap:2px;
+    z-index:var(--z-chrome);
   }
+  /* The visible dot stays 8px; the button around it is a real touch target. */
   .dots button{
-    width:8px; height:8px; padding:0;
-    border-radius:50%;
-    border:none;
-    background:var(--line);
+    width:36px; height:38px; padding:0;
+    border:none; background:none;
+    display:flex; align-items:center; justify-content:center;
     cursor:pointer;
+  }
+  .dots button::before{
+    content:"";
+    width:8px; height:8px;
+    border-radius:50%;
+    background:var(--line);
     transition:background .25s var(--ease), transform .25s var(--ease);
   }
-  .dots button:hover{background:var(--muted);}
-  .dots button:focus-visible{outline:2px solid var(--chalk); outline-offset:3px;}
-  .dots button.on{background:var(--accent-dot,var(--iron)); transform:scale(1.5);}
+  .dots button:hover::before{background:var(--muted); transform:scale(1.25);}
+  .dots button:focus-visible{outline:2px solid var(--chalk); outline-offset:-4px; border-radius:8px;}
+  .dots button[aria-current="true"]::before{background:var(--accent-dot,var(--iron)); transform:scale(1.5);}
 
   /* ---------- masthead + scroll affordance ---------- */
+  .mark h1{
+    font:inherit;
+    margin:0;
+  }
   .mark{
     position:fixed;
     top:calc(18px + env(safe-area-inset-top));
@@ -262,8 +299,9 @@
     letter-spacing:.09em;
     text-transform:uppercase;
     color:var(--muted-dim);
-    z-index:10;
+    z-index:var(--z-chrome);
     pointer-events:none;
+    margin:0;
   }
   .mark .dot{color:var(--iron);}
 
@@ -274,7 +312,7 @@
     transform:translateX(-50%);
     font-size:10.5px;
     color:var(--muted-dim);
-    z-index:10;
+    z-index:var(--z-chrome);
     text-align:center;
     pointer-events:none;
     letter-spacing:.02em;
@@ -285,16 +323,35 @@
     *{animation:none !important; transition:none !important;}
   }
 
+  /* Keyboard users land on the rail otherwise, with the deck unreachable. */
+  .skip-link{
+    position:fixed; left:50%; top:8px;
+    transform:translate(-50%,-160%);
+    z-index:calc(var(--z-grain) + 1);
+    background:var(--panel); color:var(--chalk);
+    border:1px solid var(--line); border-radius:8px;
+    padding:10px 16px; font-size:13px; font-weight:600; text-decoration:none;
+    transition:transform .2s var(--ease);
+  }
+  .skip-link:focus{transform:translate(-50%,0);}
+
   .noscript-list{padding:40px 20px; text-align:center;}
   .noscript-list a{display:block; padding:14px; color:var(--chalk);}
 </style>
 </head>
 <body>
 
-<div class="mark" aria-hidden="true">App<span class="dot">.</span>Shelf</div>
-<div class="deck" id="deck"></div>
+<a class="skip-link" href="#deck">Skip to apps</a>
+
+<header class="mark">
+  <h1>App<span class="dot">.</span>Shelf</h1>
+</header>
+
+<main class="deck" id="deck" tabindex="-1"></main>
+
 <nav class="dots" id="dots" aria-label="Jump to app"></nav>
-<div class="stamp" id="stamp"></div>
+
+<footer class="stamp" id="stamp"></footer>
 
 <noscript>
   <div class="noscript-list">
@@ -403,6 +460,7 @@
     var b = document.createElement('button');
     b.type = 'button';
     b.setAttribute('aria-label', app.name);
+    b.setAttribute('aria-current', 'false');
     b.addEventListener('click', function(){
       panels[i].scrollIntoView({block:'center'});
     });
@@ -420,7 +478,7 @@
         p.classList.add('in');
         p.classList.remove('out-up');
         var idx = +p.dataset.index;
-        dots.forEach(function(d, i){ d.classList.toggle('on', i === idx); });
+        dots.forEach(function(d, i){ d.setAttribute('aria-current', i === idx ? 'true' : 'false'); });
         dotsNav.style.setProperty('--accent-dot', list[idx].accent);
       } else {
         p.classList.remove('in');
