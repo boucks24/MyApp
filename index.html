@@ -68,7 +68,6 @@
 
   .panel{
     scroll-snap-align:center;
-    scroll-snap-stop:always;
     min-height:100dvh;
     display:flex;
     align-items:center;
@@ -81,6 +80,15 @@
       max(20px, env(safe-area-inset-left));
     /* Each app tints its own panel from its own brand colour. */
     background-image:radial-gradient(120% 70% at 50% 18%, var(--tint) 0%, var(--bg) 62%);
+  }
+  /* A bloom in the app's accent sits behind the art, so the panel reads as
+     lit from one source rather than as a flat wash. */
+  .panel::before{
+    content:"";
+    position:absolute; inset:0;
+    pointer-events:none;
+    background:radial-gradient(38% 26% at 50% 36%,
+      color-mix(in srgb, var(--accent) 20%, transparent) 0%, transparent 72%);
   }
 
   .panel-link{
@@ -118,6 +126,13 @@
     text-transform:uppercase;
     text-wrap:balance;
     margin:0;
+    overflow:hidden;
+  }
+  .name span{
+    display:inline-block;
+    /* Descenders and the tail of the 1 need the extra bottom room, or the
+       wipe clips them at rest. */
+    padding-bottom:.06em;
   }
   .desc{
     color:var(--muted);
@@ -158,6 +173,19 @@
     height:min(232px, 54vw);
     margin-bottom:28px;
     flex:0 0 auto;
+    /* `translate` is its own property: it composes with whatever `transform`
+       the scroll animation is doing, so the two never overwrite each other. */
+    translate:calc(var(--px,0) * 14px) calc(var(--py,0) * 11px);
+    transition:translate .6s var(--ease);
+  }
+  .panel.pointing .art{transition:translate .09s linear;}
+  /* A real box, not display:contents: it is an animation target, and an
+     element with no box cannot carry a scroll timeline. */
+  .copy{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    width:100%;
   }
   .art i{
     position:absolute;
@@ -222,27 +250,28 @@
   .art-swatch i:nth-child(5){left:36%; top:53%; background:#E8C97A; box-shadow:0 0 0 3px #2F5FE0;}
   .art-swatch i:nth-child(6){left:67%; top:53%; background:#7EA86F;}
 
-  /* ---------- the slide in / slide out ---------- */
+  /* ---------- entry and exit ----------
+     Two implementations. Browsers with scroll-driven animations scrub the
+     panel against its own scroll position, so the art and copy track the
+     finger continuously. Everything else falls back to the discrete
+     in / out-up classes the IntersectionObserver already sets. */
   @media (prefers-reduced-motion:no-preference){
-    .panel-link > *{
+    .art, .copy > *{
       opacity:0;
       transition:opacity .5s var(--ease), transform .62s var(--ease);
     }
-    /* Art enters from the leading edge, copy from the trailing one, so each
-       panel reads as one object sliding through rather than a fade. */
     .panel .art{transform:translate3d(-16vw,0,0) scale(.94);}
-    .panel .kicker, .panel .name, .panel .desc, .panel .cta{transform:translate3d(9vw,0,0);}
+    .panel .copy > *{transform:translate3d(9vw,0,0);}
 
     .panel.in .art{opacity:1; transform:none;}
-    .panel.in .kicker, .panel.in .name, .panel.in .desc, .panel.in .cta{opacity:1; transform:none;}
+    .panel.in .copy > *{opacity:1; transform:none;}
     .panel.in .kicker{transition-delay:.04s;}
     .panel.in .name{transition-delay:.08s;}
     .panel.in .desc{transition-delay:.14s;}
     .panel.in .cta{transition-delay:.2s;}
 
-    /* Leaving upward, the panel pushes out the opposite way it came in. */
     .panel.out-up .art{transform:translate3d(16vw,0,0) scale(.94);}
-    .panel.out-up .kicker, .panel.out-up .name, .panel.out-up .desc, .panel.out-up .cta{transform:translate3d(-9vw,0,0);}
+    .panel.out-up .copy > *{transform:translate3d(-9vw,0,0);}
 
     .art i{transition:transform .7s var(--ease);}
     .panel .art i{transform:scale(.82);}
@@ -252,7 +281,91 @@
     .panel.in .art i:nth-child(4){transition-delay:.15s;}
     .panel.in .art i:nth-child(5){transition-delay:.2s;}
     .panel.in .art i:nth-child(6){transition-delay:.25s;}
+
+    /* The name wipes up from its own baseline instead of fading in. */
+    .name span{
+      clip-path:inset(0 0 106% 0);
+      transition:clip-path .85s var(--ease) .1s;
+    }
+    .panel.in .name span{clip-path:inset(0 0 -12% 0);}
   }
+
+  @supports (animation-timeline:view()){
+    @media (prefers-reduced-motion:no-preference){
+      /* Hand the entry and exit over to the scroll position. */
+      .art, .copy > *{transition:none; opacity:1;}
+      .panel .art, .panel.out-up .art,
+      .panel .copy > *, .panel.out-up .copy > *{transform:none;}
+
+      .art{
+        animation:scrubArt linear both;
+        animation-timeline:view(block);
+        animation-range:cover 0% cover 100%;
+      }
+      .copy{
+        animation:scrubCopy linear both;
+        animation-timeline:view(block);
+        animation-range:cover 6% cover 94%;
+      }
+    }
+  }
+  @keyframes scrubArt{
+    0%        {opacity:0; transform:translate3d(0,15vh,0) scale(.84) rotate(-4deg);}
+    32%, 68%  {opacity:1; transform:none;}
+    100%      {opacity:0; transform:translate3d(0,-15vh,0) scale(.84) rotate(4deg);}
+  }
+  @keyframes scrubCopy{
+    0%        {opacity:0; transform:translate3d(0,8vh,0);}
+    36%, 66%  {opacity:1; transform:none;}
+    100%      {opacity:0; transform:translate3d(0,-8vh,0);}
+  }
+
+  /* ---------- idle motion, only on the panel you are actually looking at ----------
+     Each one says something about its app rather than moving for the sake of it:
+     the bar loads, the ball travels the rally, the pigments drift, scores tick. */
+  @media (prefers-reduced-motion:no-preference){
+    .panel.in .art-531 i:nth-child(5){animation:barRock 7s ease-in-out infinite;}
+    .panel.in .art-rally i:nth-child(3){animation:ballRun 5s var(--ease) infinite;}
+    .panel.in .art-court i:nth-child(4){animation:ballBounce 3.6s ease-in-out infinite;}
+    .panel.in .art-paint i:nth-child(1){animation:drift 11s ease-in-out infinite;}
+    .panel.in .art-paint i:nth-child(2){animation:drift 13s ease-in-out infinite reverse;}
+    .panel.in .art-paint i:nth-child(3){animation:drift 9s ease-in-out infinite .6s;}
+    .panel.in .art-score i:nth-child(2){animation:tick 4.2s ease-in-out infinite;}
+    .panel.in .art-score i:nth-child(4){animation:tick 3.1s ease-in-out infinite .4s;}
+    .panel.in .art-sketch i:nth-child(3){animation:nib 4.4s ease-in-out infinite;}
+    .panel.in .art-swatch i:nth-child(5){animation:found 3.8s ease-in-out infinite;}
+  }
+  @keyframes barRock{
+    0%,100%{transform:rotate(-1.2deg);}
+    50%    {transform:rotate(1.2deg);}
+  }
+  @keyframes ballRun{
+    0%     {transform:translate(0,0) scale(1); opacity:1;}
+    45%    {transform:translate(310%,-215%) scale(.72); opacity:1;}
+    55%    {transform:translate(390%,-200%) scale(.68); opacity:.5;}
+    100%   {transform:translate(560%,-70%) scale(.6); opacity:0;}
+  }
+  @keyframes ballBounce{
+    0%,100%{transform:translateY(0);}
+    50%    {transform:translateY(-52%);}
+  }
+  @keyframes drift{
+    0%,100%{transform:translate(0,0) scale(1);}
+    50%    {transform:translate(3%,-3%) scale(1.05);}
+  }
+  @keyframes tick{
+    0%,100%{transform:scaleY(1);}
+    50%    {transform:scaleY(1.16);}
+  }
+  @keyframes nib{
+    0%,100%{transform:scale(1); opacity:1;}
+    50%    {transform:scale(1.22); opacity:.75;}
+  }
+  @keyframes found{
+    0%,100%{box-shadow:0 0 0 3px #2F5FE0;}
+    50%    {box-shadow:0 0 0 6px rgba(47,95,224,.45);}
+  }
+  .art-score i{transform-origin:bottom center;}
 
   /* ---------- progress rail ---------- */
   .dots{
@@ -444,10 +557,12 @@
     sec.innerHTML =
       '<a class="panel-link" href="' + app.href + '" data-id="' + app.id + '">' +
         '<span class="art ' + app.art + '" aria-hidden="true">' + pips + '</span>' +
-        '<p class="kicker' + (used[app.id] ? ' recent' : '') + '">' + label + '</p>' +
-        '<h2 class="name">' + app.name + '</h2>' +
-        '<p class="desc">' + app.desc + '</p>' +
-        '<span class="cta">Open</span>' +
+        '<div class="copy">' +
+          '<p class="kicker' + (used[app.id] ? ' recent' : '') + '">' + label + '</p>' +
+          '<h2 class="name"><span>' + app.name + '</span></h2>' +
+          '<p class="desc">' + app.desc + '</p>' +
+          '<span class="cta">Open</span>' +
+        '</div>' +
       '</a>';
     frag.appendChild(sec);
   });
@@ -491,6 +606,61 @@
 
   // First panel is in view at load, before any scroll happens.
   requestAnimationFrame(function(){ panels[0].classList.add('in'); });
+
+  // ---- pointer parallax on the focused panel ----
+  // Written straight to a custom property inside one rAF, never to state, so
+  // a pointer move costs a style recalc rather than a re-render. Fine pointers
+  // only: on touch there is no hover to parallax against.
+  if (window.matchMedia('(pointer:fine)').matches &&
+      !window.matchMedia('(prefers-reduced-motion:reduce)').matches){
+    var pending = false, lastX = 0, lastY = 0, pointPanel = null, clearTimer = null;
+
+    deck.addEventListener('pointermove', function(e){
+      lastX = e.clientX; lastY = e.clientY;
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(function(){
+        pending = false;
+        var panel = document.elementFromPoint(lastX, lastY);
+        panel = panel && panel.closest ? panel.closest('.panel') : null;
+        if (!panel) return;
+        if (pointPanel && pointPanel !== panel) pointPanel.classList.remove('pointing');
+        pointPanel = panel;
+        panel.classList.add('pointing');
+        var r = panel.getBoundingClientRect();
+        panel.style.setProperty('--px', ((lastX - r.left) / r.width  - 0.5).toFixed(3));
+        panel.style.setProperty('--py', ((lastY - r.top)  / r.height - 0.5).toFixed(3));
+        clearTimeout(clearTimer);
+        clearTimer = setTimeout(function(){ panel.classList.remove('pointing'); }, 120);
+      });
+    }, {passive:true});
+
+    deck.addEventListener('pointerleave', function(){
+      if (!pointPanel) return;
+      pointPanel.classList.remove('pointing');
+      pointPanel.style.setProperty('--px', 0);
+      pointPanel.style.setProperty('--py', 0);
+    }, {passive:true});
+  }
+
+  // ---- keyboard: the rail is not the only way through the deck ----
+  function currentIndex(){
+    var mid = deck.scrollTop + deck.clientHeight / 2;
+    return Math.max(0, Math.min(panels.length - 1, Math.floor(mid / deck.clientHeight)));
+  }
+  function goTo(i){
+    i = Math.max(0, Math.min(panels.length - 1, i));
+    panels[i].scrollIntoView({block:'center'});
+  }
+  deck.addEventListener('keydown', function(e){
+    // Leave the link's own Enter/Space activation alone.
+    if (e.key === 'Enter' || e.key === ' ') return;
+    var i = currentIndex();
+    if (e.key === 'ArrowDown' || e.key === 'PageDown'){ e.preventDefault(); goTo(i + 1); }
+    else if (e.key === 'ArrowUp' || e.key === 'PageUp'){ e.preventDefault(); goTo(i - 1); }
+    else if (e.key === 'Home'){ e.preventDefault(); goTo(0); }
+    else if (e.key === 'End'){ e.preventDefault(); goTo(panels.length - 1); }
+  });
 
   // ---- launch: record usage, and make the navigation itself instant ----
 
