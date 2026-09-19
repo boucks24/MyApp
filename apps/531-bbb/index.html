@@ -325,11 +325,121 @@
   .sync-banner .sb-title{font-family:var(--font-display);font-size:14px;font-weight:600;margin-bottom:4px;}
   .sync-banner .sb-desc{color:var(--muted);font-size:12px;margin-bottom:12px;line-height:1.5;}
 
+
+  /* ============================================================
+     TRAIN v2 — one set at a time.
+     The old screen was three stacked cards of identical rows: at the bar
+     you had to scroll and re-find your place between every set. Now the
+     set you are on owns the screen, and the rest of the session is a
+     glanceable list under it.
+     ============================================================ */
+  .home-load{text-align:center;font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;font-weight:700;margin-top:-2px;}
+  .sess-rail{display:flex;align-items:center;gap:10px;padding:14px 20px 0;}
+  .sess-ticks{display:flex;gap:3px;flex:1;min-width:0;}
+  .sess-ticks i{flex:1 1 0;height:5px;border-radius:2px;background:var(--line);transition:background .25s ease;}
+  .sess-ticks i.done{background:var(--good);}
+  .sess-ticks i.now{background:var(--iron);}
+  .sess-ticks i.brk{margin-left:7px;}
+  .sess-count{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:11.5px;font-weight:700;color:var(--muted);flex:0 0 auto;}
+
+  .focus-card{
+    margin:14px 20px 0;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:18px 16px 16px;text-align:center;position:relative;overflow:hidden;
+  }
+  .focus-card.is-amrap{border-color:rgba(193,68,43,.55);}
+
+  .fc-phase{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);}
+  .fc-phase .pill{padding:3px 8px;border-radius:5px;background:var(--panel-2);color:var(--chalk);}
+  .fc-phase .pill.amrap{background:var(--iron);color:#fff;}
+
+  .fc-weight{display:flex;align-items:center;justify-content:center;gap:14px;margin:12px 0 2px;}
+  .fc-weight input,.fc-weight .fixed{
+    font-family:var(--num);font-variant-numeric:tabular-nums;
+    font-size:52px;font-weight:700;letter-spacing:-0.04em;line-height:1;text-align:center;
+  }
+  .fc-weight input{width:4.8ch;background:transparent;border:none;color:var(--chalk);padding:0;-webkit-appearance:none;appearance:none;}
+  .fc-weight input:focus{outline:none;border-bottom:2px dashed var(--steel);}
+  .fc-unit{font-size:13px;color:var(--muted);font-weight:600;}
+  .fc-step{
+    width:46px;height:46px;flex:0 0 auto;border-radius:50%;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--chalk);font-size:22px;line-height:1;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;
+    transition:background .15s ease;
+  }
+  .fc-step:hover{background:#31343A;}
+  .fc-step:active{transform:translateY(1px);}
+  /* Warm-up weights are prescribed, not chosen. Hide the steppers rather
+     than dimming them, which just looks like a broken button. */
+  .fc-step.ghost{visibility:hidden;}
+
+  .fc-target{font-size:14px;color:var(--muted);margin-top:4px;}
+  .fc-target b{color:var(--chalk);font-family:var(--num);font-weight:700;}
+  .fc-pr,
+  .focus-card .pr-target{font-size:12.5px;color:var(--good);font-weight:600;margin-top:6px;line-height:1.45;}
+  .fc-last{font-size:12px;color:var(--muted);margin-top:4px;font-style:italic;}
+
+  /* ---- the barbell, drawn ----
+     Plate maths was a grey text line. It is the most-read thing at the bar,
+     so it is now the picture: load what you see. */
+  .bar-vis{display:flex;align-items:center;justify-content:center;height:92px;margin:16px 0 8px;}
+  .bv-sleeve{display:flex;align-items:center;gap:2.5px;height:100%;}
+  .bv-sleeve.left{flex-direction:row-reverse;}
+  .bv-plate{
+    width:13px;flex:0 0 auto;height:calc(24% + var(--h,0) * 76%);
+    border-radius:2px;background:var(--c,#7E8390);box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);
+  }
+  .bv-plate.added{outline:2px solid var(--chalk);outline-offset:1px;}
+  .bv-bar{width:96px;height:8px;flex:0 0 auto;background:linear-gradient(180deg,#D2D6DE,#8A9099);border-radius:2px;}
+  .bv-collar{width:6px;height:26px;background:linear-gradient(180deg,#9AA0AC,#6E747F);border-radius:2px;flex:0 0 auto;margin:0 1px;}
+  .bv-empty{font-size:12px;color:var(--muted);align-self:center;}
+
+  .fc-change{font-size:12.5px;font-weight:600;color:var(--steel);margin-top:2px;min-height:17px;}
+  .fc-change .rm{color:var(--muted);}
+
+  .fc-reps{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:14px;}
+  .fc-reps label{font-size:13px;color:var(--muted);font-weight:600;}
+  .fc-reps input{
+    width:78px;text-align:center;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;
+    color:var(--chalk);padding:11px 6px;font-family:var(--num);font-variant-numeric:tabular-nums;font-size:19px;font-weight:700;
+  }
+  .fc-reps input:focus{outline:2px solid var(--steel);outline-offset:1px;}
+
+  .fc-do{
+    width:100%;margin-top:14px;border:none;border-radius:11px;padding:17px;
+    font-family:var(--font-display);font-weight:600;font-size:17px;letter-spacing:.02em;
+    background:var(--good);color:#0C1A0B;cursor:pointer;touch-action:manipulation;transition:background .15s ease;
+  }
+  .fc-do:active{transform:translateY(1px);}
+  .fc-do.undo{background:var(--panel-2);color:var(--muted);border:1px solid var(--line);}
+
+  /* ---- the rest of the session ---- */
+  .sess-list{margin:18px 20px 0;border-top:1px solid var(--line);}
+  .sess-row{
+    display:flex;align-items:center;gap:11px;width:100%;padding:11px 2px;
+    border:none;border-bottom:1px solid var(--line);background:none;color:inherit;
+    font-family:var(--font-body);font-size:14px;text-align:left;cursor:pointer;transition:background .14s ease;
+  }
+  .sess-row:hover{background:var(--panel);}
+  .sess-row:last-child{border-bottom:none;}
+  .sess-row.current{background:var(--panel);}
+  .sess-row.current .sr-name{color:var(--chalk);font-weight:700;}
+  .sr-mark{
+    width:20px;height:20px;flex:0 0 auto;border-radius:50%;border:1.5px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;color:transparent;
+  }
+  .sess-row.is-done .sr-mark{background:var(--good);border-color:var(--good);color:#0C1A0B;}
+  .sess-row.current .sr-mark{border-color:var(--iron);}
+  .sr-name{flex:1;min-width:0;color:var(--muted);font-size:13px;}
+  .sr-name .amrap-tag{color:var(--iron);font-weight:700;font-size:11px;letter-spacing:.05em;}
+  .sr-w{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:14px;font-weight:700;flex:0 0 auto;}
+  .sr-r{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:12px;color:var(--muted);width:48px;text-align:right;flex:0 0 auto;}
+
   /* Every control was mouse/touch only: no keyboard affordance anywhere. */
   .btn:focus-visible, .cp-cell:focus-visible, .cp-navbtn:focus-visible, .cp-gear:focus-visible,
   .lift-chip:focus-visible, .subtab:focus-visible, .done-tick:focus-visible, .bbb-dot:focus-visible,
   .pd-lift-row:focus-visible, .pd-week-row:focus-visible, .history-toggle-btn:focus-visible,
-  .rest-timer .rt-skip:focus-visible, header.topbar .back:focus-visible, .chart-card:focus-visible{
+  .rest-timer .rt-skip:focus-visible, header.topbar .back:focus-visible, .chart-card:focus-visible,
+  .fc-step:focus-visible, .fc-do:focus-visible, .sess-row:focus-visible{
     outline:2px solid var(--steel);outline-offset:2px;
   }
   .btn{transition:opacity .14s var(--ease), background .16s var(--ease);}
@@ -597,6 +707,7 @@
   let pendingStaleReminder = null; // {exportedAt, days} when the committed backup file is over a month old
   let sessionWeights = null; // {main:[w,w,w], bbb:w} — editable overrides for the in-progress workout
   let liftHistoryOpen = false; // Train's "history for this lift" panel -- collapsed by default, toggled per session
+  let focusIdx = 0; // which set in the flattened session the Train screen is showing
   let warmupDone = [false, false, false];
   let mainDone = [false, false, false];
   let restStartAt = null; // ms epoch when the current rest clock started, or null if not resting
@@ -609,7 +720,7 @@
   let pendingDiscardConfirm = null; // route to go to while the "discard workout" confirmation modal is open
 
   function go(r){
-    route = r; bbbDone = 0; repsInput = {}; sessionWeights = null;
+    route = r; bbbDone = 0; repsInput = {}; sessionWeights = null; focusIdx = 0;
     warmupDone = [false, false, false]; mainDone = [false, false, false];
     liftHistoryOpen = false;
     if (r === '531home') viewingCycle = state.cycle;
@@ -875,6 +986,10 @@
           </div>
           <div class="row"><span class="label">Top set</span><span class="value">${fmtW(w.mainSets[2].weight)} × ${w.mainSets[2].repsLabel}</span></div>
           <div class="row"><span class="label">BBB: ${LIFT_LABEL[w.bbbLift]}</span><span class="value">${fmtW(w.bbbWeight)} × 5×10</span></div>
+          <!-- Same drawing as Train, so the top set is recognisable before
+               you have even started. -->
+          ${renderBarVisual(w.mainSets[2].weight, null)}
+          <div class="home-load">Top set, per side</div>
         </div>
         <button class="btn" data-action="startWorkout">Start workout</button>
         <button class="btn ghost" data-action="pickDay">Choose a different day</button>
@@ -885,110 +1000,172 @@
     `;
   }
 
+
+  /* ---------------- session model (Train v2) ----------------
+     The workout flattened into one ordered list of sets, so the screen can
+     show exactly one of them and still know where it sits in the whole
+     session. Completion still lives in warmupDone/mainDone/bbbDone; this
+     only reads them. */
+  function sessionSets(w, sw){
+    const out = [];
+    w.warmupSets.forEach((ws, i) => out.push({
+      kind:'warmup', idx:i, weight:ws.weight, reps:String(ws.reps), repsLabel:String(ws.reps),
+      pct:ws.pct, amrap:false, label:'Warm-up ' + ws.pct + '%', short:'Warm-up ' + (i+1) + ' of 3',
+      done:!!warmupDone[i], editable:false
+    }));
+    w.mainSets.forEach((ms, i) => out.push({
+      kind:'main', idx:i, weight:sw.main[i], reps:ms.repsLabel, repsLabel:ms.repsLabel,
+      pct:ms.pct, amrap:!!ms.amrap, label:'Main ' + ms.pct + '%', short:'Main ' + (i+1) + ' of 3',
+      done:!!mainDone[i], editable:true
+    }));
+    for (let i = 0; i < 5; i++) out.push({
+      kind:'bbb', idx:i, weight:sw.bbb, reps:'10', repsLabel:'10',
+      pct:null, amrap:false, label:'BBB ' + (i+1) + ' of 5', short:'BBB ' + (i+1) + ' of 5',
+      done:i < bbbDone, editable:true
+    });
+    return out;
+  }
+
+  // Olympic plate colours, so the drawn bar matches what is on the rack.
+  const PLATE_COLOUR_KG = {25:'#C1442B', 20:'#2E6FA7', 15:'#C79A2E', 10:'#4F8B4A', 5:'#D8D4CC', 2.5:'#B04534', 1.25:'#9AA0AC'};
+  const PLATE_COLOUR_LB = {45:'#2E6FA7', 35:'#C79A2E', 25:'#4F8B4A', 10:'#D8D4CC', 5:'#2E6FA7', 2.5:'#C1442B'};
+  function plateColour(d){
+    const map = settings.unit === 'kg' ? PLATE_COLOUR_KG : PLATE_COLOUR_LB;
+    return map[d] || '#7E8390';
+  }
+
+  /* Draws the bar as it should actually be loaded. `added` marks the plates
+     that changed since the previous set, so the thing you have to physically
+     do is the thing that is outlined. */
+  function renderBarVisual(weight, stage){
+    // stage.total, not plateBreakdown(): the session keeps big plates loaded
+    // and trims the small ones, so the canonical minimal breakdown would draw
+    // a bar that contradicts the "add 1x2.5" instruction printed beneath it.
+    const counts = (stage && stage.total && Object.keys(stage.total).length)
+      ? stage.total
+      : plateBreakdown(weight);
+    const denoms = plateDenoms().filter(d => counts[d]);
+    const maxD = plateDenoms()[0] || 1;
+    const added = (stage && stage.add) || {};
+    if (!denoms.length){
+      return `<div class="bar-vis"><span class="bv-empty">Bar only, ${fmtW(barWeight())}</span></div>`;
+    }
+    let addLeft = Object.assign({}, added);
+    const sleeve = denoms.map(d => {
+      let html = '';
+      for (let n = 0; n < counts[d]; n++){
+        const isNew = addLeft[d] > 0;
+        if (isNew) addLeft[d]--;
+        html += `<span class="bv-plate${isNew ? ' added' : ''}" style="--h:${(d / maxD).toFixed(3)};--c:${plateColour(d)}"></span>`;
+      }
+      return html;
+    }).join('');
+    return `
+      <div class="bar-vis" role="img" aria-label="Load ${fmtW(weight)}: ${formatPlateCounts(counts) || 'bar only'} per side">
+        <span class="bv-sleeve left">${sleeve}<span class="bv-collar"></span></span>
+        <span class="bv-bar"></span>
+        <span class="bv-sleeve right">${sleeve}<span class="bv-collar"></span></span>
+      </div>`;
+  }
+
+  function focusSetIndex(sets){
+    if (focusIdx >= 0 && focusIdx < sets.length) return focusIdx;
+    return 0;
+  }
+  // After marking a set done, move to the first one still outstanding.
+  function advanceFocus(sets){
+    const next = sets.findIndex(s => !s.done);
+    focusIdx = next === -1 ? sets.length - 1 : next;
+  }
+
   function renderTrain(){
     const w = computeWorkout();
     const lift = w.lift;
     const sw = ensureSessionWeights(w);
+    const sets = sessionSets(w, sw);
 
-    // One continuous plate sequence across the whole session — warm-up
-    // through BBB — so each stage's "add/remove" reflects what's actually
-    // still loaded from the stage before it.
-    const stageWeights = w.warmupSets.map(s => s.weight).concat(sw.main, [sw.bbb]);
-    const plateStages = buildSessionPlateStages(stageWeights);
-    const warmupCount = w.warmupSets.length;
+    // One continuous plate sequence across the whole session, so each stage's
+    // add/remove reflects what is still loaded from the stage before it.
+    const stageWeights = sets.map(s => s.weight);
+    const stages = buildSessionPlateStages(stageWeights);
 
-    let warmupHtml = w.warmupSets.map((ws,i)=>{
-      const plateLine = formatPlateStage(plateStages[i]);
-      return `
-        <div class="set-row">
-          <div class="set-left">
-            <div class="pct">${ws.pct}% of TM</div>
-            <div class="weight">${fmtW(ws.weight)}</div>
-            <div class="target">Target: ${ws.reps} reps</div>
-            <div class="plate-line">${plateLine} per side</div>
-          </div>
-          <div class="set-right">
-            <button type="button" class="done-tick ${warmupDone[i] ? 'done' : ''}" data-action="toggleSetDone" data-kind="warmup" data-idx="${i}" aria-label="Mark warm-up set ${i+1} done">&#10003;</button>
-          </div>
-        </div>
-      `;
+    const fi = focusSetIndex(sets);
+    const f = sets[fi];
+    const doneCount = sets.filter(s => s.done).length;
+
+    // progress rail: a break between warm-up, main and BBB
+    const ticks = sets.map((s, i) => {
+      const brk = (i === w.warmupSets.length || i === w.warmupSets.length + w.mainSets.length) ? ' brk' : '';
+      const cls = s.done ? ' done' : (i === fi ? ' now' : '');
+      return `<i class="${cls}${brk}"></i>`;
     }).join('');
 
-    let setsHtml = w.mainSets.map((s,i)=>{
-      const plateLine = formatPlateStage(plateStages[warmupCount + i]);
+    const lt = f.kind === 'main' ? lastTimeForSet(lift, state.week, f.idx) : null;
+    const bbbLast = f.kind === 'bbb' ? lastTimeForBBB(w.bbbLift) : null;
+    const liftName = f.kind === 'bbb' ? LIFT_LABEL[w.bbbLift] : LIFT_LABEL[lift];
 
-      const lt = lastTimeForSet(lift, state.week, i);
-      const ltLine = lt
-        ? `Last time: ${fmtW(lt.weight)} × ${lt.reps ?? lt.repsLabel}`
-        : '';
-
-      return `
-        <div class="set-row">
-          <div class="set-left">
-            <div class="pct">${s.pct}% of TM</div>
-            <div class="weight-edit">
-              <input type="number" inputmode="decimal" step="${settings.increment || 2.5}" class="weight-input" data-set="${i}" value="${sw.main[i]}">
-              <span class="unit">${settings.unit}</span>
-            </div>
-            <div class="target">Target: ${s.repsLabel} reps</div>
-            ${s.amrap ? prTargetLine(lift, sw.main[i]) : ''}
-            <div class="plate-line">${plateLine} per side</div>
-            ${ltLine ? `<div class="last-time">${ltLine}</div>` : ''}
-          </div>
-          <div class="set-right">
-            ${s.amrap ? `<input class="reps" type="number" inputmode="numeric" placeholder="reps" id="amrap-${i}" value="${repsInput[i] ?? ''}">` : ''}
-            <button type="button" class="done-tick ${mainDone[i] ? 'done' : ''}" data-action="toggleSetDone" data-kind="main" data-idx="${i}" aria-label="Mark main set ${i+1} done">&#10003;</button>
-          </div>
+    const focusHtml = `
+      <section class="focus-card ${f.amrap ? 'is-amrap' : ''}">
+        <div class="fc-phase">
+          <span class="pill ${f.amrap ? 'amrap' : ''}">${f.amrap ? 'AMRAP' : f.short}</span>
+          <span>${liftName}${f.pct ? ' · ' + f.pct + '% of TM' : ''}</span>
         </div>
-      `;
-    }).join('');
 
-    const bbbPlateLine = formatPlateStage(plateStages[warmupCount + 3]);
-    const bbbLast = lastTimeForBBB(w.bbbLift);
-    const bbbLastLine = bbbLast ? `Last time: ${fmtW(bbbLast.weight)} × ${bbbLast.sets}/5 sets` : '';
+        <div class="fc-weight">
+          <button type="button" class="fc-step ${f.editable ? '' : 'ghost'}" data-action="bumpWeight" data-dir="-1" aria-label="Decrease weight">&minus;</button>
+          ${f.editable
+            ? `<input type="number" inputmode="decimal" step="${settings.increment || 2.5}" id="focusWeight" value="${f.weight}" aria-label="Weight">`
+            : `<span class="fixed">${f.weight}</span>`}
+          <button type="button" class="fc-step ${f.editable ? '' : 'ghost'}" data-action="bumpWeight" data-dir="1" aria-label="Increase weight">+</button>
+        </div>
+        <div class="fc-unit">${settings.unit}</div>
 
-    let bbbDots = '';
-    for (let i=0;i<5;i++){
-      bbbDots += `<div class="bbb-dot ${i < bbbDone ? 'done':''}" data-action="toggleBbb" data-i="${i}">${i+1}</div>`;
-    }
+        <div class="fc-target">Target <b>${f.repsLabel}</b> reps</div>
+        ${f.amrap ? prTargetLine(lift, f.weight) : ''}
+        ${lt ? `<div class="fc-last">Last time: ${fmtW(lt.weight)} × ${lt.reps ?? lt.repsLabel}</div>` : ''}
+        ${bbbLast ? `<div class="fc-last">Last time: ${fmtW(bbbLast.weight)} × ${bbbLast.sets}/5 sets</div>` : ''}
+
+        ${renderBarVisual(f.weight, stages[fi])}
+        <div class="fc-change">${formatPlateStage(stages[fi])}</div>
+
+        ${f.amrap ? `
+          <div class="fc-reps">
+            <label for="amrap-${f.idx}">Reps done</label>
+            <input class="reps" type="number" inputmode="numeric" placeholder="0" id="amrap-${f.idx}" value="${repsInput[f.idx] ?? ''}">
+          </div>` : ''}
+
+        <button type="button" class="fc-do ${f.done ? 'undo' : ''}" data-action="markFocus">
+          ${f.done ? 'Mark not done' : 'Done'}
+        </button>
+      </section>
+    `;
+
+    const listHtml = sets.map((s, i) => `
+      <button type="button" class="sess-row ${s.done ? 'is-done' : ''} ${i === fi ? 'current' : ''}"
+              data-action="focusSet" data-i="${i}">
+        <span class="sr-mark">&#10003;</span>
+        <span class="sr-name">${s.label}${s.amrap ? ' <span class="amrap-tag">AMRAP</span>' : ''}</span>
+        <span class="sr-w">${fmtW(s.weight)}</span>
+        <span class="sr-r">× ${s.repsLabel}</span>
+      </button>
+    `).join('');
 
     return `
       ${topbar('Today', 'Week ' + state.week + ' · ' + w.scheme.label, null, '531home', true)}
-      <main>
-        <div class="card">
-          <div class="lift-head">
-            <div class="plate ${LIFT_CLASS[lift]}"></div>
-            <div>
-              <div class="name">${LIFT_LABEL[lift]}</div>
-              <div class="meta">Training max ${fmtW(w.tm)}</div>
-            </div>
-            <button type="button" class="history-toggle-btn ${liftHistoryOpen ? 'open' : ''}" data-action="toggleLiftHistory" aria-expanded="${liftHistoryOpen}">${liftHistoryOpen ? 'Hide history' : 'History'}</button>
-          </div>
-          ${liftHistoryOpen ? renderLiftHistoryPanel(lift) : ''}
-        </div>
+      <div class="sess-rail">
+        <span class="sess-ticks">${ticks}</span>
+        <span class="sess-count">${doneCount}/${sets.length}</span>
+      </div>
+      <main style="padding-left:0;padding-right:0;">
+        ${focusHtml}
 
-        <div class="card">
-          <h2>Warm-up</h2>
-          ${warmupHtml}
-        </div>
+        <div class="sess-list">${listHtml}</div>
 
-        <div class="card">
-          <h2>Main sets</h2>
-          ${setsHtml}
+        <div style="padding:0 20px;">
+          <button class="btn" style="margin-top:20px;" data-action="finishWorkout">Finish &amp; log workout</button>
+          <button class="btn ghost" data-action="toggleLiftHistory" aria-expanded="${liftHistoryOpen}">${liftHistoryOpen ? 'Hide history for this lift' : 'History for this lift'}</button>
+          ${liftHistoryOpen ? `<div class="card">${renderLiftHistoryPanel(lift)}</div>` : ''}
         </div>
-
-        <div class="card">
-          <h2>Boring But Big: ${LIFT_LABEL[w.bbbLift]}</h2>
-          <div class="row">
-            <span class="label">5 sets × 10 reps</span>
-            <span class="value bbb-weight-edit"><input type="number" inputmode="decimal" step="${settings.increment || 2.5}" id="bbbWeightInput" value="${sw.bbb}"> ${settings.unit}</span>
-          </div>
-          <div class="plate-line">${bbbPlateLine} per side</div>
-          ${bbbLastLine ? `<div class="last-time">${bbbLastLine}</div>` : ''}
-          <div class="bbb-counter">${bbbDots}</div>
-        </div>
-
-        <button class="btn" data-action="finishWorkout">Finish &amp; log workout</button>
       </main>
       <div class="rest-timer ${restStartAt ? '' : 'hidden'} ${restOvertime ? 'overtime' : ''}" id="restTimer">
         <span class="rt-label">Since last set</span>
@@ -1381,6 +1558,34 @@
       });
     });
 
+    // Train v2's single weight field writes to whichever set is focused.
+    const fw = document.getElementById('focusWeight');
+    if (fw){
+      fw.addEventListener('change', () => {
+        const v = parseFloat(fw.value);
+        if (isNaN(v) || v < 0 || !sessionWeights) { render(); return; }
+        const w = computeWorkout();
+        const sets = sessionSets(w, sessionWeights);
+        const f = sets[focusSetIndex(sets)];
+        if (f && f.editable){
+          if (f.kind === 'main') sessionWeights.main[f.idx] = v;
+          else sessionWeights.bbb = v;
+        }
+        render();
+      });
+    }
+
+    // repsInput was declared and reset but never written to, so a typed AMRAP
+    // count was wiped by the next render (i.e. by ticking any set). Capture it
+    // as it is typed.
+    document.querySelectorAll('input.reps').forEach(el=>{
+      el.addEventListener('input', () => {
+        const id = el.id || '';
+        const i = parseInt(id.replace('amrap-', ''));
+        if (!isNaN(i)) repsInput[i] = el.value;
+      });
+    });
+
     const bbbWeightInput = document.getElementById('bbbWeightInput');
     if (bbbWeightInput){
       bbbWeightInput.addEventListener('change', () => {
@@ -1437,6 +1642,9 @@
     else if (action === 'saveCycleTMEdit') doSaveCycleTMEdit();
     else if (action === 'setHistoryLift') { historyLiftFilter = el.getAttribute('data-lift'); render(); }
     else if (action === 'toggleSetDone') doToggleSetDone(el.getAttribute('data-kind'), parseInt(el.getAttribute('data-idx')));
+    else if (action === 'focusSet') { focusIdx = parseInt(el.getAttribute('data-i')); render(); }
+    else if (action === 'bumpWeight') doBumpWeight(parseInt(el.getAttribute('data-dir')));
+    else if (action === 'markFocus') doMarkFocus();
     else if (action === 'cancelStartCycle') { pendingStartCycleConfirm = null; render(); }
     else if (action === 'confirmStartCycle') doConfirmStartNewCycle();
     else if (action === 'backDiscardConfirm') { pendingDiscardConfirm = el.getAttribute('data-route'); render(); }
@@ -1538,6 +1746,43 @@
     render();
   }
 
+  /* Train v2: the focused set is the unit of interaction, so these translate
+     one button into whichever completion array actually backs that set. */
+  function doMarkFocus(){
+    const w = computeWorkout();
+    const sets = sessionSets(w, ensureSessionWeights(w));
+    const f = sets[focusSetIndex(sets)];
+    if (!f) return;
+    if (f.kind === 'warmup'){
+      warmupDone[f.idx] = !warmupDone[f.idx];
+      if (warmupDone[f.idx]) startRest(REST_WARMUP);
+    } else if (f.kind === 'main'){
+      mainDone[f.idx] = !mainDone[f.idx];
+      if (mainDone[f.idx]) startRest(REST_MAIN);
+    } else {
+      // BBB completion is a count, so marking set i done means "i+1 done".
+      const was = bbbDone;
+      bbbDone = f.done ? f.idx : f.idx + 1;
+      if (bbbDone > was) startRest(REST_BBB);
+    }
+    const after = sessionSets(w, ensureSessionWeights(w));
+    if (after[focusSetIndex(after)].done) advanceFocus(after);
+    render();
+  }
+
+  function doBumpWeight(dir){
+    const w = computeWorkout();
+    const sw = ensureSessionWeights(w);
+    const sets = sessionSets(w, sw);
+    const f = sets[focusSetIndex(sets)];
+    if (!f || !f.editable) return;
+    const step = settings.increment || 2.5;
+    const next = Math.max(barWeight(), Math.round((f.weight + dir * step) / step) * step);
+    if (f.kind === 'main') sw.main[f.idx] = next;
+    else sw.bbb = next;
+    render();
+  }
+
   function doToggleBbb(i){
     // tapping a dot sets completed count to i+1, tapping the currently-last done dot un-marks it
     const was = bbbDone;
@@ -1552,8 +1797,11 @@
     const mainSets = w.mainSets.map((s,i)=>{
       const out = { pct:s.pct, repsLabel:s.repsLabel, weight:sw.main[i], amrap:s.amrap };
       if (s.amrap){
+        // The field only exists while that set is focused, so fall back to the
+        // value captured when it was typed.
         const inp = document.getElementById('amrap-'+i);
-        const val = inp ? parseInt(inp.value) : null;
+        const raw = inp ? inp.value : repsInput[i];
+        const val = parseInt(raw);
         out.actualReps = (val && val>0) ? val : null;
       }
       return out;
