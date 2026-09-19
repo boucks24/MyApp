@@ -193,16 +193,53 @@
     transform-origin:center;
   }
 
-  /* 5/3/1: plate stack seen end-on, in the plate-weight colours. */
-  .art-531 i{border-radius:50%;}
-  .art-531 i:nth-child(1){inset:0; background:#2E6FA7;}
-  .art-531 i:nth-child(2){inset:13%; background:#C79A2E;}
-  .art-531 i:nth-child(3){inset:27%; background:#C1442B;}
-  .art-531 i:nth-child(4){inset:41%; background:#4F8B4A;}
-  .art-531 i:nth-child(5){
-    inset:47% -18%; height:6%; border-radius:3px;
-    background:linear-gradient(90deg,#7E8390,#C9CDD6,#7E8390);
+  /* 5/3/1: a loaded barbell in side view. The previous end-on plate stack
+     read as a dartboard, which is not what this app is about. Plate colours
+     follow the app's own weight coding: blue 20, brass 15, green 10. */
+  .art-531 i:nth-child(1){
+    left:1%; right:1%; top:47.5%; height:5%;
+    border-radius:2px;
+    background:linear-gradient(180deg,#D2D6DE 0%,#9AA0AC 45%,#6E747F 100%);
   }
+  /* Knurled centre section. */
+  .art-531 i:nth-child(2){
+    left:38%; right:38%; top:46.5%; height:7%;
+    border-radius:2px;
+    background:repeating-linear-gradient(90deg,#8A9099 0 2px,#5E646E 2px 4px);
+  }
+  .art-531 i:nth-child(3),
+  .art-531 i:nth-child(4){
+    width:7.5%; top:15%; height:70%;
+    border-radius:4px;
+    background:linear-gradient(180deg,#3B84C4 0%,#2E6FA7 50%,#20527D 100%);
+  }
+  .art-531 i:nth-child(3){left:10%;}
+  .art-531 i:nth-child(4){right:10%;}
+  .art-531 i:nth-child(5),
+  .art-531 i:nth-child(6){
+    width:6.5%; top:24%; height:52%;
+    border-radius:3px;
+    background:linear-gradient(180deg,#DCB24A 0%,#C79A2E 50%,#9A7520 100%);
+  }
+  .art-531 i:nth-child(5){left:19.5%;}
+  .art-531 i:nth-child(6){right:19.5%;}
+  .art-531 i:nth-child(7),
+  .art-531 i:nth-child(8){
+    width:5.5%; top:32%; height:36%;
+    border-radius:3px;
+    background:linear-gradient(180deg,#63A85D 0%,#4F8B4A 50%,#3A6836 100%);
+  }
+  .art-531 i:nth-child(7){left:28%;}
+  .art-531 i:nth-child(8){right:28%;}
+  /* Collars holding the load on. */
+  .art-531 i:nth-child(9),
+  .art-531 i:nth-child(10){
+    width:2.5%; top:40%; height:20%;
+    border-radius:2px;
+    background:#7E8390;
+  }
+  .art-531 i:nth-child(9){left:34.5%;}
+  .art-531 i:nth-child(10){right:34.5%;}
 
   /* Court allocator: a court plan, net and ball. */
   .art-court i:nth-child(1){inset:12% 4%; border:2px solid rgba(244,241,232,.42); border-radius:4px; background:rgba(36,74,61,.55);}
@@ -324,7 +361,10 @@
      Each one says something about its app rather than moving for the sake of it:
      the bar loads, the ball travels the rally, the pigments drift, scores tick. */
   @media (prefers-reduced-motion:no-preference){
-    .panel.in .art-531 i:nth-child(5){animation:barRock 7s ease-in-out infinite;}
+    .panel.in .art-531 i:nth-child(3),
+    .panel.in .art-531 i:nth-child(4){animation:barFlex 5.5s ease-in-out infinite;}
+    .panel.in .art-531 i:nth-child(5),
+    .panel.in .art-531 i:nth-child(6){animation:barFlex 5.5s ease-in-out infinite .08s;}
     .panel.in .art-rally i:nth-child(3){animation:ballRun 5s var(--ease) infinite;}
     .panel.in .art-court i:nth-child(4){animation:ballBounce 3.6s ease-in-out infinite;}
     .panel.in .art-paint i:nth-child(1){animation:drift 11s ease-in-out infinite;}
@@ -335,9 +375,10 @@
     .panel.in .art-sketch i:nth-child(3){animation:nib 4.4s ease-in-out infinite;}
     .panel.in .art-swatch i:nth-child(5){animation:found 3.8s ease-in-out infinite;}
   }
-  @keyframes barRock{
-    0%,100%{transform:rotate(-1.2deg);}
-    50%    {transform:rotate(1.2deg);}
+  /* A loaded bar sags at the ends and springs back. */
+  @keyframes barFlex{
+    0%,100%{transform:translateY(0);}
+    50%    {transform:translateY(3.5%);}
   }
   @keyframes ballRun{
     0%     {transform:translate(0,0) scale(1); opacity:1;}
@@ -548,7 +589,8 @@
     sec.style.setProperty('--accent', app.accent);
     sec.dataset.index = i;
 
-    var shots = app.art === 'art-swatch' ? 6 : (app.art === 'art-paint' ? 3 : 5);
+    var SHAPES = {'art-531':10, 'art-swatch':6, 'art-paint':3};
+    var shots = SHAPES[app.art] || 5;
     var pips = '';
     for (var n = 0; n < shots; n++) pips += '<i></i>';
 
@@ -568,7 +610,64 @@
   });
   deck.appendChild(frag);
 
-  var panels = Array.prototype.slice.call(deck.querySelectorAll('.panel'));
+  // ---- wrap-around ----
+  // A clone of the last panel sits before the first and a clone of the first
+  // sits after the last. Scrolling onto a clone silently jumps to its real
+  // twin, so the deck loops in both directions with no visible seam. Clones
+  // are hidden from assistive tech and taken out of the tab order, so the
+  // apps are still announced exactly once.
+  var realPanels = Array.prototype.slice.call(deck.querySelectorAll('.panel'));
+  var lastClone = realPanels[realPanels.length - 1].cloneNode(true);
+  var firstClone = realPanels[0].cloneNode(true);
+  [[lastClone, realPanels.length - 1], [firstClone, 0]].forEach(function(pair){
+    var node = pair[0];
+    node.dataset.clone = '1';
+    node.dataset.index = pair[1];
+    node.setAttribute('aria-hidden', 'true');
+    var a = node.querySelector('.panel-link');
+    if (a) a.setAttribute('tabindex', '-1');
+  });
+  deck.insertBefore(lastClone, realPanels[0]);
+  deck.appendChild(firstClone);
+
+  var panels = realPanels;
+  var slides = Array.prototype.slice.call(deck.querySelectorAll('.panel'));
+
+  // Land on the real first panel before the browser paints, so the leading
+  // clone is never seen. Reading offsetHeight forces the layout that makes
+  // clientHeight meaningful this early.
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  void deck.offsetHeight;
+  deck.style.scrollBehavior = 'auto';
+  deck.scrollTop = deck.clientHeight;
+  deck.style.scrollBehavior = '';
+
+  function jumpTo(slideIdx){
+    deck.style.scrollBehavior = 'auto';
+    deck.scrollTop = slideIdx * deck.clientHeight;
+    void deck.offsetHeight;
+    deck.style.scrollBehavior = '';
+  }
+
+  function slideIndex(){
+    var h = deck.clientHeight || 1;
+    return Math.round(deck.scrollTop / h);
+  }
+
+  // Only once motion has stopped: jumping mid-gesture fights the scroller.
+  function settle(){
+    var i = slideIndex();
+    if (i === 0) jumpTo(slides.length - 2);            // leading clone -> real last
+    else if (i === slides.length - 1) jumpTo(1);       // trailing clone -> real first
+  }
+  if ('onscrollend' in window) deck.addEventListener('scrollend', settle);
+  else {
+    var settleTimer = null;
+    deck.addEventListener('scroll', function(){
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(settle, 140);
+    }, {passive:true});
+  }
 
   // Progress rail
   list.forEach(function(app, i){
@@ -602,7 +701,7 @@
       }
     });
   }, {threshold:[0, 0.5, 0.9]});
-  panels.forEach(function(p){ io.observe(p); });
+  slides.forEach(function(p){ io.observe(p); });
 
   // First panel is in view at load, before any scroll happens.
   requestAnimationFrame(function(){ panels[0].classList.add('in'); });
@@ -644,13 +743,12 @@
   }
 
   // ---- keyboard: the rail is not the only way through the deck ----
-  function currentIndex(){
-    var mid = deck.scrollTop + deck.clientHeight / 2;
-    return Math.max(0, Math.min(panels.length - 1, Math.floor(mid / deck.clientHeight)));
-  }
+  function currentIndex(){ return slideIndex(); }
   function goTo(i){
-    i = Math.max(0, Math.min(panels.length - 1, i));
-    panels[i].scrollIntoView({block:'center'});
+    // Clamped to the slide list, clones included: stepping onto one is what
+    // makes the wrap happen, and settle() takes it from there.
+    i = Math.max(0, Math.min(slides.length - 1, i));
+    slides[i].scrollIntoView({block:'center'});
   }
   deck.addEventListener('keydown', function(e){
     // Leave the link's own Enter/Space activation alone.
