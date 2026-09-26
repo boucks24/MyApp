@@ -537,14 +537,23 @@
      Any subset can be picked on any day; always 3 sets. */
   const ACC_SETS = 3;
   const ACCESSORIES = [
-    { id:'chinup',     label:'Chin-ups',           cat:'Pull',       note:'Palms facing you, full hang each rep' },
+    { id:'pullup',     label:'Pull-ups',           cat:'Pull',       note:'Palms facing away, full hang each rep' },
     { id:'pushup',     label:'Push-ups',           cat:'Push',       note:'Chest to the floor, body in one line' },
     { id:'dip',        label:'Dips',               cat:'Push',       note:'Bars or bench, shoulders below elbows' },
     { id:'legraise',   label:'Hanging leg raises', cat:'Core',       note:'From a bar; knees tucked if straight-leg is too hard' },
-    { id:'splitsquat', label:'Split squats',       cat:'Single-leg', note:'Rear foot elevated, reps counted per leg' }
+    { id:'sidelunge',  label:'Side lunges',        cat:'Single-leg', note:'Step wide, sit into the stepping hip, reps per leg' }
+  ];
+  /* Retired from the picker but still present in logged history. Kept so old
+     entries render with their real name instead of a bare id, and deliberately
+     NOT folded into their replacements: a chin-up is not a pull-up and a split
+     squat is not a side lunge, so merging them would put easier reps into the
+     new movement's accBest() and inflate the record. */
+  const RETIRED_ACCESSORIES = [
+    { id:'chinup',     label:'Chin-ups',     cat:'Pull',       retired:true },
+    { id:'splitsquat', label:'Split squats', cat:'Single-leg', retired:true }
   ];
   const ACC_BY_ID = {};
-  ACCESSORIES.forEach(a => { ACC_BY_ID[a.id] = a; });
+  ACCESSORIES.concat(RETIRED_ACCESSORIES).forEach(a => { ACC_BY_ID[a.id] = a; });
 
   function round(w){
     const inc = settings.increment || 2.5;
@@ -781,6 +790,7 @@
   let pendingPickDay = null; // {dayIndex, week} while the "choose a different day" modal is open
   let pendingCycleTMEdit = null; // {squat,bench,deadlift,press} while the TM-edit modal is open
   let pendingStartCycleConfirm = null; // true while the "start new cycle" confirmation modal is open
+  let editingSession = null; // {idx, prevWeek, prevDayIndex} while a logged workout is open in Train for editing
   let pendingDiscardConfirm = null; // route to go to while the "discard workout" confirmation modal is open
 
   function go(r){
@@ -1045,14 +1055,17 @@
   /* Accessory records, under the cycle grid on Home. Bodyweight movements have
      no weight to project from, so the "max" is the best single set logged. */
   function renderAccessoryMaxes(){
-    const rows = ACCESSORIES.map(a => {
+    // Retired movements still show if there is history for them, so swapping an
+    // exercise out does not silently hide what you already did.
+    const shown = ACCESSORIES.concat(RETIRED_ACCESSORIES.filter(a => accEntries(a.id).length));
+    const rows = shown.map(a => {
       const best = accBest(a.id);
       const last = accLast(a.id);
       return `
         <div class="row">
           <span class="label">
             ${a.label}
-            <span class="am-cat">${a.cat}</span>
+            <span class="am-cat">${a.cat}${a.retired ? ' · retired' : ''}</span>
             ${last ? `<span class="am-last">Last ${accSetsLabel(last.rec)} &middot; ${last.date}</span>` : ''}
           </span>
           <span class="value">${best ? best.reps + ' reps' : '-'}</span>
@@ -1271,7 +1284,12 @@
     `).join('');
 
     return `
-      ${topbar('Today', 'Week ' + state.week + ' · ' + w.scheme.label, null, '531home', true)}
+      ${topbar(
+          editingSession ? 'Edit workout' : 'Today',
+          editingSession
+            ? (history[editingSession.idx] ? history[editingSession.idx].date + ' · ' : '') + 'Week ' + state.week + ' · ' + w.scheme.label
+            : 'Week ' + state.week + ' · ' + w.scheme.label,
+          null, '531home', true)}
       <div class="sess-rail">
         <span class="sess-ticks">${ticks}</span>
         <span class="sess-count">${doneCount}/${sets.length}</span>
@@ -1283,7 +1301,8 @@
 
         <div style="padding:0 20px;">
           ${renderAccessoryBlock()}
-          <button class="btn" style="margin-top:20px;" data-action="finishWorkout">Finish &amp; log workout</button>
+          <button class="btn" style="margin-top:20px;" data-action="finishWorkout">${editingSession ? 'Save changes' : 'Finish &amp; log workout'}</button>
+          ${editingSession ? `<button class="btn danger" data-action="deleteEditedWorkout">Delete this workout</button>` : ''}
           <button class="btn ghost" data-action="toggleLiftHistory" aria-expanded="${liftHistoryOpen}">${liftHistoryOpen ? 'Hide history for this lift' : 'History for this lift'}</button>
           ${liftHistoryOpen ? `<div class="card">${renderLiftHistoryPanel(lift)}</div>` : ''}
         </div>
@@ -1765,7 +1784,7 @@
       historyLiftFilter = el.getAttribute('data-lift');
       render(); window.scrollTo(0,0);
     }
-    else if (action === 'editHistory') doEditHistory(parseInt(el.getAttribute('data-idx')));
+    else if (action === 'editHistory') openWorkoutForEdit(parseInt(el.getAttribute('data-idx')));
     else if (action === 'cancelEditHistory') doCancelEditHistory();
     else if (action === 'saveEditHistory') doSaveEditHistory();
     else if (action === 'exportData') doExportData();
@@ -1795,12 +1814,13 @@
     else if (action === 'focusSet') { focusIdx = parseInt(el.getAttribute('data-i')); render(); }
     else if (action === 'bumpWeight') doBumpWeight(parseInt(el.getAttribute('data-dir')));
     else if (action === 'markFocus') doMarkFocus();
+    else if (action === 'deleteEditedWorkout') doDeleteEditedWorkout();
     else if (action === 'toggleAcc') doToggleAcc(el.getAttribute('data-id'));
     else if (action === 'cancelStartCycle') { pendingStartCycleConfirm = null; render(); }
     else if (action === 'confirmStartCycle') doConfirmStartNewCycle();
     else if (action === 'backDiscardConfirm') { pendingDiscardConfirm = el.getAttribute('data-route'); render(); }
     else if (action === 'cancelDiscardWorkout') { pendingDiscardConfirm = null; render(); }
-    else if (action === 'confirmDiscardWorkout') { const r = pendingDiscardConfirm; pendingDiscardConfirm = null; go(r); }
+    else if (action === 'confirmDiscardWorkout') { const r = pendingDiscardConfirm; pendingDiscardConfirm = null; leaveEditSession(); go(r); }
   }
 
   // Toggling a set's tick is what marks it complete — it also starts that
@@ -1822,8 +1842,7 @@
   function doCycleCellClick(wk, lift){
     const entry = history.find(h => h.cycle === viewingCycle && h.week === wk && h.lift === lift);
     if (entry){
-      editingHistoryIdx = history.indexOf(entry);
-      render();
+      openWorkoutForEdit(history.indexOf(entry));
       return;
     }
     if (viewingCycle !== state.cycle) return;
@@ -1957,6 +1976,60 @@
     render();
   }
 
+  /* Editing a logged workout reopens Train itself, pre-filled, rather than a
+     separate modal with a different shape: the screen you logged it on is the
+     screen you already know. The current position in the programme is stashed
+     and restored, so correcting a week-1 session does not drag you back there. */
+  function openWorkoutForEdit(idx){
+    const h = history[idx];
+    if (!h) return;
+    const dayIdx = settings.order.indexOf(h.lift);
+    if (dayIdx === -1){ editingHistoryIdx = idx; render(); return; } // unknown lift: fall back to the modal
+
+    const prevWeek = state.week, prevDayIndex = state.dayIndex;
+    state.week = h.week;
+    state.dayIndex = dayIdx;
+    go('train'); // clears session state, so everything below must come after it
+    editingSession = { idx: idx, prevWeek: prevWeek, prevDayIndex: prevDayIndex };
+
+    sessionWeights = {
+      main: h.mainSets.map(s => s.weight),
+      bbb: h.bbbWeight
+    };
+    // Warm-ups are never persisted, so treat a logged session as fully done.
+    warmupDone = [true, true, true];
+    mainDone = [true, true, true];
+    bbbDone = h.bbbSets || 0;
+    repsInput = {};
+    h.mainSets.forEach((s, i) => { if (s.amrap && s.actualReps) repsInput[i] = String(s.actualReps); });
+
+    const accs = Array.isArray(h.accessories) ? h.accessories : [];
+    sessionAcc = { picked: accs.map(a => a.id), reps: {} };
+    accs.forEach(a => {
+      sessionAcc.reps[a.id] = Array.from({ length: ACC_SETS }, (_, i) => (a.sets && a.sets[i]) ? String(a.sets[i]) : '');
+    });
+    focusIdx = 0;
+    render();
+  }
+
+  // Put the programme position back however the edit ends.
+  function leaveEditSession(){
+    if (!editingSession) return;
+    state.week = editingSession.prevWeek;
+    state.dayIndex = editingSession.prevDayIndex;
+    editingSession = null;
+  }
+
+  function doDeleteEditedWorkout(){
+    if (!editingSession) return;
+    if (!confirm('Delete this workout entry?')) return;
+    history.splice(editingSession.idx, 1);
+    save(HKEY, history);
+    leaveEditSession();
+    showToast('Workout deleted.');
+    go('531home');
+  }
+
   function doFinishWorkout(){
     const w = computeWorkout();
     const sw = ensureSessionWeights(w);
@@ -1986,10 +2059,13 @@
       return { id, sets };
     }).filter(a => a.sets.some(r => r > 0));
 
+    const editing = editingSession && history[editingSession.idx];
     const entry = {
-      date: new Date().toISOString().slice(0,10),
+      // An edit keeps the day it was actually performed, and the cycle it was
+      // logged under; only the numbers are being corrected.
+      date: editing ? editing.date : new Date().toISOString().slice(0,10),
       lift: w.lift,
-      cycle: state.cycle,
+      cycle: editing ? editing.cycle : state.cycle,
       week: state.week,
       weekLabel: w.scheme.label,
       mainSets,
@@ -1998,6 +2074,18 @@
       bbbSets: bbbDone,
       accessories
     };
+
+    if (editing){
+      history[editingSession.idx] = entry;
+      save(HKEY, history);
+      sessionWeights = null;
+      sessionAcc = null;
+      leaveEditSession();
+      showToast('Workout updated.');
+      go('531home');
+      return;
+    }
+
     history.push(entry);
     save(HKEY, history);
 
