@@ -562,6 +562,16 @@
 (function(){
   "use strict";
 
+  // The refresh button reloads the shelf under a fresh ?t=, but each app is a
+  // separate document with its own cache entry — and the deck prefetches all of
+  // them, so a tile tap could hand back a copy from before the refresh. Carrying
+  // the same token onto every app link makes a refresh mean "and the apps too".
+  var BUST = (location.search.match(/[?&]t=(\d+)/) || [])[1];
+  function bust(href){
+    if (!BUST) return href;
+    return href + (href.indexOf('?') === -1 ? '?' : '&') + 't=' + BUST;
+  }
+
   // Default order. With no usage recorded yet the deck opens on 5/3/1 BBB;
   // once apps have been opened, most-recent leads and anything never opened
   // keeps this order behind it.
@@ -636,7 +646,7 @@
     var label = used[app.id] ? relTime(used[app.id]) : (i === 0 ? 'Start here' : '');
 
     sec.innerHTML =
-      '<a class="panel-link" href="' + app.href + '" data-id="' + app.id + '">' +
+      '<a class="panel-link" href="' + bust(app.href) + '" data-id="' + app.id + '">' +
         '<span class="art ' + app.art + '" aria-hidden="true">' + pips + '</span>' +
         '<div class="copy">' +
           '<p class="kicker' + (used[app.id] ? ' recent' : '') + '">' + label + '</p>' +
@@ -833,7 +843,7 @@
 
   // Warm every app once the deck itself is done loading, so a tap navigates
   // to an already-cached document instead of starting a fresh request.
-  function warmAll(){ list.forEach(function(a){ prefetch(a.href); }); }
+  function warmAll(){ list.forEach(function(a){ prefetch(bust(a.href)); }); }
   if ('requestIdleCallback' in window) requestIdleCallback(warmAll, {timeout:2500});
   else setTimeout(warmAll, 900);
 
