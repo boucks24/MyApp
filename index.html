@@ -459,6 +459,41 @@
   }
   .mark .dot{color:var(--iron);}
 
+  /* ---------- refresh ---------- */
+  /* Mirrors the centred masthead on the other corner, clear of the dots rail
+     (which is pinned to the right edge at mid-height). */
+  .refresh{
+    position:fixed;
+    top:calc(12px + env(safe-area-inset-top));
+    right:max(12px, env(safe-area-inset-right));
+    z-index:var(--z-chrome);
+    width:38px;
+    height:38px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0;
+    border:1px solid var(--line);
+    border-radius:999px;
+    background:color-mix(in srgb, var(--panel) 78%, transparent);
+    -webkit-backdrop-filter:blur(6px);
+    backdrop-filter:blur(6px);
+    color:var(--iron);
+    font-size:16px;
+    line-height:1;
+    cursor:pointer;
+    transition:border-color .2s var(--ease), transform .16s var(--ease), opacity .2s var(--ease);
+  }
+  .refresh .ic{display:block;}
+  .refresh:hover{border-color:var(--iron);}
+  .refresh:active{transform:scale(.92);}
+  .refresh:focus-visible{outline:2px solid var(--chalk); outline-offset:3px;}
+  /* Held until the navigation below actually replaces the page, so a slow
+     network still reads as "working" rather than as a dead tap. */
+  .refresh.spinning{opacity:.6; pointer-events:none;}
+  .refresh.spinning .ic{animation:refresh-spin .6s linear infinite;}
+  @keyframes refresh-spin{ to{ transform:rotate(360deg); } }
+
   .stamp{
     position:fixed;
     bottom:calc(16px + env(safe-area-inset-bottom));
@@ -500,6 +535,10 @@
 <header class="mark">
   <h1>App<span class="dot">.</span>Shelf</h1>
 </header>
+
+<button class="refresh" id="refreshBtn" type="button" title="Refresh" aria-label="Refresh to fetch the latest version">
+  <span class="ic" aria-hidden="true">&#x27F3;</span>
+</button>
 
 <main class="deck" id="deck" tabindex="-1"></main>
 
@@ -808,6 +847,22 @@
         : '';
     })
     .catch(function(){ stamp.textContent = ''; });
+
+  // ---- refresh ----
+  // A plain location.reload() can still be served from the copy iOS keeps for
+  // a home-screen web app; navigating to a new URL (a fresh query string)
+  // forces a real network fetch, so the stamp above can actually change.
+  var refreshBtn = document.getElementById('refreshBtn');
+  refreshBtn.addEventListener('click', function(){
+    refreshBtn.classList.add('spinning');
+    stamp.textContent = 'Refreshing…';
+    // Give the browser a frame to paint the spinning state before the
+    // navigation tears the page down — otherwise a fast reload replaces the
+    // page before any of it is ever shown.
+    setTimeout(function(){
+      location.href = location.pathname + '?t=' + Date.now();
+    }, 60);
+  });
 })();
 </script>
 </body>
