@@ -159,6 +159,25 @@
   }
   .lift-chip.active{background:var(--iron);border-color:var(--iron);color:#fff;}
 
+  /* ---- bodyweight accessories ---- */
+  .acc-sub{color:var(--muted);font-size:12px;line-height:1.5;margin:0 0 12px;}
+  .acc-chips{display:flex;gap:6px;flex-wrap:wrap;}
+  .acc-list{margin-top:6px;}
+  .acc-row{border-top:1px solid var(--line);padding:13px 0 3px;}
+  .acc-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+  .acc-name{font-family:var(--font-display);font-size:14px;font-weight:600;}
+  .acc-best{font-family:var(--num);font-variant-numeric:tabular-nums;font-size:12px;font-weight:700;color:var(--good);flex:0 0 auto;}
+  .acc-note{color:var(--muted);font-size:11.5px;line-height:1.45;margin-top:3px;}
+  .acc-inputs{display:flex;gap:8px;margin-top:9px;}
+  .acc-inputs input{
+    flex:1;min-width:0;text-align:center;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;
+    color:var(--chalk);padding:10px 4px;font-family:var(--num);font-variant-numeric:tabular-nums;font-size:16px;font-weight:700;
+  }
+  .acc-inputs input:focus{outline:2px solid var(--steel);outline-offset:1px;}
+  .am-cat{display:block;font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin-top:3px;}
+  .am-last{display:block;font-size:11px;color:var(--muted);margin-top:2px;}
+  .hi-acc{color:var(--muted);font-size:11.5px;}
+
   .history-group{margin-bottom:6px;}
   .history-group .hg-title{
     font-family:var(--font-display);font-size:13px;font-weight:600;letter-spacing:0.02em;
@@ -333,7 +352,6 @@
      set you are on owns the screen, and the rest of the session is a
      glanceable list under it.
      ============================================================ */
-  .home-load{text-align:center;font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;font-weight:700;margin-top:-2px;}
   .sess-rail{display:flex;align-items:center;gap:10px;padding:14px 20px 0;}
   .sess-ticks{display:flex;gap:3px;flex:1;min-width:0;}
   .sess-ticks i{flex:1 1 0;height:5px;border-radius:2px;background:var(--line);transition:background .25s ease;}
@@ -508,6 +526,25 @@
   const CYCLE_BUMP_LB = { squat:10, deadlift:10, bench:5, press:5 };
   const WARMUP_SCHEME = [ { pct:40, reps:5 }, { pct:50, reps:5 }, { pct:60, reps:3 } ];
   const REST_WARMUP = 45, REST_MAIN = 120, REST_BBB = 75; // seconds
+
+  /* ---------------- bodyweight accessories ----------------
+     Wendler prescribes assistance work by category rather than by exercise —
+     push, pull, single-leg/core, roughly 50-100 reps a session — so the list is
+     five bodyweight movements covering all three (two push, one pull, one core,
+     one single-leg). Bodyweight-only on purpose: no loading, no plate maths, and
+     the "max" worth tracking is simply the best single set ever logged (a 1RM
+     formula has nothing to put in it when the weight never changes).
+     Any subset can be picked on any day; always 3 sets. */
+  const ACC_SETS = 3;
+  const ACCESSORIES = [
+    { id:'chinup',     label:'Chin-ups',           cat:'Pull',       note:'Palms facing you, full hang each rep' },
+    { id:'pushup',     label:'Push-ups',           cat:'Push',       note:'Chest to the floor, body in one line' },
+    { id:'dip',        label:'Dips',               cat:'Push',       note:'Bars or bench, shoulders below elbows' },
+    { id:'legraise',   label:'Hanging leg raises', cat:'Core',       note:'From a bar; knees tucked if straight-leg is too hard' },
+    { id:'splitsquat', label:'Split squats',       cat:'Single-leg', note:'Rear foot elevated, reps counted per leg' }
+  ];
+  const ACC_BY_ID = {};
+  ACCESSORIES.forEach(a => { ACC_BY_ID[a.id] = a; });
 
   function round(w){
     const inc = settings.increment || 2.5;
@@ -694,6 +731,32 @@
     return { weight: h.bbbWeight, sets: h.bbbSets };
   }
 
+  /* Accessory records. A workout stores `accessories:[{id,sets:[r,r,r]}]`, so the
+     record for a movement is the best single set across every workout — a total
+     would just reward doing more sets, and there is no weight to estimate from. */
+  function accEntries(id){
+    return history
+      .filter(h => Array.isArray(h.accessories))
+      .map(h => ({ date: h.date, rec: h.accessories.find(a => a.id === id) }))
+      .filter(x => x.rec && Array.isArray(x.rec.sets) && x.rec.sets.some(r => r > 0))
+      .sort((a,b) => String(a.date).localeCompare(String(b.date)));
+  }
+  function accBest(id){
+    let best = null;
+    accEntries(id).forEach(e => {
+      const m = Math.max.apply(null, e.rec.sets.map(r => r || 0));
+      if (!best || m > best.reps) best = { reps: m, date: e.date };
+    });
+    return best;
+  }
+  function accLast(id){
+    const es = accEntries(id);
+    return es.length ? es[es.length - 1] : null;
+  }
+  function accSetsLabel(rec){
+    return rec.sets.map(r => r || 0).join('/');
+  }
+
   /* ---------------- navigation state ---------------- */
   let route = '531home'; // 531home | setup | train | history
   let toastTimer = null;
@@ -706,6 +769,7 @@
   let editingHistoryIdx = null;
   let pendingStaleReminder = null; // {exportedAt, days} when the committed backup file is over a month old
   let sessionWeights = null; // {main:[w,w,w], bbb:w} — editable overrides for the in-progress workout
+  let sessionAcc = null; // {picked:[accId], reps:{accId:[r,r,r]}} — this session's accessory picks + typed reps
   let liftHistoryOpen = false; // Train's "history for this lift" panel -- collapsed by default, toggled per session
   let focusIdx = 0; // which set in the flattened session the Train screen is showing
   let warmupDone = [false, false, false];
@@ -720,7 +784,7 @@
   let pendingDiscardConfirm = null; // route to go to while the "discard workout" confirmation modal is open
 
   function go(r){
-    route = r; bbbDone = 0; repsInput = {}; sessionWeights = null; focusIdx = 0;
+    route = r; bbbDone = 0; repsInput = {}; sessionWeights = null; sessionAcc = null; focusIdx = 0;
     warmupDone = [false, false, false]; mainDone = [false, false, false];
     liftHistoryOpen = false;
     if (r === '531home') viewingCycle = state.cycle;
@@ -783,6 +847,19 @@
       sessionWeights = { main: w.mainSets.map(s => s.weight), bbb: w.bbbWeight };
     }
     return sessionWeights;
+  }
+
+  // Accessory picks are session-only (reset by go(), like sessionWeights) but
+  // seeded from the last workout that logged any — in practice people rotate
+  // through the same two or three rather than re-picking from scratch.
+  function ensureSessionAcc(){
+    if (!sessionAcc){
+      const prev = history.filter(h => Array.isArray(h.accessories) && h.accessories.length).pop();
+      const picked = prev ? prev.accessories.map(a => a.id).filter(id => ACC_BY_ID[id]) : [];
+      sessionAcc = { picked, reps: {} };
+      picked.forEach(id => { sessionAcc.reps[id] = Array(ACC_SETS).fill(''); });
+    }
+    return sessionAcc;
   }
 
   function showToast(msg){
@@ -965,32 +1042,39 @@
     `;
   }
 
+  /* Accessory records, under the cycle grid on Home. Bodyweight movements have
+     no weight to project from, so the "max" is the best single set logged. */
+  function renderAccessoryMaxes(){
+    const rows = ACCESSORIES.map(a => {
+      const best = accBest(a.id);
+      const last = accLast(a.id);
+      return `
+        <div class="row">
+          <span class="label">
+            ${a.label}
+            <span class="am-cat">${a.cat}</span>
+            ${last ? `<span class="am-last">Last ${accSetsLabel(last.rec)} &middot; ${last.date}</span>` : ''}
+          </span>
+          <span class="value">${best ? best.reps + ' reps' : '-'}</span>
+        </div>`;
+    }).join('');
+    return `
+      <div class="card" style="margin-top:22px;">
+        <h2>Accessory max reps</h2>
+        <p class="acc-sub">Best single set logged. Pick any of the five during a workout &mdash; ${ACC_SETS} sets each, bodyweight only.</p>
+        ${rows}
+      </div>
+    `;
+  }
+
   function renderHome(){
     if (!hasTMs()) { go('setup'); return renderSetup(); }
-    const w = computeWorkout();
-    const lift = w.lift;
     return `
       ${topbar('5/3/1 BBB', 'Cycle ' + state.cycle, '../../')}
       ${syncBanner()}
       <main>
         ${renderCycleProgress()}
-
-        <div class="card" style="margin-top:22px;">
-          <h2>Next workout</h2>
-          <div class="lift-head">
-            <div class="plate ${LIFT_CLASS[lift]}"></div>
-            <div>
-              <div class="name">${LIFT_LABEL[lift]}</div>
-              <div class="meta">Week ${state.week} · ${w.scheme.label}</div>
-            </div>
-          </div>
-          <div class="row"><span class="label">Top set</span><span class="value">${fmtW(w.mainSets[2].weight)} × ${w.mainSets[2].repsLabel}</span></div>
-          <div class="row"><span class="label">BBB: ${LIFT_LABEL[w.bbbLift]}</span><span class="value">${fmtW(w.bbbWeight)} × 5×10</span></div>
-          <!-- Same drawing as Train, so the top set is recognisable before
-               you have even started. -->
-          ${renderBarVisual(w.mainSets[2].weight, null)}
-          <div class="home-load">Top set, per side</div>
-        </div>
+        ${renderAccessoryMaxes()}
         <button class="btn" data-action="startWorkout">Start workout</button>
         <button class="btn ghost" data-action="pickDay">Choose a different day</button>
 
@@ -1078,6 +1162,42 @@
     focusIdx = next === -1 ? sets.length - 1 : next;
   }
 
+  /* The accessories section on Train: five chips (any subset for today) and, for
+     each picked movement, ACC_SETS rep boxes. Reps are captured per keystroke in
+     bindEvents() because toggling a chip re-renders the screen. */
+  function renderAccessoryBlock(){
+    const sa = ensureSessionAcc();
+    const chips = ACCESSORIES.map(a =>
+      `<button type="button" class="lift-chip ${sa.picked.indexOf(a.id) !== -1 ? 'active' : ''}" data-action="toggleAcc" data-id="${a.id}">${a.label}</button>`
+    ).join('');
+    const rows = sa.picked.map(id => {
+      const a = ACC_BY_ID[id];
+      const best = accBest(id);
+      const last = accLast(id);
+      const inputs = Array.from({ length: ACC_SETS }, (_, i) =>
+        `<input class="acc-reps" type="number" inputmode="numeric" min="0" placeholder="0" data-id="${id}" data-set="${i}" value="${(sa.reps[id] && sa.reps[id][i]) ?? ''}" aria-label="${a.label}, set ${i+1} reps">`
+      ).join('');
+      return `
+        <div class="acc-row">
+          <div class="acc-head">
+            <span class="acc-name">${a.label}</span>
+            <span class="acc-best">${best ? 'Max ' + best.reps : 'No max yet'}</span>
+          </div>
+          <div class="acc-note">${a.cat} &middot; ${a.note}${last ? ' &middot; last ' + accSetsLabel(last.rec) : ''}</div>
+          <div class="acc-inputs">${inputs}</div>
+        </div>
+      `;
+    }).join('');
+    return `
+      <div class="card" style="margin-top:20px;">
+        <h2>Accessories</h2>
+        <p class="acc-sub">Bodyweight, ${ACC_SETS} sets each. Tap what you are doing today and log the reps.</p>
+        <div class="acc-chips">${chips}</div>
+        ${sa.picked.length ? `<div class="acc-list">${rows}</div>` : ''}
+      </div>
+    `;
+  }
+
   function renderTrain(){
     const w = computeWorkout();
     const lift = w.lift;
@@ -1162,6 +1282,7 @@
         <div class="sess-list">${listHtml}</div>
 
         <div style="padding:0 20px;">
+          ${renderAccessoryBlock()}
           <button class="btn" style="margin-top:20px;" data-action="finishWorkout">Finish &amp; log workout</button>
           <button class="btn ghost" data-action="toggleLiftHistory" aria-expanded="${liftHistoryOpen}">${liftHistoryOpen ? 'Hide history for this lift' : 'History for this lift'}</button>
           ${liftHistoryOpen ? `<div class="card">${renderLiftHistoryPanel(lift)}</div>` : ''}
@@ -1192,6 +1313,15 @@
     return `<div class="lift-filter-row">${chips}</div>`;
   }
 
+  // "Chin-ups 8/7/6 · Dips 12/10/9" under a logged workout's detail line.
+  function accSummaryLine(h){
+    if (!Array.isArray(h.accessories)) return '';
+    const parts = h.accessories
+      .filter(a => ACC_BY_ID[a.id] && Array.isArray(a.sets) && a.sets.some(r => r > 0))
+      .map(a => ACC_BY_ID[a.id].label + ' ' + accSetsLabel(a));
+    return parts.length ? `<span class="hi-acc">${parts.join(' &middot; ')}</span>` : '';
+  }
+
   function renderHistoryItem(h){
     const realIdx = history.indexOf(h);
     const top = h.mainSets[h.mainSets.length-1];
@@ -1211,6 +1341,7 @@
             ? `Cycle ${h.cycle} · Week ${h.week} (${h.weekLabel}) &middot; BBB${h.bbbLift ? ' ('+LIFT_LABEL[h.bbbLift]+')' : ''} ${fmtW(h.bbbWeight)} × ${h.bbbSets}/5`
             : h.weekLabel}
           ${prLine ? '<br>' + prLine : ''}
+          ${accSummaryLine(h) ? '<br>' + accSummaryLine(h) : ''}
         </div>
         <div class="btn-row" style="margin-top:8px;">
           <button class="btn ghost" style="padding:6px 0;" data-action="editHistory" data-idx="${realIdx}">Edit</button>
@@ -1422,6 +1553,11 @@
   function renderEditHistoryModal(){
     const h = history[editingHistoryIdx];
     if (!h) return '';
+    // Only the accessories this workout actually logged — the picker lives on
+    // Train, this is just for correcting counts after the fact.
+    const accFieldsHtml = (h.accessories || []).filter(a => ACC_BY_ID[a.id]).map(a => `
+      <label class="field"><span>${ACC_BY_ID[a.id].label} reps (${ACC_SETS} sets)</span><input type="text" inputmode="numeric" id="eh-acc-${a.id}" value="${(a.sets || []).join(', ')}"></label>
+    `).join('');
     const setsHtml = h.mainSets.map((s,i)=>`
       <label class="field"><span>${s.pct != null ? s.pct + '% set' : 'Logged set'}${s.amrap ? ' (AMRAP)' : ''} weight</span><input type="number" inputmode="decimal" id="eh-w-${i}" value="${s.weight}"></label>
       ${s.amrap ? `<label class="field"><span>Reps achieved</span><input type="number" inputmode="numeric" id="eh-r-${i}" value="${s.actualReps ?? ''}"></label>` : ''}
@@ -1434,6 +1570,7 @@
           <label class="field"><span>Date</span><input type="date" id="eh-date" value="${h.date}"></label>
           ${setsHtml}
           <label class="field"><span>BBB sets completed (0–5)</span><input type="number" inputmode="numeric" id="eh-bbb" min="0" max="5" value="${h.bbbSets}"></label>
+          ${accFieldsHtml}
           <div class="btn-row">
             <button class="btn secondary" data-action="cancelEditHistory">Cancel</button>
             <button class="btn" data-action="saveEditHistory">Save</button>
@@ -1586,6 +1723,19 @@
       });
     });
 
+    // Same reason as repsInput above: a chip toggle re-renders the section, so
+    // typed accessory reps have to be captured as they are typed.
+    document.querySelectorAll('input.acc-reps').forEach(el=>{
+      el.addEventListener('input', () => {
+        const sa = ensureSessionAcc();
+        const id = el.getAttribute('data-id');
+        const i = parseInt(el.getAttribute('data-set'));
+        if (isNaN(i)) return;
+        if (!sa.reps[id]) sa.reps[id] = Array(ACC_SETS).fill('');
+        sa.reps[id][i] = el.value;
+      });
+    });
+
     const bbbWeightInput = document.getElementById('bbbWeightInput');
     if (bbbWeightInput){
       bbbWeightInput.addEventListener('change', () => {
@@ -1645,6 +1795,7 @@
     else if (action === 'focusSet') { focusIdx = parseInt(el.getAttribute('data-i')); render(); }
     else if (action === 'bumpWeight') doBumpWeight(parseInt(el.getAttribute('data-dir')));
     else if (action === 'markFocus') doMarkFocus();
+    else if (action === 'toggleAcc') doToggleAcc(el.getAttribute('data-id'));
     else if (action === 'cancelStartCycle') { pendingStartCycleConfirm = null; render(); }
     else if (action === 'confirmStartCycle') doConfirmStartNewCycle();
     else if (action === 'backDiscardConfirm') { pendingDiscardConfirm = el.getAttribute('data-route'); render(); }
@@ -1791,6 +1942,21 @@
     render();
   }
 
+  // Picking is free-form: any subset of the five, on any day. Un-picking keeps the
+  // typed reps in sessionAcc.reps so a mis-tap doesn't lose them.
+  function doToggleAcc(id){
+    if (!ACC_BY_ID[id]) return;
+    const sa = ensureSessionAcc();
+    const at = sa.picked.indexOf(id);
+    if (at === -1){
+      sa.picked.push(id);
+      if (!sa.reps[id]) sa.reps[id] = Array(ACC_SETS).fill('');
+    } else {
+      sa.picked.splice(at, 1);
+    }
+    render();
+  }
+
   function doFinishWorkout(){
     const w = computeWorkout();
     const sw = ensureSessionWeights(w);
@@ -1806,6 +1972,20 @@
       }
       return out;
     });
+    // Live inputs first (they hold anything typed but not yet blurred), falling
+    // back to what was captured per keystroke; a movement with no reps at all
+    // isn't logged, so an accidental chip tap leaves no record.
+    const sa = ensureSessionAcc();
+    const accessories = sa.picked.map(id => {
+      const sets = Array.from({ length: ACC_SETS }, (_, i) => {
+        const el = document.querySelector('input.acc-reps[data-id="' + id + '"][data-set="' + i + '"]');
+        const raw = el ? el.value : (sa.reps[id] || [])[i];
+        const v = parseInt(raw);
+        return (!isNaN(v) && v > 0) ? v : 0;
+      });
+      return { id, sets };
+    }).filter(a => a.sets.some(r => r > 0));
+
     const entry = {
       date: new Date().toISOString().slice(0,10),
       lift: w.lift,
@@ -1815,12 +1995,14 @@
       mainSets,
       bbbLift: w.bbbLift,
       bbbWeight: sw.bbb,
-      bbbSets: bbbDone
+      bbbSets: bbbDone,
+      accessories
     };
     history.push(entry);
     save(HKEY, history);
 
     sessionWeights = null;
+    sessionAcc = null;
     advanceDay();
     showToast('Workout logged.');
     go('531home');
@@ -1906,6 +2088,19 @@
       }
       return out;
     });
+
+    if (Array.isArray(h.accessories)){
+      h.accessories = h.accessories.map(a => {
+        const el = document.getElementById('eh-acc-' + a.id);
+        if (!el) return a;
+        const sets = el.value.split(/[^0-9]+/).filter(x => x !== '').slice(0, ACC_SETS).map(x => {
+          const v = parseInt(x);
+          return (!isNaN(v) && v > 0) ? v : 0;
+        });
+        while (sets.length < ACC_SETS) sets.push(0);
+        return Object.assign({}, a, { sets });
+      }).filter(a => a.sets.some(r => r > 0));
+    }
 
     const bbbEl = document.getElementById('eh-bbb');
     const bbbVal = bbbEl ? parseInt(bbbEl.value) : NaN;
