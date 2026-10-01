@@ -274,6 +274,36 @@
   }
   input[type="number"]::placeholder{color:rgba(244,241,232,.38);}
   input[type="number"]:focus{outline:2px solid var(--ball);outline-offset:1px;}
+  /* Court picker: six toggles, because which courts are free changes week
+     to week and the old build had 13-16 hard-coded. */
+  /* Six fixed columns, so the chips always read as the court numbers in
+     order rather than reflowing into a ragged last row. */
+  .court-picker{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:8px;}
+  .court-chip{
+    padding:15px 2px;
+    border-radius:10px;
+    border:1px solid rgba(244,241,232,.2);
+    background:var(--deep);
+    color:rgba(244,241,232,.72);
+    font-family:'Archivo Black',sans-serif;
+    font-size:17px;
+    line-height:1;
+    cursor:pointer;
+    touch-action:manipulation;
+    transition:background .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease);
+  }
+  .court-chip:hover{border-color:rgba(244,241,232,.45);color:var(--line);}
+  .court-chip[aria-pressed="true"]{background:var(--ball);border-color:var(--ball);color:var(--ink);}
+  .court-chip:focus-visible{outline:2px solid var(--ball);outline-offset:2px;}
+  .picker-note{
+    font-size:12px;
+    color:rgba(244,241,232,.5);
+    text-align:center;
+    margin:0 0 18px;
+    min-height:16px;
+  }
+  .picker-note.warn{color:#F0B4A0;}
+
   .setup-note{
     font-size:12.5px;
     color:rgba(244,241,232,.55);
@@ -298,10 +328,14 @@
   </header>
 
   <div class="setup-card" id="setupCard">
+    <label id="courtsLabel">Which courts today?</label>
+    <div class="court-picker" id="courtPicker" role="group" aria-labelledby="courtsLabel"></div>
+    <p class="picker-note" id="pickerNote"></p>
+
     <label for="playerCount">How many players today?</label>
     <input type="number" id="playerCount" min="4" max="16" step="1" placeholder="e.g. 10" inputmode="numeric">
     <button id="startBtn">Set courts</button>
-    <p class="setup-note" id="setupNote">Courts 16, 15, 14 and 13. Up to 4 players per court.</p>
+    <p class="setup-note" id="setupNote">Up to 4 players per court, two a side.</p>
   </div>
 
   <div id="playArea" class="hidden">
@@ -313,7 +347,7 @@
 
     <div class="actions">
       <button class="link-btn" id="resetBtn">Reset courts</button>
-      <button class="link-btn" id="changeBtn">Change player count</button>
+      <button class="link-btn" id="changeBtn">Change setup</button>
     </div>
 
     <div class="grid" id="grid"></div>
@@ -323,12 +357,15 @@
 
 <script>
   try {
-    const ALL_COURTS = [16, 15, 14, 13]; // priority order when fewer than 4 courts are needed
+    const AVAILABLE_COURTS = [13, 14, 15, 16, 17, 18]; // every court the club can give us
     const SIDES = ['A', 'B'];
     const CAPACITY = 2; // players per side, per court
+    const PER_COURT = CAPACITY * SIDES.length;
+    const STORE = 'courtAllocator:courts';
 
-    let COURTS = [];
+    let COURTS = [];       // the courts actually in play this session
     let slots = {};
+    let selectedCourts = loadCourts();   // the pool picked on the setup screen
 
     const headerSub = document.getElementById('headerSub');
     const setupCard = document.getElementById('setupCard');
@@ -344,24 +381,81 @@
     const resetBtn = document.getElementById('resetBtn');
     const grid = document.getElementById('grid');
     const fullNote = document.getElementById('fullNote');
+    const courtPicker = document.getElementById('courtPicker');
+    const pickerNote = document.getElementById('pickerNote');
+
+    /* The pool is remembered between visits: which courts are free tends to be
+       the same for weeks at a time, so re-picking every session is busywork. */
+    function loadCourts(){
+      try {
+        const raw = localStorage.getItem(STORE);
+        const arr = raw ? JSON.parse(raw) : null;
+        const clean = Array.isArray(arr) ? arr.filter(c => AVAILABLE_COURTS.indexOf(c) !== -1) : [];
+        if (clean.length) return clean.sort((a, b) => a - b);
+      } catch(e){ /* blocked or corrupt storage: fall through to the default */ }
+      return [13, 14, 15, 16];
+    }
+    function saveCourts(){
+      try { localStorage.setItem(STORE, JSON.stringify(selectedCourts)); } catch(e){}
+    }
+
+    function renderPicker(){
+      courtPicker.innerHTML = '';
+      AVAILABLE_COURTS.forEach(c => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'court-chip';
+        btn.textContent = c;
+        btn.setAttribute('aria-pressed', selectedCourts.indexOf(c) !== -1 ? 'true' : 'false');
+        btn.setAttribute('aria-label', 'Court ' + c);
+        btn.addEventListener('click', () => toggleCourt(c));
+        courtPicker.appendChild(btn);
+      });
+      updatePickerNote();
+    }
+
+    function toggleCourt(c){
+      const i = selectedCourts.indexOf(c);
+      if (i === -1) selectedCourts.push(c); else selectedCourts.splice(i, 1);
+      selectedCourts.sort((a, b) => a - b);
+      saveCourts();
+      renderPicker();
+    }
+
+    function courtListLabel(list){
+      if (!list.length) return '';
+      if (list.length === 1) return String(list[0]);
+      return list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1];
+    }
+
+    function updatePickerNote(){
+      const n = selectedCourts.length;
+      pickerNote.classList.toggle('warn', n === 0);
+      pickerNote.textContent = n
+        ? n + ' court' + (n > 1 ? 's' : '') + ' selected, room for ' + (n * PER_COURT) + ' players.'
+        : 'Pick at least one court.';
+    }
 
     function courtsNeeded(count){
-      const needed = Math.ceil(count / (CAPACITY * SIDES.length)); // 4 players per full court
-      return Math.min(ALL_COURTS.length, Math.max(1, needed));
+      const needed = Math.ceil(count / PER_COURT); // 4 players per full court
+      return Math.min(selectedCourts.length, Math.max(1, needed));
     }
 
     function setupCourts(count){
       clearTimeout(revertTimer);
       const n = courtsNeeded(count);
-      COURTS = ALL_COURTS.slice(0, n);
+      // Lowest-numbered picked courts first, so a short night fills from one
+      // end of the pool rather than an arbitrary order.
+      COURTS = selectedCourts.slice(0, n);
       slots = {};
       COURTS.forEach(c => SIDES.forEach(s => slots[c + s] = 0));
 
-      const sorted = COURTS.slice().sort((a, b) => b - a);
-      const label = sorted.length > 1
-        ? sorted.slice(0, -1).join(', ') + ' and ' + sorted[sorted.length - 1]
-        : String(sorted[0]);
-      headerSub.textContent = `Tap for a random spot. Court${COURTS.length > 1 ? 's' : ''} ${label}.`;
+      const label = courtListLabel(COURTS);
+      const spots = COURTS.length * PER_COURT;
+      const over = count - spots;
+      headerSub.textContent =
+        `Tap for a random spot. Court${COURTS.length > 1 ? 's' : ''} ${label}.` +
+        (over > 0 ? ` ${spots} spots for ${count} players, so ${over} will be waiting.` : '');
 
       resultValue.textContent = 'TAP';
       resultSub.textContent = 'Tap this card to get your court';
@@ -453,9 +547,15 @@
       playArea.classList.add('hidden');
       setupCard.classList.remove('hidden');
       headerSub.textContent = 'Tap for a random spot';
+      renderPicker();
     }
 
     startBtn.addEventListener('click', () => {
+      if (!selectedCourts.length){
+        setupNote.textContent = 'Pick at least one court before you start.';
+        setupNote.style.color = '#F0B4A0';
+        return;
+      }
       const raw = parseInt(playerCountInput.value, 10);
       if(!raw || raw < 1){
         setupNote.textContent = 'Enter how many players are here today.';
@@ -463,8 +563,11 @@
         return;
       }
       setupNote.style.color = '';
+      setupNote.textContent = 'Up to 4 players per court, two a side.';
       setupCourts(raw);
     });
+
+    renderPicker();
 
     playerCountInput.addEventListener('keydown', (e) => {
       if(e.key === 'Enter') startBtn.click();
