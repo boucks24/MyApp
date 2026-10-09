@@ -27,7 +27,51 @@ landmarks where alpha is how much of the *previous smoothed* frame to keep, so 0
 is raw and 0.85 heavily damped; it rebuilds `smoothedFrames` from `frames` on
 every slider move, so the slider is non-destructive.
 
-The rig is a **cylinder per bone plus a sphere per joint**, not the prototype's
+The body is a **skinned humanoid** (`mannequin.glb`, the Mixamo X Bot shipped
+with the three.js examples, vendored at 2.9MB). `loadMannequin()` replaces its
+materials with one white standard material and `updateMannequin()` retargets
+MediaPipe's landmarks onto the skeleton each frame. `BONE_AIM` maps a model bone
+to a landmark pair, `CHILD_OF` names each bone's child, and `aimBone()` rotates
+a bone so the direction to that child lands on the landmark direction. It works
+from the bone's *current* child direction rather than an assumed rest axis, so it
+does not care which way the rig's bones point. Chains are walked parents first,
+because aiming a bone moves its children. The hips take a basis built from the
+hip line and the hip-to-shoulder line. Only rotations are driven, never
+positions or lengths: MediaPipe world landmarks are already hip-relative, so the
+figure performs in place with the model's own proportions, and noisy landmarks
+cannot stretch a limb.
+
+`boneKey()` strips non-alphanumerics from bone names. The file stores
+`mixamorig:Hips` but GLTFLoader sanitises node names to `mixamorigHips`, so a
+literal lookup silently matched nothing and left the model in its T-pose.
+
+Two sizing bugs both came from `Box3.setFromObject`, which **ignores skinning and
+returns bind-pose bounds**. It reported this model as 0.688 tall, so scaling to
+1.8 made a 4.8-unit giant standing two thirds of a metre above the floor; and
+used for camera framing it returned a box whose top was below the hips. Both are
+now measured from bone world positions instead: scale from the rest skeleton
+against `SKELETON_HEIGHT`, and framing from `measureMannequin()`, which solves
+every sampled frame and records where the bones actually go, so the fit covers
+the whole take.
+
+Lighting is a dark studio with a white key and two lime rim lights behind, which
+is what lifts the figure off the black background. **Light layers cannot scope a
+light to particular objects**: three.js only collects a light if it shares a
+layer with the *camera*, so putting the rims on their own layer removed them
+entirely rather than restricting them to the body. The court is kept out of
+their way by being unlit (`MeshBasicMaterial`) instead. Court lines and the net
+are canvas textures rather than geometry. The court is dark grey, not black,
+because a black contact shadow is invisible on a black floor.
+
+The contact shadow is a radial-gradient plane under the feet, tracked from the
+**toe** bones: the ankle bone sits a quarter of a metre above the ground even
+when the foot is planted, so measuring lift from it meant a standing figure
+never got a full-strength shadow. It fades and shrinks as the feet leave the
+clip's lowest point, so a jump does not drag a hard shadow with it.
+
+The capsule rig below is still built, and is what you get if the model fails to
+load; the fallback is exercised by pointing `MANNEQUIN_URL` at a missing file.
+It is a **cylinder per bone plus a sphere per joint**, not the prototype's
 one scaled capsule per bone: scaling a capsule along its length stretches its
 hemispherical caps too, so bone ends ballooned in proportion to limb length.
 Spheres at `JOINTS` (derived from `BONES`) keep a constant radius and give the

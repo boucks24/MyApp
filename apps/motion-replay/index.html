@@ -289,6 +289,18 @@
   </div>
 </div>
 
+<!-- GLTFLoader imports the bare specifier "three"; the map makes that resolve
+     to the same URL the app imports, so there is a single three instance.
+     Two copies would break every instanceof inside the loader. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/": "https://cdn.jsdelivr.net/npm/three@0.160.0/"
+  }
+}
+</script>
+
 <script type="module">
 /* ---------------- dependencies ----------------
    three and MediaPipe are imported dynamically rather than at the top of the
@@ -297,6 +309,8 @@
    when Reconstruct is pressed means the UI always renders and a network
    failure becomes a message instead of a dead page. */
 const THREE_URL = "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+const GLTF_URL = "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
+const MANNEQUIN_URL = "mannequin.glb";
 const VISION_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
 const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL_URLS = {
@@ -421,6 +435,44 @@ const BONES = [
 // The neck is not a landmark pair: it runs from the midpoint of the shoulders
 // to the head, so it is built separately in updateRig().
 const NECK = 'neck';
+
+/* ---------------- mannequin retargeting ----------------
+   The capsule rig is still built and still used when the model cannot load,
+   but the default body is a skinned humanoid driven by the same landmarks.
+   Each entry aims a model bone along the direction of a landmark pair. The
+   chain is walked parents first, because aiming a bone moves its children. */
+const BONE_AIM = [
+  ['mixamorig:Spine',        'leftHip',       'leftShoulder',  'torso'],
+  ['mixamorig:LeftArm',      'leftShoulder',  'leftElbow'],
+  ['mixamorig:LeftForeArm',  'leftElbow',     'leftWrist'],
+  ['mixamorig:RightArm',     'rightShoulder', 'rightElbow'],
+  ['mixamorig:RightForeArm', 'rightElbow',    'rightWrist'],
+  ['mixamorig:LeftUpLeg',    'leftHip',       'leftKnee'],
+  ['mixamorig:LeftLeg',      'leftKnee',      'leftAnkle'],
+  ['mixamorig:LeftFoot',     'leftAnkle',     'leftFoot'],
+  ['mixamorig:RightUpLeg',   'rightHip',      'rightKnee'],
+  ['mixamorig:RightLeg',     'rightKnee',     'rightAnkle'],
+  ['mixamorig:RightFoot',    'rightAnkle',    'rightFoot']
+];
+/* GLTFLoader sanitises node names, so the file's "mixamorig:Hips" arrives as
+   "mixamorigHips". Keying on a stripped form means the maps above stay
+   readable and the lookup works whichever way the exporter wrote them. */
+function boneKey(n){ return String(n).replace(/[^A-Za-z0-9]/g, ''); }
+
+const CHILD_OF = {
+  'mixamorig:Spine':'mixamorig:Spine1',
+  'mixamorig:LeftArm':'mixamorig:LeftForeArm',
+  'mixamorig:LeftForeArm':'mixamorig:LeftHand',
+  'mixamorig:RightArm':'mixamorig:RightForeArm',
+  'mixamorig:RightForeArm':'mixamorig:RightHand',
+  'mixamorig:LeftUpLeg':'mixamorig:LeftLeg',
+  'mixamorig:LeftLeg':'mixamorig:LeftFoot',
+  'mixamorig:LeftFoot':'mixamorig:LeftToeBase',
+  'mixamorig:RightUpLeg':'mixamorig:RightLeg',
+  'mixamorig:RightLeg':'mixamorig:RightFoot',
+  'mixamorig:RightFoot':'mixamorig:RightToeBase',
+  'mixamorig:Neck':'mixamorig:Head'
+};
 // Every joint the bones touch, so each gets a sphere and the limbs read as
 // one continuous body rather than a pile of disconnected sticks.
 const JOINTS = Array.from(new Set(BONES.flat()));
@@ -521,15 +573,29 @@ async function runPipeline(file){
   await new Promise(res => origVideo.addEventListener('loadedmetadata', res, { once:true }));
 
   setupScene();
+
+  if (!modelReady){
+    progText.textContent = 'Loading mannequin…';
+    try {
+      await loadMannequin();
+      if (capsuleGroup) capsuleGroup.visible = false; // the skinned body takes over
+    } catch (e){
+      // Not fatal: the capsule rig is a complete body on its own.
+      console.warn('Mannequin unavailable, falling back to the capsule rig', e);
+      mannequinNote = ' The mannequin could not be loaded, so this is the capsule rig.';
+    }
+  }
+
   applySmoothing(parseFloat(smoothSlider.value));
   measureRig();
+  measureMannequin();
 
   scrubber.max = String(frameCount - 1);
   scrubber.value = '0';
   frameInfo.textContent = `1 / ${frameCount}`;
 
   detectNote.textContent = `Pose detected on ${(detectedRatio*100).toFixed(0)}% of sampled frames` +
-    (detectedRatio < 1 ? '. Frames without a detection hold the last confident pose.' : '.');
+    (detectedRatio < 1 ? '. Frames without a detection hold the last confident pose.' : '.') + mannequinNote;
 
   progFill.style.width = '100%';
   setTimeout(() => progWrap.classList.remove('show'), 400);
@@ -584,13 +650,26 @@ smoothSlider.addEventListener('input', () => {
 /* ---------------- three.js rig ---------------- */
 let renderer, scene, camera;
 let boneMeshes = {}, jointMeshes = {}, headMesh, floorMesh;
+let netMesh = null;
+let shadowMesh = null;
+let capsuleGroup = null;      // the primitive rig, kept as the fallback body
+let mannequin = null;         // the skinned humanoid, once loaded
+let bones = {};               // mixamorig name -> Bone
+let modelReady = false;
+let mannequinNote = '';
+let manBounds = null;   // {minY,maxY,halfX,maxZ} over every pose in the clip
 const BONE_RADIUS = 0.042;
 const JOINT_RADIUS = 0.055;
 const HEAD_RADIUS = 0.13;
+// Ankle-bone to head-bone on a ~1.8m figure; the mesh extends a little past both.
+const SKELETON_HEIGHT = 1.58;
 
 // Scratch objects: updateRig runs per frame over every bone, so allocating
 // vectors inside the loop would churn the GC during playback and export.
 let _a, _b, _mid, _dir, _up, _quat, _shoulderMid, _headPos;
+let _bA, _bB, _bDir, _bq, _bqWorld, _bqParent;
+let _mAcross, _mUp, _mFwd, _mHip, _mSho, _mDir, _mBasis;
+let _sA, _sB;
 
 function setupScene(){
   if (renderer) return; // a second video reuses the same scene
@@ -598,51 +677,77 @@ function setupScene(){
   _a = new THREE.Vector3(); _b = new THREE.Vector3(); _mid = new THREE.Vector3();
   _dir = new THREE.Vector3(); _up = new THREE.Vector3(0,1,0); _quat = new THREE.Quaternion();
   _shoulderMid = new THREE.Vector3(); _headPos = new THREE.Vector3();
+  _bA = new THREE.Vector3(); _bB = new THREE.Vector3(); _bDir = new THREE.Vector3();
+  _bq = new THREE.Quaternion(); _bqWorld = new THREE.Quaternion(); _bqParent = new THREE.Quaternion();
+  _mAcross = new THREE.Vector3(); _mUp = new THREE.Vector3(); _mFwd = new THREE.Vector3();
+  _mHip = new THREE.Vector3(); _mSho = new THREE.Vector3(); _mDir = new THREE.Vector3();
+  _mBasis = new THREE.Matrix4();
+  _sA = new THREE.Vector3(); _sB = new THREE.Vector3();
 
   renderer = new THREE.WebGLRenderer({ canvas: renderCanvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0A0A0C);
+  scene.background = new THREE.Color(0x050507);
 
   camera = new THREE.PerspectiveCamera(40, 1, 0.05, 20);
   camera.position.set(0, 0.2, 2.4);
   camera.lookAt(0, 0, 0);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x222222, 1.2));
-  const dir = new THREE.DirectionalLight(0xffffff, 1.4);
-  dir.position.set(1, 2, 2);
-  scene.add(dir);
+  /* Lighting follows the reference: a dark studio with a soft frontal key and
+     a hard lime rim from behind, which is what lifts the figure off the black
+     background and gives it the edge glow. */
+  scene.add(new THREE.AmbientLight(0xffffff, 0.16));
 
-  floorMesh = new THREE.Mesh(
-    new THREE.CircleGeometry(1.6, 48),
-    new THREE.MeshStandardMaterial({ color: 0x1B1D22, roughness: 1 })
-  );
-  floorMesh.rotation.x = -Math.PI / 2;
-  floorMesh.position.y = -1.0;
-  scene.add(floorMesh);
+  const key = new THREE.DirectionalLight(0xffffff, 1.9);
+  key.position.set(1.2, 2.2, 2.4);
+  scene.add(key);
+
+  const fill = new THREE.DirectionalLight(0x9FB4D0, 0.40);
+  fill.position.set(-2.2, 0.6, 1.4);
+  scene.add(fill);
+
+  /* Lime rims, behind and to each side. These are what separate the figure
+     from the black background.
+
+     Note: light layers cannot scope a light to particular objects. three.js
+     only collects a light if it shares a layer with the CAMERA, so putting the
+     rims on their own layer removed them from the scene entirely rather than
+     restricting them to the body. The court is kept out of their way by being
+     unlit (MeshBasicMaterial) instead. */
+  const rim = new THREE.DirectionalLight(0xDDE86A, 3.6);
+  rim.position.set(-1.7, 2.4, -2.8);
+  scene.add(rim);
+
+  const rim2 = new THREE.DirectionalLight(0xDDE86A, 2.0);
+  rim2.position.set(1.9, 1.2, -2.4);
+  scene.add(rim2);
+
+  buildCourt();
 
   /* A cylinder shaft per bone with a sphere at every joint, rather than one
      scaled capsule per bone. Scaling a capsule along its length stretches its
      hemispherical caps too, so bones came out with lozenge-shaped ends that
      grew with the limb; spheres at the joints keep a constant radius and read
      as a proper capsule rig. */
+  capsuleGroup = new THREE.Group();
+  scene.add(capsuleGroup);
   const limbMat = new THREE.MeshStandardMaterial({ color: 0xC1442B, roughness: 0.45, metalness: 0.1 });
   for (const [a, b] of BONES){
     const geo = new THREE.CylinderGeometry(BONE_RADIUS, BONE_RADIUS, 1, 12, 1, true);
     const mesh = new THREE.Mesh(geo, limbMat);
-    scene.add(mesh);
+    capsuleGroup.add(mesh);
     boneMeshes[a + '_' + b] = mesh;
   }
   // Neck: same cylinder treatment as a bone, driven from the shoulder midpoint.
   boneMeshes[NECK] = new THREE.Mesh(
     new THREE.CylinderGeometry(BONE_RADIUS, BONE_RADIUS, 1, 12, 1, true), limbMat);
-  scene.add(boneMeshes[NECK]);
+  capsuleGroup.add(boneMeshes[NECK]);
 
   const jointGeo = new THREE.SphereGeometry(JOINT_RADIUS, 16, 12);
   for (const j of JOINTS){
     const mesh = new THREE.Mesh(jointGeo, limbMat);
-    scene.add(mesh);
+    capsuleGroup.add(mesh);
     jointMeshes[j] = mesh;
   }
 
@@ -650,7 +755,7 @@ function setupScene(){
     new THREE.SphereGeometry(HEAD_RADIUS, 20, 16),
     new THREE.MeshStandardMaterial({ color: 0xECE8E1, roughness: 0.5 })
   );
-  scene.add(headMesh);
+  capsuleGroup.add(headMesh);
 
   window.addEventListener('resize', resizeRenderer);
 }
@@ -696,7 +801,34 @@ function measureRig(){
 }
 
 function frameCamera(){
-  if (!camera || !rigPoints.length) return;
+  if (!camera) return;
+  /* With the mannequin in play the landmark cloud is the wrong shape to frame
+     against: the model has its own proportions and only borrows the angles.
+     Box3.setFromObject is no use either, because it ignores skinning and
+     returns bind-pose bounds (it reported a box whose top sat below the hips).
+     measureMannequin() walks the clip and records where the bones actually go,
+     so the fit covers every pose in the take. */
+  if (modelReady && manBounds){
+    const halfH = Math.max((manBounds.maxY - manBounds.minY) / 2, 0.6) * 0.92;
+    const midY = (manBounds.maxY + manBounds.minY) / 2;
+    const halfW = Math.max(manBounds.halfX, 0.45);
+    const vFov = camera.fov * Math.PI / 180;
+    const tanV = Math.tan(vFov / 2), tanH = tanV * camera.aspect;
+    const dist = Math.max(halfH / tanV, halfW / tanH) * 1.02 + manBounds.maxZ;
+    /* Slightly above, aimed slightly below centre. Dead level puts the floor's
+       horizon at eye height, so the court only appears far behind the figure
+       and it looks like it is floating. */
+    camera.position.set(0, midY + halfH * 0.26, dist);
+    camera.lookAt(0, midY - halfH * 0.12, 0);
+    camera.near = 0.05; camera.far = dist * 6;
+    camera.updateProjectionMatrix();
+    const ground = manBounds.minY;
+    if (floorMesh) floorMesh.position.y = ground;
+    if (netMesh) netMesh.position.y = ground + 0.475;
+    if (shadowMesh) shadowMesh.position.y = ground + 0.005;
+    return;
+  }
+  if (!rigPoints.length) return;
   const pad = Math.max(HEAD_RADIUS, JOINT_RADIUS);
   const tanV = Math.tan((camera.fov * Math.PI / 180) / 2);
   const tanH = tanV * camera.aspect;
@@ -714,6 +846,226 @@ function frameCamera(){
   camera.far = camZ * 4;
   camera.updateProjectionMatrix();
   if (floorMesh) floorMesh.position.y = rigMinY;
+  if (netMesh) netMesh.position.y = rigMinY + 0.475;
+}
+
+/* The court. Lines are painted into a canvas texture rather than built from
+   geometry: one texture beats a few dozen thin boxes, and it stays crisp at
+   the shallow angle the floor is seen from. */
+function buildCourt(){
+  const S = 1024;
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.fillStyle = '#23262B'; g.fillRect(0, 0, S, S);
+  g.strokeStyle = 'rgba(236,232,225,0.85)';
+  g.lineWidth = 5;
+  const m = 90;
+  g.strokeRect(m, m, S - 2*m, S - 2*m);              // doubles tramlines
+  const sm = m + 96;
+  g.beginPath(); g.moveTo(sm, m); g.lineTo(sm, S - m);
+  g.moveTo(S - sm, m); g.lineTo(S - sm, S - m); g.stroke();   // singles
+  const sv = S * 0.27;
+  g.beginPath();
+  g.moveTo(sm, sv); g.lineTo(S - sm, sv);
+  g.moveTo(sm, S - sv); g.lineTo(S - sm, S - sv);
+  g.moveTo(S/2, sv); g.lineTo(S/2, S - sv);          // service + centre line
+  g.stroke();
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+
+  floorMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(12, 12),
+    // Unlit: the court is a flat dark surface with lines, and this keeps the
+    // lime rims off it entirely.
+    new THREE.MeshBasicMaterial({ map: tex })
+  );
+  floorMesh.rotation.x = -Math.PI / 2;
+  floorMesh.position.y = -1.0;
+  scene.add(floorMesh);
+
+  /* Contact shadow. Without it the figure reads as floating no matter how the
+     court is lit, and a real shadow map is a lot of machinery for one blob. */
+  const sc = document.createElement('canvas'); sc.width = sc.height = 128;
+  const sg = sc.getContext('2d');
+  const grd = sg.createRadialGradient(64, 64, 2, 64, 64, 62);
+  grd.addColorStop(0,   'rgba(0,0,0,0.95)');
+  grd.addColorStop(0.40,'rgba(0,0,0,0.55)');
+  grd.addColorStop(1,   'rgba(0,0,0,0)');
+  sg.fillStyle = grd; sg.fillRect(0, 0, 128, 128);
+  const stex = new THREE.CanvasTexture(sc);
+  shadowMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.25, 0.95),
+    new THREE.MeshBasicMaterial({ map: stex, transparent: true, depthWrite: false })
+  );
+  shadowMesh.rotation.x = -Math.PI / 2;
+  shadowMesh.position.set(0, -0.995, 0);
+  scene.add(shadowMesh);
+
+  // Net behind the figure, so the scene reads as depth rather than a backdrop.
+  const nc = document.createElement('canvas'); nc.width = 256; nc.height = 64;
+  const ng = nc.getContext('2d');
+  ng.clearRect(0, 0, 256, 64);
+  ng.strokeStyle = 'rgba(205,210,220,0.45)'; ng.lineWidth = 1;
+  for (let x = 0; x <= 256; x += 6){ ng.beginPath(); ng.moveTo(x, 10); ng.lineTo(x, 64); ng.stroke(); }
+  for (let y = 10; y <= 64; y += 6){ ng.beginPath(); ng.moveTo(0, y); ng.lineTo(256, y); ng.stroke(); }
+  ng.fillStyle = '#ECE8E1'; ng.fillRect(0, 0, 256, 9);
+  const ntex = new THREE.CanvasTexture(nc);
+  ntex.colorSpace = THREE.SRGBColorSpace;
+  ntex.wrapS = THREE.RepeatWrapping; ntex.repeat.set(7, 1);
+
+  netMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(12, 0.95),
+    new THREE.MeshBasicMaterial({ map: ntex, transparent: true, side: THREE.DoubleSide })
+  );
+  netMesh.position.set(0, -1.0 + 0.475, -4.2);
+  scene.add(netMesh);
+}
+
+/* The skinned body. Loaded after the scene exists so a failure just leaves the
+   capsule rig on screen rather than stopping the reconstruction. */
+async function loadMannequin(){
+  const { GLTFLoader } = await import(GLTF_URL);
+  const gltf = await new GLTFLoader().loadAsync(MANNEQUIN_URL);
+  const root = gltf.scene;
+
+  /* One white material for every surface. The model ships with its own
+     textures; the reference look is a clean studio mannequin, so they are
+     replaced rather than tinted. */
+  const skin = new THREE.MeshStandardMaterial({
+    color: 0xFBFAF7, roughness: 0.28, metalness: 0.02
+  });
+  root.traverse(o => {
+    if (o.isMesh || o.isSkinnedMesh){
+      o.material = skin;
+      o.castShadow = true;
+      o.frustumCulled = false; // bones are driven far from the rest pose
+    }
+    if (o.isBone) bones[boneKey(o.name)] = o;
+  });
+
+  /* Normalise height, then drop the model so its HIPS sit at the origin.
+     MediaPipe world landmarks are hip-relative, so this puts both bodies in
+     the same space and lets one camera fit serve either.
+
+     Measured from the SKELETON, not Box3.setFromObject: that ignores skinning
+     and reported this model as 0.688 tall, which scaled it by 2.6 and left a
+     4.8-unit giant with the ground two thirds of a metre under its feet. */
+  root.updateMatrixWorld(true);
+  const probe = new THREE.Vector3();
+  let bMin = Infinity, bMax = -Infinity;
+  for (const k in bones){
+    probe.setFromMatrixPosition(bones[k].matrixWorld);
+    if (probe.y < bMin) bMin = probe.y;
+    if (probe.y > bMax) bMax = probe.y;
+  }
+  const skelH = (isFinite(bMin) && bMax > bMin) ? (bMax - bMin) : 1.0;
+  root.scale.setScalar(SKELETON_HEIGHT / skelH);
+  root.updateMatrixWorld(true);
+  const hipBone = bones[boneKey('mixamorig:Hips')];
+  const hipY = hipBone ? probe.setFromMatrixPosition(hipBone.matrixWorld).y : 0;
+  root.position.set(0, -hipY, 0);
+  root.updateMatrixWorld(true);
+
+  scene.add(root);
+  mannequin = root;
+  // Cache the rest pose so each frame solves from a known state.
+  mannequin.updateMatrixWorld(true);
+  modelReady = true;
+}
+
+/* Rotate `bone` so the direction to its child lands on `targetDir`.
+   Working from the bone's *current* child direction rather than an assumed
+   rest axis means this does not care which way the rig's bones point. */
+function aimBone(name, targetDir){
+  const bone = bones[boneKey(name)], childName = CHILD_OF[name];
+  const child = childName ? bones[boneKey(childName)] : null;
+  if (!bone || !child) return;
+  bone.updateWorldMatrix(true, false);
+  child.updateWorldMatrix(true, false);
+  _bA.setFromMatrixPosition(bone.matrixWorld);
+  _bB.setFromMatrixPosition(child.matrixWorld);
+  _bDir.copy(_bB).sub(_bA);
+  if (_bDir.lengthSq() < 1e-10) return;
+  _bDir.normalize();
+  _bq.setFromUnitVectors(_bDir, targetDir);        // world-space correction
+  bone.getWorldQuaternion(_bqWorld);
+  _bqWorld.premultiply(_bq);                        // new world orientation
+  bone.parent.getWorldQuaternion(_bqParent);
+  bone.quaternion.copy(_bqParent.invert().multiply(_bqWorld));
+  bone.updateWorldMatrix(false, true);
+}
+
+function dirBetween(points, aKey, bKey, out){
+  const pa = points[IDX[aKey]], pb = points[IDX[bKey]];
+  if (!pa || !pb) return null;
+  out.set(-(pb.x - pa.x), -(pb.y - pa.y), -(pb.z - pa.z));
+  return out.lengthSq() > 1e-10 ? out.normalize() : null;
+}
+
+function updateMannequin(points){
+  if (!modelReady || !points) return;
+  const hips = bones[boneKey('mixamorig:Hips')];
+  if (!hips) return;
+
+  // Root orientation from the body's own basis: across the hips, up the spine.
+  const across = dirBetween(points, 'rightHip', 'leftHip', _mAcross);
+  const lh = points[IDX.leftHip], rh = points[IDX.rightHip];
+  const ls = points[IDX.leftShoulder], rs = points[IDX.rightShoulder];
+  if (across && lh && rh && ls && rs){
+    _mHip.set(-(lh.x + rh.x) / 2, -(lh.y + rh.y) / 2, -(lh.z + rh.z) / 2);
+    _mSho.set(-(ls.x + rs.x) / 2, -(ls.y + rs.y) / 2, -(ls.z + rs.z) / 2);
+    _mUp.copy(_mSho).sub(_mHip);
+    if (_mUp.lengthSq() > 1e-10){
+      _mUp.normalize();
+      _mFwd.crossVectors(_mAcross, _mUp).normalize();
+      _mAcross.crossVectors(_mUp, _mFwd).normalize();  // re-orthogonalise
+      _mBasis.makeBasis(_mAcross, _mUp, _mFwd);
+      hips.quaternion.setFromRotationMatrix(_mBasis);
+      hips.updateWorldMatrix(false, true);
+    }
+  }
+
+  for (const [boneName, aKey, bKey] of BONE_AIM){
+    const d = dirBetween(points, aKey, bKey, _mDir);
+    if (d) aimBone(boneName, d);
+  }
+  // Head follows the shoulders-to-nose line.
+  const nose = points[IDX.nose];
+  if (nose && ls && rs){
+    _mSho.set(-(ls.x + rs.x) / 2, -(ls.y + rs.y) / 2, -(ls.z + rs.z) / 2);
+    _mDir.set(-nose.x, -nose.y, -nose.z).sub(_mSho);
+    if (_mDir.lengthSq() > 1e-10) aimBone('mixamorig:Neck', _mDir.normalize());
+  }
+}
+
+/* Solve every frame once and record where the bones land, so the camera fit
+   covers the whole take rather than whichever pose happens to be showing.
+   Bone world positions are padded for the mesh wrapped around them. */
+function measureMannequin(){
+  if (!modelReady || !mannequin) return;
+  const names = Object.keys(bones);
+  if (!names.length) return;
+  let minY = Infinity, maxY = -Infinity, halfX = 0, maxZ = 0;
+  const v = new THREE.Vector3();
+  const step = Math.max(1, Math.ceil(smoothedFrames.length / 120));
+  for (let i = 0; i < smoothedFrames.length; i += step){
+    const pts = smoothedFrames[i];
+    if (!pts) continue;
+    updateMannequin(pts);
+    mannequin.updateMatrixWorld(true);
+    for (const n of names){
+      v.setFromMatrixPosition(bones[n].matrixWorld);
+      if (v.y < minY) minY = v.y;
+      if (v.y > maxY) maxY = v.y;
+      const ax = Math.abs(v.x); if (ax > halfX) halfX = ax;
+      if (v.z > maxZ) maxZ = v.z;
+    }
+  }
+  if (!isFinite(minY)) return;
+  const pad = 0.10;   // the mesh is thicker than the bone line through it
+  manBounds = { minY: minY - pad, maxY: maxY + pad, halfX: halfX + pad, maxZ: maxZ + pad };
 }
 
 function resizeRenderer(){
@@ -784,6 +1136,28 @@ function updateRig(points){
   }
 }
 
+/* Slide the blob to sit under whichever foot is lower, and fade it as the
+   feet leave the ground, so a jump does not drag a hard shadow with it. */
+function updateContactShadow(){
+  if (!shadowMesh || !modelReady) return;
+  /* Toes, not ankles: the ankle bone sits a quarter of a metre above the
+     ground even when the foot is planted, so measuring lift from it meant a
+     standing figure never got a full-strength shadow. */
+  const lf = bones[boneKey('mixamorig:LeftToeBase')] || bones[boneKey('mixamorig:LeftFoot')];
+  const rf = bones[boneKey('mixamorig:RightToeBase')] || bones[boneKey('mixamorig:RightFoot')];
+  if (!lf || !rf) return;
+  _sA.setFromMatrixPosition(lf.matrixWorld);
+  _sB.setFromMatrixPosition(rf.matrixWorld);
+  shadowMesh.position.x = (_sA.x + _sB.x) / 2;
+  shadowMesh.position.z = (_sA.z + _sB.z) / 2;
+  // measureMannequin() padded the bounds, so the clip's lowest bone is here:
+  const lowest = manBounds ? manBounds.minY + 0.10 : -1;
+  const lift = Math.min(_sA.y, _sB.y) - lowest;
+  const t = Math.max(0, Math.min(1, 1 - lift / 0.55));
+  shadowMesh.material.opacity = 0.25 + 0.75 * t;
+  shadowMesh.scale.setScalar(0.85 + 0.35 * t);
+}
+
 function renderFrame(){
   if (renderer) renderer.render(scene, camera);
 }
@@ -804,6 +1178,8 @@ function goToFrame(i){
     origVideo.currentTime = Math.min(t, Math.max(0, origVideo.duration - 0.001));
   }
   updateRig(smoothedFrames[currentFrame]);
+  updateMannequin(smoothedFrames[currentFrame]);
+  updateContactShadow();
   renderFrame();
 }
 
