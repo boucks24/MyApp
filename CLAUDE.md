@@ -3,7 +3,7 @@
 Static single-page app shelf (e.g. GitHub Pages). No `package.json`, no build/lint/test tooling.
 
 ## Files
-- `index.html` — landing page tile grid (`.menu-grid`/`.tile`), links to `apps/<name>/`
+- `index.html` — landing page: a full-screen vertical scroll deck, one panel per app (`.panel`/`.art`), ordered by last used and wrapping around at both ends. Panels are built at parse time from the `APPS` array; each app's art is a set of plain `<i>` boxes styled by an `art-*` class, with its shape count in `SHAPES`.
 - `apps/531-bbb` — 5/3/1 lift tracker
 - `apps/court-allocator` — tennis court randomizer
 - `apps/rally-clipper` — tennis analysis: auto rally/shot detector + clip exporter, video↔.fit sync, .fit route/wellness analysis (formerly the standalone Route Mapper app, merged in), and a pose-similarity photo montage builder
@@ -11,7 +11,7 @@ Static single-page app shelf (e.g. GitHub Pages). No `package.json`, no build/li
 - `apps/scoreboard` — live/upcoming sport scores (ESPN public feeds)
 - `apps/sketchpad` — basic freehand drawing canvas
 - `apps/swatch-finder` — look up an Ohuhu Honolulu marker by code/name; shows its colour and location on the source swatch-sheet photo
-- `apps/motion-replay` — reconstruct a 3D capsule rig from the pose in a video clip (MediaPipe Pose + three.js)
+- `apps/motion-replay` — rebuild the pose in a video clip as a skinned 3D figure on a court (MediaPipe Pose + three.js); the capsule rig it started as is now only the fallback when the model will not load
 
 Each app folder has its own `apps/<name>/CLAUDE.md` with that app's implementation internals — read only the one for the app you're touching, not all of them. This file covers only repo-wide conventions.
 

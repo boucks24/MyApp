@@ -287,6 +287,42 @@
   .art-swatch i:nth-child(5){left:36%; top:53%; background:#E8C97A; box-shadow:0 0 0 3px #2F5FE0;}
   .art-swatch i:nth-child(6){left:67%; top:53%; background:#7EA86F;}
 
+  /* A pose skeleton mid-stride, built the way the app's own figure is: limbs
+     hinged at the joint they hang from. They lean with the `rotate` property
+     rather than `transform`, because the entry animation owns `transform` on
+     every shape and would overwrite a baked-in angle. The angles stay well
+     off vertical at both ends of the loop, so the figure never passes through
+     a pose where every limb lines up with the torso and reads as a blob.
+     Screen y runs down, so a positive angle swings a hanging limb to the
+     LEFT: the free arm is +42, the racket arm -52. */
+  .art-motion i{background:#E7E4DC; border-radius:99px;}
+  .art-motion i:nth-child(1){                        /* ground */
+    left:6%; right:6%; top:90%; height:2px; border-radius:0;
+    background:linear-gradient(90deg,transparent,rgba(231,228,220,.4),transparent);
+  }
+  .art-motion i:nth-child(2){                        /* contact shadow */
+    left:30%; width:40%; top:86%; height:8%; border-radius:50%;
+    background:#000; opacity:.55; filter:blur(6px);
+  }
+  .art-motion i:nth-child(3){left:40%; top:2%;  width:20%; height:20%;}   /* head */
+  .art-motion i:nth-child(4){left:42%; top:22%; width:16%; height:26%;}   /* torso */
+  .art-motion i:nth-child(5){left:40%; top:44%; width:20%; height:10%;}   /* pelvis */
+  .art-motion i:nth-child(6){                        /* free arm, swung back */
+    left:40%; top:23%; width:8%; height:30%; transform-origin:50% 7%; rotate:42deg;
+  }
+  .art-motion i:nth-child(7){                        /* racket arm, held out */
+    left:52%; top:23%; width:8%; height:30%; transform-origin:50% 7%; rotate:-52deg;
+  }
+  .art-motion i:nth-child(8){                        /* trailing leg */
+    left:40.5%; top:46%; width:9%; height:40%; transform-origin:50% 5%; rotate:16deg;
+  }
+  .art-motion i:nth-child(9){                        /* leading leg */
+    left:50.5%; top:46%; width:9%; height:40%; transform-origin:50% 5%; rotate:-18deg;
+  }
+  .art-motion i:nth-child(10){                       /* what the racket arm meets */
+    left:73%; top:37%; width:13%; height:13%; background:var(--accent);
+  }
+
   /* ---------- entry and exit ----------
      Two implementations. Browsers with scroll-driven animations scrub the
      panel against its own scroll position, so the art and copy track the
@@ -374,6 +410,9 @@
     .panel.in .art-score i:nth-child(4){animation:tick 3.1s ease-in-out infinite .4s;}
     .panel.in .art-sketch i:nth-child(3){animation:nib 4.4s ease-in-out infinite;}
     .panel.in .art-swatch i:nth-child(5){animation:found 3.8s ease-in-out infinite;}
+    .panel.in .art-motion i:nth-child(6){animation:armSwing 4.6s ease-in-out infinite;}
+    .panel.in .art-motion i:nth-child(8){animation:legTrail 4.6s ease-in-out infinite;}
+    .panel.in .art-motion i:nth-child(9){animation:legLead 4.6s ease-in-out infinite;}
   }
   /* A loaded bar sags at the ends and springs back. */
   @keyframes barFlex{
@@ -402,6 +441,11 @@
     0%,100%{transform:scale(1); opacity:1;}
     50%    {transform:scale(1.22); opacity:.75;}
   }
+  /* Half a stride, looped. The racket arm is left out of it: the ball is
+     placed where that hand is, and an arm that moved would leave it behind. */
+  @keyframes armSwing{ 0%,100%{rotate:42deg;} 50%{rotate:26deg;} }
+  @keyframes legTrail{ 0%,100%{rotate:16deg;} 50%{rotate:6deg;} }
+  @keyframes legLead{  0%,100%{rotate:-18deg;} 50%{rotate:-8deg;} }
   @keyframes found{
     0%,100%{box-shadow:0 0 0 3px #2F5FE0;}
     50%    {box-shadow:0 0 0 6px rgba(47,95,224,.45);}
@@ -580,6 +624,8 @@
      desc:'Workout planner and log.'},
     {id:'rally-clipper',   href:'apps/rally-clipper/',   name:'Tennis Analysis', art:'art-rally',  tint:'#17251F', accent:'#D7E05B',
      desc:"Auto-clip rallies from a match video, sync footage to your watch's .fit data, or explore a route and wellness file on its own."},
+    {id:'motion-replay',   href:'apps/motion-replay/',   name:'Motion Replay',   art:'art-motion', tint:'#1A1B20', accent:'#C1442B',
+     desc:'Rebuild the pose in any clip as a 3D figure on a court, then scrub it or export the render.'},
     {id:'underpaint',      href:'apps/underpaint/',      name:'Underpaint',      art:'art-paint',  tint:'#241F1A', accent:'#D69A3D',
      desc:'Mix paint colours, pull a palette from a photo, simplify to vector.'},
     {id:'scoreboard',      href:'apps/scoreboard/',      name:'Scoreboard',      art:'art-score',  tint:'#141C2C', accent:'#3DDC97',
@@ -638,7 +684,7 @@
     sec.style.setProperty('--accent', app.accent);
     sec.dataset.index = i;
 
-    var SHAPES = {'art-531':10, 'art-swatch':6, 'art-paint':3};
+    var SHAPES = {'art-531':10, 'art-motion':10, 'art-swatch':6, 'art-paint':3};
     var shots = SHAPES[app.art] || 5;
     var pips = '';
     for (var n = 0; n < shots; n++) pips += '<i></i>';
