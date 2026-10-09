@@ -382,6 +382,7 @@ processBtn.addEventListener('click', () => {
 
 function describeError(err){
   const msg = (err && err.message) ? err.message : String(err);
+  if (/^No pose found/.test(msg)) return msg;
   if (/import|fetch|network|Failed to|dynamically imported/i.test(msg)){
     return 'Could not load the pose model or 3D library. They come from a CDN, so check your connection and try again. (' + msg + ')';
   }
@@ -417,6 +418,9 @@ const BONES = [
   ['leftAnkle','leftFoot'],
   ['rightAnkle','rightFoot']
 ];
+// The neck is not a landmark pair: it runs from the midpoint of the shoulders
+// to the head, so it is built separately in updateRig().
+const NECK = 'neck';
 // Every joint the bones touch, so each gets a sphere and the limbs read as
 // one continuous body rather than a pile of disconnected sticks.
 const JOINTS = Array.from(new Set(BONES.flat()));
@@ -492,6 +496,16 @@ async function runPipeline(file){
   frameCount = total;
   detectedRatio = detected / total;
 
+  /* No detections at all means there is nothing to reconstruct. Showing the
+     viewer anyway put the user in front of an empty 3D stage with a note
+     claiming gaps were "held from the last confident detection", of which
+     there were none. Stay on the upload card and say what to try instead. */
+  if (!detected){
+    frames = []; frameCount = 0;
+    throw new Error('No pose found in any sampled frame. This works best with one person, ' +
+                    'full body in frame and reasonably well lit. Try a different clip, or the Heavy model.');
+  }
+
   // Hold the last confident pose across gaps so the rig does not vanish on a
   // missed frame.
   let lastGood = null;
@@ -508,20 +522,21 @@ async function runPipeline(file){
 
   setupScene();
   applySmoothing(parseFloat(smoothSlider.value));
+  measureRig();
 
   scrubber.max = String(frameCount - 1);
   scrubber.value = '0';
   frameInfo.textContent = `1 / ${frameCount}`;
 
   detectNote.textContent = `Pose detected on ${(detectedRatio*100).toFixed(0)}% of sampled frames` +
-    (detectedRatio < 1 ? '. Gaps are held from the last confident detection.' : '.');
+    (detectedRatio < 1 ? '. Frames without a detection hold the last confident pose.' : '.');
 
   progFill.style.width = '100%';
   setTimeout(() => progWrap.classList.remove('show'), 400);
 
   uploadCard.style.display = 'none';
   viewer.classList.add('show');
-  resizeRenderer();
+  resizeRenderer(); // also frames the camera, now that the panel has a size
   goToFrame(0);
 }
 
@@ -568,20 +583,21 @@ smoothSlider.addEventListener('input', () => {
 
 /* ---------------- three.js rig ---------------- */
 let renderer, scene, camera;
-let boneMeshes = {}, jointMeshes = {}, headMesh;
+let boneMeshes = {}, jointMeshes = {}, headMesh, floorMesh;
 const BONE_RADIUS = 0.042;
 const JOINT_RADIUS = 0.055;
+const HEAD_RADIUS = 0.13;
 
 // Scratch objects: updateRig runs per frame over every bone, so allocating
 // vectors inside the loop would churn the GC during playback and export.
-let _a, _b, _mid, _dir, _up, _quat, _shoulderMid, _headDir;
+let _a, _b, _mid, _dir, _up, _quat, _shoulderMid, _headPos;
 
 function setupScene(){
   if (renderer) return; // a second video reuses the same scene
 
   _a = new THREE.Vector3(); _b = new THREE.Vector3(); _mid = new THREE.Vector3();
   _dir = new THREE.Vector3(); _up = new THREE.Vector3(0,1,0); _quat = new THREE.Quaternion();
-  _shoulderMid = new THREE.Vector3(); _headDir = new THREE.Vector3();
+  _shoulderMid = new THREE.Vector3(); _headPos = new THREE.Vector3();
 
   renderer = new THREE.WebGLRenderer({ canvas: renderCanvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -598,13 +614,13 @@ function setupScene(){
   dir.position.set(1, 2, 2);
   scene.add(dir);
 
-  const floor = new THREE.Mesh(
+  floorMesh = new THREE.Mesh(
     new THREE.CircleGeometry(1.6, 48),
     new THREE.MeshStandardMaterial({ color: 0x1B1D22, roughness: 1 })
   );
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -1.0;
-  scene.add(floor);
+  floorMesh.rotation.x = -Math.PI / 2;
+  floorMesh.position.y = -1.0;
+  scene.add(floorMesh);
 
   /* A cylinder shaft per bone with a sphere at every joint, rather than one
      scaled capsule per bone. Scaling a capsule along its length stretches its
@@ -618,6 +634,11 @@ function setupScene(){
     scene.add(mesh);
     boneMeshes[a + '_' + b] = mesh;
   }
+  // Neck: same cylinder treatment as a bone, driven from the shoulder midpoint.
+  boneMeshes[NECK] = new THREE.Mesh(
+    new THREE.CylinderGeometry(BONE_RADIUS, BONE_RADIUS, 1, 12, 1, true), limbMat);
+  scene.add(boneMeshes[NECK]);
+
   const jointGeo = new THREE.SphereGeometry(JOINT_RADIUS, 16, 12);
   for (const j of JOINTS){
     const mesh = new THREE.Mesh(jointGeo, limbMat);
@@ -626,12 +647,73 @@ function setupScene(){
   }
 
   headMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.13, 20, 16),
+    new THREE.SphereGeometry(HEAD_RADIUS, 20, 16),
     new THREE.MeshStandardMaterial({ color: 0xECE8E1, roughness: 0.5 })
   );
   scene.add(headMesh);
 
   window.addEventListener('resize', resizeRenderer);
+}
+
+/* The camera was fixed at distance 2.4 with a 40 degree field of view, which
+   sees about 1.75 world units of height. A standing figure is roughly 1.8 from
+   heel to crown, so the head was clipped off the top of every render.
+
+   Framing has to account for depth, not just height and width: MediaPipe puts
+   the nose about 0.3 in front of the hip origin, so the head sits markedly
+   closer to the camera than the torso and projects larger. Fitting to the
+   bounding box alone still clipped it. Instead keep the point cloud and solve
+   for the camera distance that puts every point inside the frustum:
+
+     |y - cy| <= tan(vFov/2) * (camZ - z)   ->   camZ >= z + |y - cy| / tan(vFov/2)
+
+   and the same horizontally, then take the furthest requirement. */
+let rigPoints = [];   // {x,y,z} in three.js space, over the whole clip
+let rigCenterY = 0, rigMinY = -1;
+
+function measureRig(){
+  rigPoints = [];
+  // A long clip does not need every frame to establish the extremes.
+  const step = Math.max(1, Math.ceil(smoothedFrames.length / 240));
+  const keys = JOINTS.concat(['nose']);
+  let minY = Infinity, maxY = -Infinity;
+  for (let i = 0; i < smoothedFrames.length; i += step){
+    const pts = smoothedFrames[i];
+    if (!pts) continue;
+    for (const k of keys){
+      const p = pts[IDX[k]];
+      if (!p) continue;
+      const x = -p.x, y = -p.y, z = -p.z;
+      rigPoints.push({ x, y, z });
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (!rigPoints.length){ rigCenterY = 0; rigMinY = -1; return; }
+  const pad = Math.max(HEAD_RADIUS, JOINT_RADIUS);
+  rigMinY = minY - pad;
+  rigCenterY = (maxY + minY) / 2;
+}
+
+function frameCamera(){
+  if (!camera || !rigPoints.length) return;
+  const pad = Math.max(HEAD_RADIUS, JOINT_RADIUS);
+  const tanV = Math.tan((camera.fov * Math.PI / 180) / 2);
+  const tanH = tanV * camera.aspect;
+  let camZ = 0;
+  for (const p of rigPoints){
+    const needV = p.z + (Math.abs(p.y - rigCenterY) + pad) / tanV;
+    const needH = p.z + (Math.abs(p.x) + pad) / tanH;
+    if (needV > camZ) camZ = needV;
+    if (needH > camZ) camZ = needH;
+  }
+  camZ *= 1.08; // a little air so nothing touches the edge
+  camera.position.set(0, rigCenterY, camZ);
+  camera.lookAt(0, rigCenterY, 0);
+  camera.near = 0.05;
+  camera.far = camZ * 4;
+  camera.updateProjectionMatrix();
+  if (floorMesh) floorMesh.position.y = rigMinY;
 }
 
 function resizeRenderer(){
@@ -642,6 +724,7 @@ function resizeRenderer(){
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  frameCamera(); // aspect changed, so the fit has to be recomputed
   renderFrame();
 }
 
@@ -674,17 +757,30 @@ function updateRig(points){
     mesh.position.copy(toVec(_a, p));
   }
 
-  // Sit the head just beyond the nose, along the line out from the shoulders,
-  // so it does not intersect the chest.
+  /* Head and neck. The head sits ON the nose rather than beyond it: pushing it
+     a further 0.06 along the shoulders-to-nose line left a visible gap, because
+     that line points up and forward and the nose is already the topmost
+     landmark. A neck cylinder from the shoulder midpoint to the head then
+     closes the gap that remains, so the rig reads as one body. */
   const nose = points[IDX.nose];
   const ls = points[IDX.leftShoulder], rs = points[IDX.rightShoulder];
   if (nose && ls && rs){
     toVec(_a, ls); toVec(_b, rs);
     _shoulderMid.copy(_a).add(_b).multiplyScalar(0.5);
-    toVec(_a, nose);
-    _headDir.copy(_a).sub(_shoulderMid);
-    if (_headDir.lengthSq() > 1e-8) _headDir.normalize(); else _headDir.set(0, 1, 0);
-    headMesh.position.copy(_a).addScaledVector(_headDir, 0.06);
+    toVec(_headPos, nose);
+    headMesh.position.copy(_headPos);
+
+    const neck = boneMeshes[NECK];
+    if (neck){
+      _mid.copy(_shoulderMid).add(_headPos).multiplyScalar(0.5);
+      _dir.copy(_headPos).sub(_shoulderMid);
+      const nlen = Math.max(_dir.length(), 0.001);
+      _dir.normalize();
+      _quat.setFromUnitVectors(_up, _dir);
+      neck.position.copy(_mid);
+      neck.quaternion.copy(_quat);
+      neck.scale.set(1, nlen, 1);
+    }
   }
 }
 
