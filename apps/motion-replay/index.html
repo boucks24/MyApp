@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Motion Replay">
+<meta name="theme-color" content="#15161A">
+<title>Motion Replay</title>
+<meta name="description" content="Reconstruct a 3D capsule rig from the pose in any video clip, entirely in the browser.">
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#15161A;
+    --panel:#1E2024;
+    --panel-2:#252830;
+    --line:#33363B;
+    --line-hi:#43474F;
+    --chalk:#ECE8E1;
+    --muted:#8B8D93;
+    --muted-dim:#6A6D74;
+    --iron:#C1442B;
+    --good:#5FA85A;
+    --font-display:'Oswald', system-ui, -apple-system, sans-serif;
+    --font-body:'Space Grotesk', system-ui, -apple-system, sans-serif;
+    --font-mono:'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --r:10px;
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    background:#15161A;
+    background-image:radial-gradient(120% 70% at 50% 0%, #1C1E24 0%, #131419 62%);
+    background-attachment:fixed;
+    color:var(--chalk);
+    font-family:var(--font-body);
+    font-size:15px;
+    line-height:1.5;
+    min-height:100dvh;
+    padding:calc(20px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+            calc(48px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  .wrap{max-width:940px; margin:0 auto;}
+
+  .back-link{
+    display:inline-flex; align-items:center; gap:5px;
+    color:rgba(236,232,225,.78); font-size:12.5px; font-weight:600; text-decoration:none;
+    margin-bottom:20px; padding:9px 15px 9px 12px;
+    border-radius:999px; border:1px solid var(--line);
+    background:var(--panel); min-height:38px; touch-action:manipulation;
+    transition:background .18s var(--ease), color .18s var(--ease);
+  }
+  .back-link .back-arrow{font-size:16px; line-height:1;}
+  .back-link:hover{color:var(--chalk); background:var(--panel-2);}
+  .back-link:focus-visible{outline:2px solid var(--iron); outline-offset:2px;}
+
+  header{text-align:center; margin-bottom:22px;}
+  h1{
+    font-family:var(--font-display); font-weight:700;
+    font-size:clamp(30px,8vw,44px); line-height:.96; letter-spacing:-0.02em;
+    text-transform:uppercase; margin:0;
+  }
+  h1 .dot{color:var(--iron);}
+  .sub{color:var(--muted); font-size:14px; margin:9px auto 0; max-width:46ch; line-height:1.55;}
+
+  .card{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:14px; padding:18px;
+  }
+
+  /* ---------- picker ---------- */
+  .drop{
+    border:1.5px dashed var(--line); border-radius:var(--r);
+    padding:30px 16px; text-align:center; cursor:pointer;
+    background:#17181C;
+    transition:border-color .18s var(--ease), background .18s var(--ease);
+  }
+  .drop:hover{border-color:var(--line-hi);}
+  .drop.over{border-color:var(--iron); background:rgba(193,68,43,.07);}
+  .drop:focus-visible{outline:2px solid var(--iron); outline-offset:2px;}
+  .drop .big{font-family:var(--font-display); font-size:17px; font-weight:600; margin-bottom:5px; letter-spacing:.01em;}
+  .drop .small{color:var(--muted); font-size:12.5px; line-height:1.5;}
+  /* Visually hidden rather than display:none: some mobile browsers are
+     unreliable about firing 'change' on a display:none file input. */
+  .vh-file{position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;}
+
+  .row{display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-top:16px;}
+  label.field{
+    font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--muted); display:flex; flex-direction:column; gap:7px; flex:1 1 150px; min-width:140px;
+  }
+  select{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--chalk);
+    padding:11px 10px; border-radius:9px; font-size:14px; font-family:var(--font-body); font-weight:500;
+  }
+  select:focus-visible{outline:2px solid var(--iron); outline-offset:2px;}
+
+  button.primary{
+    background:var(--iron); color:#fff; border:none; border-radius:10px;
+    font-family:var(--font-display); font-weight:600; font-size:16px; letter-spacing:.02em;
+    padding:16px 18px; cursor:pointer; width:100%; touch-action:manipulation;
+    transition:background .16s var(--ease), transform .12s var(--ease);
+  }
+  button.primary:hover:not(:disabled){background:#D14E33;}
+  button.primary:disabled{background:var(--line); color:var(--muted-dim); cursor:not-allowed;}
+  button.primary:active:not(:disabled){transform:translateY(1px);}
+  button.ghost{
+    background:transparent; color:var(--chalk); border:1px solid var(--line); border-radius:10px;
+    font-size:14px; font-weight:600; padding:14px 16px; cursor:pointer; touch-action:manipulation;
+    transition:background .16s var(--ease), border-color .16s var(--ease);
+  }
+  button.ghost:hover{background:var(--panel-2); border-color:var(--line-hi);}
+  button.ghost:active{transform:translateY(1px);}
+  button:focus-visible{outline:2px solid var(--iron); outline-offset:2px;}
+
+  .progwrap{margin-top:14px; display:none;}
+  .progwrap.show{display:block;}
+  .progbar{height:6px; background:var(--panel-2); border:1px solid var(--line); border-radius:4px; overflow:hidden;}
+  .progbar > div{height:100%; width:0%; background:var(--iron); transition:width .15s linear;}
+  .progtext{font-size:12.5px; color:var(--muted); margin-top:8px; line-height:1.5;}
+  .progtext.err{color:#F0B4A0;}
+
+  /* ---------- viewer ---------- */
+  .viewer{display:none;}
+  .viewer.show{display:block;}
+  .panels{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  @media (max-width:560px){ .panels{grid-template-columns:1fr;} }
+  .panel{
+    background:#000; border:1px solid var(--line); border-radius:var(--r);
+    position:relative; aspect-ratio:9/16; overflow:hidden;
+  }
+  .panel canvas, .panel video{width:100%; height:100%; object-fit:contain; display:block;}
+  .panel .tag{
+    position:absolute; top:7px; left:7px;
+    font-size:10px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
+    background:rgba(0,0,0,.65); padding:4px 8px; border-radius:5px; color:var(--muted);
+  }
+
+  .scrub{margin-top:14px;}
+  input[type=range]{
+    width:100%; accent-color:var(--iron); height:30px;
+  }
+  input[type=range]:focus-visible{outline:2px solid var(--iron); outline-offset:3px;}
+  .transport{display:flex; gap:8px; align-items:center; margin-top:4px;}
+  .transport button{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--chalk);
+    width:46px; height:46px; border-radius:10px; font-size:15px;
+    cursor:pointer; flex:0 0 auto; touch-action:manipulation;
+    transition:background .16s var(--ease);
+  }
+  .transport button:hover{background:#2E323B;}
+  .frameinfo{
+    font-size:13px; color:var(--muted); margin-left:auto;
+    font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-weight:700;
+  }
+
+  .smoothrow{margin-top:16px;}
+  .smoothrow label{
+    font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--muted); display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .smoothrow output{
+    font-family:var(--font-mono); font-variant-numeric:tabular-nums;
+    font-size:13px; color:var(--chalk); font-weight:700; letter-spacing:0;
+  }
+
+  .exportbar{margin-top:18px; display:flex; gap:10px; flex-wrap:wrap;}
+  .exportbar button{flex:1 1 150px;}
+
+  .notes{
+    font-size:12px; color:var(--muted-dim); line-height:1.65;
+    margin-top:16px; padding-top:14px; border-top:1px solid var(--line);
+  }
+  .notes b{color:var(--muted);}
+
+  .hidden-stage{position:absolute; left:-99999px; top:-99999px; width:1px; height:1px; overflow:hidden;}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important; transition:none !important;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back-link" href="../../"><span class="back-arrow" aria-hidden="true">&lsaquo;</span>Shelf</a>
+
+  <header>
+    <h1>Motion<span class="dot">.</span>Replay</h1>
+    <p class="sub">Reconstruct a 3D capsule rig from the pose in any clip. Pose accuracy first.</p>
+  </header>
+
+  <section class="card" id="uploadCard">
+    <div class="drop" id="drop" role="button" tabindex="0" aria-label="Choose a video file">
+      <div class="big" id="dropBig">Drop a video, or tap to choose</div>
+      <div class="small" id="dropSmall">MP4, MOV or WebM. Works best with one person, full body in frame.</div>
+      <input type="file" id="fileInput" accept="video/*" class="vh-file">
+    </div>
+
+    <div class="row">
+      <label class="field" for="fpsSelect">
+        Sample rate
+        <select id="fpsSelect">
+          <option value="12">12 fps (fast)</option>
+          <option value="20">20 fps</option>
+          <option value="30" selected>30 fps (accurate)</option>
+        </select>
+      </label>
+      <label class="field" for="modelSelect">
+        Model
+        <select id="modelSelect">
+          <option value="lite">Lite (fast)</option>
+          <option value="full" selected>Full (accurate)</option>
+          <option value="heavy">Heavy (slowest, best)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="row">
+      <button class="primary" id="processBtn" disabled>Choose a video first</button>
+    </div>
+
+    <div class="progwrap" id="progWrap">
+      <div class="progbar"><div id="progFill"></div></div>
+      <div class="progtext" id="progText">Loading pose model&hellip;</div>
+    </div>
+
+    <p class="notes">
+      Everything runs in your browser and nothing is uploaded. The pipeline seeks to each sampled frame
+      individually rather than streaming, so detections are never dropped to keep up with playback.
+      Longer or higher-rate clips take longer; capped at 900 sampled frames.
+      <b>The pose model and 3D library are fetched from a CDN on first run</b>, so the reconstruction step
+      needs a network connection even though your video never leaves the device.
+    </p>
+  </section>
+
+  <section class="viewer" id="viewer">
+    <div class="card">
+      <div class="panels">
+        <div class="panel">
+          <span class="tag">Original</span>
+          <video id="origVideo" playsinline muted></video>
+        </div>
+        <div class="panel">
+          <span class="tag">Render</span>
+          <canvas id="renderCanvas"></canvas>
+        </div>
+      </div>
+
+      <div class="scrub">
+        <input type="range" id="scrubber" min="0" max="0" value="0" step="1" aria-label="Scrub frames">
+        <div class="transport">
+          <button id="playBtn" aria-label="Play">&#9654;</button>
+          <button id="stepBack" aria-label="Previous frame">&#9664;</button>
+          <button id="stepFwd" aria-label="Next frame">&#9654;</button>
+          <div class="frameinfo" id="frameInfo">0 / 0</div>
+        </div>
+      </div>
+
+      <div class="smoothrow">
+        <label for="smoothSlider">
+          <span>Smoothing</span>
+          <output id="smoothOut">0.35</output>
+        </label>
+        <input type="range" id="smoothSlider" min="0" max="0.85" step="0.01" value="0.35">
+      </div>
+
+      <div class="exportbar">
+        <button class="ghost" id="newVideoBtn">New video</button>
+        <button class="primary" id="exportBtn">Export render (.webm)</button>
+      </div>
+
+      <div class="progwrap" id="exportProgWrap">
+        <div class="progbar"><div id="exportProgFill"></div></div>
+        <div class="progtext" id="exportProgText">Encoding&hellip;</div>
+      </div>
+
+      <p class="notes" id="detectNote"></p>
+    </div>
+  </section>
+
+  <div class="hidden-stage">
+    <canvas id="sampleCanvas"></canvas>
+  </div>
+</div>
+
+<script type="module">
+/* ---------------- dependencies ----------------
+   three and MediaPipe are imported dynamically rather than at the top of the
+   module. A top-level import of an unreachable CDN kills the whole module, so
+   an offline load would leave a blank page with nothing to read. Loading them
+   when Reconstruct is pressed means the UI always renders and a network
+   failure becomes a message instead of a dead page. */
+const THREE_URL = "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+const VISION_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
+const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+const MODEL_URLS = {
+  lite:  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+  full:  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+  heavy: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task"
+};
+
+let THREE = null;
+
+/* ---------------- DOM ---------------- */
+const el = id => document.getElementById(id);
+const drop = el('drop');
+const dropBig = el('dropBig');
+const dropSmall = el('dropSmall');
+const fileInput = el('fileInput');
+const processBtn = el('processBtn');
+const fpsSelect = el('fpsSelect');
+const modelSelect = el('modelSelect');
+const progWrap = el('progWrap');
+const progFill = el('progFill');
+const progText = el('progText');
+const uploadCard = el('uploadCard');
+const viewer = el('viewer');
+const origVideo = el('origVideo');
+const renderCanvas = el('renderCanvas');
+const scrubber = el('scrubber');
+const playBtn = el('playBtn');
+const stepBack = el('stepBack');
+const stepFwd = el('stepFwd');
+const frameInfo = el('frameInfo');
+const smoothSlider = el('smoothSlider');
+const smoothOut = el('smoothOut');
+const newVideoBtn = el('newVideoBtn');
+const exportBtn = el('exportBtn');
+const exportProgWrap = el('exportProgWrap');
+const exportProgFill = el('exportProgFill');
+const exportProgText = el('exportProgText');
+const detectNote = el('detectNote');
+const sampleCanvas = el('sampleCanvas');
+const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+
+let chosenFile = null;
+let videoURL = null;
+
+/* ---------------- file picking ---------------- */
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); fileInput.click(); }
+});
+['dragenter','dragover'].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => {
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) handlePick(f);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) handlePick(fileInput.files[0]);
+});
+
+function handlePick(f){
+  chosenFile = f;
+  dropBig.textContent = f.name;
+  dropSmall.textContent = (f.size / 1024 / 1024).toFixed(1) + ' MB. Tap to choose a different file.';
+  processBtn.disabled = false;
+  processBtn.textContent = 'Reconstruct 3D rig';
+}
+
+processBtn.addEventListener('click', () => {
+  if (!chosenFile) return;
+  processBtn.disabled = true;
+  progWrap.classList.add('show');
+  progText.classList.remove('err');
+  runPipeline(chosenFile).catch(err => {
+    console.error(err);
+    progText.classList.add('err');
+    progText.textContent = describeError(err);
+    processBtn.disabled = false;
+  });
+});
+
+function describeError(err){
+  const msg = (err && err.message) ? err.message : String(err);
+  if (/import|fetch|network|Failed to|dynamically imported/i.test(msg)){
+    return 'Could not load the pose model or 3D library. They come from a CDN, so check your connection and try again. (' + msg + ')';
+  }
+  return 'Error: ' + msg;
+}
+
+/* ---------------- pose landmark layout ----------------
+   MediaPipe Pose returns 33 landmarks; the rig uses the subset below. */
+const IDX = {
+  nose:0,
+  leftShoulder:11, rightShoulder:12,
+  leftElbow:13, rightElbow:14,
+  leftWrist:15, rightWrist:16,
+  leftHip:23, rightHip:24,
+  leftKnee:25, rightKnee:26,
+  leftAnkle:27, rightAnkle:28,
+  leftFoot:31, rightFoot:32
+};
+
+const BONES = [
+  ['leftShoulder','rightShoulder'],
+  ['leftShoulder','leftHip'],
+  ['rightShoulder','rightHip'],
+  ['leftHip','rightHip'],
+  ['leftShoulder','leftElbow'],
+  ['leftElbow','leftWrist'],
+  ['rightShoulder','rightElbow'],
+  ['rightElbow','rightWrist'],
+  ['leftHip','leftKnee'],
+  ['leftKnee','leftAnkle'],
+  ['rightHip','rightKnee'],
+  ['rightKnee','rightAnkle'],
+  ['leftAnkle','leftFoot'],
+  ['rightAnkle','rightFoot']
+];
+// Every joint the bones touch, so each gets a sphere and the limbs read as
+// one continuous body rather than a pile of disconnected sticks.
+const JOINTS = Array.from(new Set(BONES.flat()));
+
+/* ---------------- pipeline state ---------------- */
+let frames = [];         // raw landmark frames: {t, world:[...]} or null
+let smoothedFrames = [];
+let frameCount = 0;
+let frameDuration = 1/30;
+let detectedRatio = 0;
+
+async function runPipeline(file){
+  progText.textContent = 'Loading 3D library…';
+  progFill.style.width = '3%';
+  if (!THREE) THREE = await import(THREE_URL);
+
+  progText.textContent = 'Loading pose model…';
+  progFill.style.width = '6%';
+  const { PoseLandmarker, FilesetResolver } = await import(VISION_URL);
+  const vision = await FilesetResolver.forVisionTasks(WASM_ROOT);
+  const landmarker = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions: { modelAssetPath: MODEL_URLS[modelSelect.value] || MODEL_URLS.full, delegate: 'GPU' },
+    runningMode: 'IMAGE',
+    numPoses: 1,
+    minPoseDetectionConfidence: 0.5,
+    minPosePresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+
+  progText.textContent = 'Reading video…';
+  progFill.style.width = '10%';
+
+  if (videoURL) URL.revokeObjectURL(videoURL);
+  videoURL = URL.createObjectURL(file);
+  const stageVideo = document.createElement('video');
+  stageVideo.src = videoURL;
+  stageVideo.muted = true;
+  stageVideo.playsInline = true;
+  await new Promise((res, rej) => {
+    stageVideo.addEventListener('loadedmetadata', res, { once:true });
+    stageVideo.addEventListener('error', () => rej(new Error('Could not read that video file')), { once:true });
+  });
+
+  const duration = stageVideo.duration;
+  if (!duration || !isFinite(duration)) throw new Error('That video has no readable duration');
+
+  const targetFps = parseInt(fpsSelect.value, 10);
+  const total = Math.max(1, Math.min(Math.floor(duration * targetFps), 900));
+  frameDuration = duration / total;
+
+  sampleCanvas.width = stageVideo.videoWidth;
+  sampleCanvas.height = stageVideo.videoHeight;
+
+  frames = new Array(total).fill(null);
+  let detected = 0;
+
+  for (let i = 0; i < total; i++){
+    const t = Math.min(duration - 0.001, i * frameDuration);
+    await seekTo(stageVideo, t);
+    sampleCtx.drawImage(stageVideo, 0, 0, sampleCanvas.width, sampleCanvas.height);
+    const result = landmarker.detect(sampleCanvas);
+    if (result.worldLandmarks && result.worldLandmarks.length){
+      frames[i] = { t, world: result.worldLandmarks[0] };
+      detected++;
+    }
+    if (i % 2 === 0 || i === total - 1){
+      progFill.style.width = (10 + Math.round((i / total) * 80)) + '%';
+      progText.textContent = `Detecting pose… frame ${i+1} of ${total}`;
+    }
+  }
+
+  landmarker.close();
+  frameCount = total;
+  detectedRatio = detected / total;
+
+  // Hold the last confident pose across gaps so the rig does not vanish on a
+  // missed frame.
+  let lastGood = null;
+  for (let i = 0; i < frameCount; i++){
+    if (frames[i]) lastGood = frames[i];
+    else if (lastGood) frames[i] = { t: i * frameDuration, world: lastGood.world, held: true };
+  }
+
+  progFill.style.width = '95%';
+  progText.textContent = 'Building 3D rig…';
+
+  origVideo.src = videoURL;
+  await new Promise(res => origVideo.addEventListener('loadedmetadata', res, { once:true }));
+
+  setupScene();
+  applySmoothing(parseFloat(smoothSlider.value));
+
+  scrubber.max = String(frameCount - 1);
+  scrubber.value = '0';
+  frameInfo.textContent = `1 / ${frameCount}`;
+
+  detectNote.textContent = `Pose detected on ${(detectedRatio*100).toFixed(0)}% of sampled frames` +
+    (detectedRatio < 1 ? '. Gaps are held from the last confident detection.' : '.');
+
+  progFill.style.width = '100%';
+  setTimeout(() => progWrap.classList.remove('show'), 400);
+
+  uploadCard.style.display = 'none';
+  viewer.classList.add('show');
+  resizeRenderer();
+  goToFrame(0);
+}
+
+function seekTo(video, t){
+  return new Promise(res => {
+    const onSeeked = () => { video.removeEventListener('seeked', onSeeked); res(); };
+    video.addEventListener('seeked', onSeeked);
+    video.currentTime = t;
+  });
+}
+
+/* ---------------- smoothing ----------------
+   Exponential moving average over the world landmarks. alpha is how much of
+   the previous smoothed frame to keep, so 0 is raw and 0.85 is heavily damped. */
+function applySmoothing(alpha){
+  smoothedFrames = new Array(frameCount);
+  let prev = null;
+  for (let i = 0; i < frameCount; i++){
+    const cur = frames[i];
+    if (!cur){ smoothedFrames[i] = prev; continue; }
+    if (!prev){
+      smoothedFrames[i] = cur.world.map(p => ({ x:p.x, y:p.y, z:p.z, visibility:p.visibility }));
+    } else {
+      smoothedFrames[i] = cur.world.map((p, idx) => {
+        const pp = prev[idx] || p;
+        return {
+          x: alpha * pp.x + (1 - alpha) * p.x,
+          y: alpha * pp.y + (1 - alpha) * p.y,
+          z: alpha * pp.z + (1 - alpha) * p.z,
+          visibility: p.visibility
+        };
+      });
+    }
+    prev = smoothedFrames[i];
+  }
+}
+
+smoothSlider.addEventListener('input', () => {
+  smoothOut.textContent = parseFloat(smoothSlider.value).toFixed(2);
+  if (!frameCount) return;
+  applySmoothing(parseFloat(smoothSlider.value));
+  goToFrame(currentFrame);
+});
+
+/* ---------------- three.js rig ---------------- */
+let renderer, scene, camera;
+let boneMeshes = {}, jointMeshes = {}, headMesh;
+const BONE_RADIUS = 0.042;
+const JOINT_RADIUS = 0.055;
+
+// Scratch objects: updateRig runs per frame over every bone, so allocating
+// vectors inside the loop would churn the GC during playback and export.
+let _a, _b, _mid, _dir, _up, _quat, _shoulderMid, _headDir;
+
+function setupScene(){
+  if (renderer) return; // a second video reuses the same scene
+
+  _a = new THREE.Vector3(); _b = new THREE.Vector3(); _mid = new THREE.Vector3();
+  _dir = new THREE.Vector3(); _up = new THREE.Vector3(0,1,0); _quat = new THREE.Quaternion();
+  _shoulderMid = new THREE.Vector3(); _headDir = new THREE.Vector3();
+
+  renderer = new THREE.WebGLRenderer({ canvas: renderCanvas, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0A0A0C);
+
+  camera = new THREE.PerspectiveCamera(40, 1, 0.05, 20);
+  camera.position.set(0, 0.2, 2.4);
+  camera.lookAt(0, 0, 0);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x222222, 1.2));
+  const dir = new THREE.DirectionalLight(0xffffff, 1.4);
+  dir.position.set(1, 2, 2);
+  scene.add(dir);
+
+  const floor = new THREE.Mesh(
+    new THREE.CircleGeometry(1.6, 48),
+    new THREE.MeshStandardMaterial({ color: 0x1B1D22, roughness: 1 })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -1.0;
+  scene.add(floor);
+
+  /* A cylinder shaft per bone with a sphere at every joint, rather than one
+     scaled capsule per bone. Scaling a capsule along its length stretches its
+     hemispherical caps too, so bones came out with lozenge-shaped ends that
+     grew with the limb; spheres at the joints keep a constant radius and read
+     as a proper capsule rig. */
+  const limbMat = new THREE.MeshStandardMaterial({ color: 0xC1442B, roughness: 0.45, metalness: 0.1 });
+  for (const [a, b] of BONES){
+    const geo = new THREE.CylinderGeometry(BONE_RADIUS, BONE_RADIUS, 1, 12, 1, true);
+    const mesh = new THREE.Mesh(geo, limbMat);
+    scene.add(mesh);
+    boneMeshes[a + '_' + b] = mesh;
+  }
+  const jointGeo = new THREE.SphereGeometry(JOINT_RADIUS, 16, 12);
+  for (const j of JOINTS){
+    const mesh = new THREE.Mesh(jointGeo, limbMat);
+    scene.add(mesh);
+    jointMeshes[j] = mesh;
+  }
+
+  headMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.13, 20, 16),
+    new THREE.MeshStandardMaterial({ color: 0xECE8E1, roughness: 0.5 })
+  );
+  scene.add(headMesh);
+
+  window.addEventListener('resize', resizeRenderer);
+}
+
+function resizeRenderer(){
+  if (!renderer) return;
+  const host = renderCanvas.parentElement;
+  const w = host.clientWidth, h = host.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderFrame();
+}
+
+/* MediaPipe world landmarks are metres with the origin near the hip centre and
+   y pointing down. Flip y for three.js, and flip x so the render faces the
+   viewer the same way round as the source video. */
+function toVec(out, p){ return out.set(-p.x, -p.y, -p.z); }
+
+function updateRig(points){
+  if (!points) return;
+
+  for (const [a, b] of BONES){
+    const pa = points[IDX[a]], pb = points[IDX[b]];
+    const mesh = boneMeshes[a + '_' + b];
+    if (!pa || !pb || !mesh) continue;
+    toVec(_a, pa); toVec(_b, pb);
+    _mid.copy(_a).add(_b).multiplyScalar(0.5);
+    _dir.copy(_b).sub(_a);
+    const len = Math.max(_dir.length(), 0.001);
+    _dir.normalize();
+    _quat.setFromUnitVectors(_up, _dir);
+    mesh.position.copy(_mid);
+    mesh.quaternion.copy(_quat);
+    mesh.scale.set(1, len, 1);
+  }
+
+  for (const j of JOINTS){
+    const p = points[IDX[j]], mesh = jointMeshes[j];
+    if (!p || !mesh) continue;
+    mesh.position.copy(toVec(_a, p));
+  }
+
+  // Sit the head just beyond the nose, along the line out from the shoulders,
+  // so it does not intersect the chest.
+  const nose = points[IDX.nose];
+  const ls = points[IDX.leftShoulder], rs = points[IDX.rightShoulder];
+  if (nose && ls && rs){
+    toVec(_a, ls); toVec(_b, rs);
+    _shoulderMid.copy(_a).add(_b).multiplyScalar(0.5);
+    toVec(_a, nose);
+    _headDir.copy(_a).sub(_shoulderMid);
+    if (_headDir.lengthSq() > 1e-8) _headDir.normalize(); else _headDir.set(0, 1, 0);
+    headMesh.position.copy(_a).addScaledVector(_headDir, 0.06);
+  }
+}
+
+function renderFrame(){
+  if (renderer) renderer.render(scene, camera);
+}
+
+/* ---------------- transport ---------------- */
+let currentFrame = 0;
+let playing = false;
+let rafId = null;
+let lastTickTime = 0;
+
+function goToFrame(i){
+  if (!frameCount) return;
+  currentFrame = Math.max(0, Math.min(frameCount - 1, i));
+  scrubber.value = String(currentFrame);
+  frameInfo.textContent = `${currentFrame + 1} / ${frameCount}`;
+  const t = currentFrame * frameDuration;
+  if (Math.abs(origVideo.currentTime - t) > frameDuration){
+    origVideo.currentTime = Math.min(t, Math.max(0, origVideo.duration - 0.001));
+  }
+  updateRig(smoothedFrames[currentFrame]);
+  renderFrame();
+}
+
+scrubber.addEventListener('input', () => { pause(); goToFrame(parseInt(scrubber.value, 10)); });
+stepBack.addEventListener('click', () => { pause(); goToFrame(currentFrame - 1); });
+stepFwd.addEventListener('click', () => { pause(); goToFrame(currentFrame + 1); });
+playBtn.addEventListener('click', () => { playing ? pause() : play(); });
+
+function play(){
+  if (!frameCount) return;
+  if (currentFrame >= frameCount - 1) goToFrame(0);
+  playing = true;
+  playBtn.innerHTML = '&#10073;&#10073;';
+  playBtn.setAttribute('aria-label', 'Pause');
+  origVideo.currentTime = Math.min(currentFrame * frameDuration, Math.max(0, origVideo.duration - 0.001));
+  origVideo.play().catch(()=>{});
+  lastTickTime = performance.now();
+  tick();
+}
+function pause(){
+  playing = false;
+  playBtn.innerHTML = '&#9654;';
+  playBtn.setAttribute('aria-label', 'Play');
+  origVideo.pause();
+  if (rafId) cancelAnimationFrame(rafId);
+}
+function tick(){
+  if (!playing) return;
+  const now = performance.now();
+  if ((now - lastTickTime) / 1000 >= frameDuration){
+    lastTickTime = now;
+    if (currentFrame >= frameCount - 1){ pause(); return; }
+    goToFrame(currentFrame + 1);
+  }
+  rafId = requestAnimationFrame(tick);
+}
+
+newVideoBtn.addEventListener('click', () => {
+  pause();
+  viewer.classList.remove('show');
+  uploadCard.style.display = '';
+  processBtn.disabled = true;
+  processBtn.textContent = 'Choose a video first';
+  dropBig.textContent = 'Drop a video, or tap to choose';
+  dropSmall.textContent = 'MP4, MOV or WebM. Works best with one person, full body in frame.';
+  fileInput.value = '';
+  chosenFile = null;
+  frames = []; smoothedFrames = []; frameCount = 0; currentFrame = 0;
+});
+
+/* ---------------- export (render canvas, MediaRecorder to webm) ---------------- */
+exportBtn.addEventListener('click', async () => {
+  if (!frameCount) return;
+  pause();
+  exportBtn.disabled = true;
+  exportProgWrap.classList.add('show');
+  exportProgText.classList.remove('err');
+  exportProgText.textContent = 'Encoding render…';
+  exportProgFill.style.width = '0%';
+
+  try {
+    if (typeof MediaRecorder === 'undefined' || !renderCanvas.captureStream){
+      throw new Error('This browser cannot record a canvas');
+    }
+    const stream = renderCanvas.captureStream(Math.round(1 / frameDuration));
+    const chunks = [];
+    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+    const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 });
+    recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    const done = new Promise(res => { recorder.onstop = res; });
+    recorder.start();
+
+    // MediaRecorder captures in real time, so the frames have to be walked at
+    // playback pace rather than as fast as they can be drawn.
+    for (let i = 0; i < frameCount; i++){
+      goToFrame(i);
+      exportProgFill.style.width = Math.round((i / frameCount) * 100) + '%';
+      exportProgText.textContent = `Encoding… frame ${i+1} of ${frameCount}`;
+      await new Promise(r => setTimeout(r, Math.max(16, frameDuration * 1000)));
+    }
+    recorder.stop();
+    await done;
+
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (chosenFile ? chosenFile.name.replace(/\.[^.]+$/, '') : 'motion-replay') + '-render.webm';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+    exportProgFill.style.width = '100%';
+    exportProgText.textContent = 'Done. Check your downloads.';
+  } catch (err){
+    console.error(err);
+    exportProgText.classList.add('err');
+    exportProgText.textContent = 'Export failed: ' + ((err && err.message) ? err.message : err);
+  } finally {
+    exportBtn.disabled = false;
+    setTimeout(() => exportProgWrap.classList.remove('show'), 2500);
+  }
+});
+</script>
+</body>
+</html>
