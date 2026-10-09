@@ -41,6 +41,29 @@ positions or lengths: MediaPipe world landmarks are already hip-relative, so the
 figure performs in place with the model's own proportions, and noisy landmarks
 cannot stretch a limb.
 
+The hips basis is the one place a sign error hides. The rig's rest pose faces
+**+Z with +Y up, which puts its left-to-right body axis on -X**, so the basis
+columns are `(-across, up, facing)` and `facing = up x across`, not
+`across x up`. Building it the other way round turns the figure a half turn
+about its own axis, and that is nearly invisible in the obvious diagnostics:
+every bone is aimed in world space *after* the hips are set, so each limb still
+lands exactly on its landmark direction and the per-bone aim error stays at
+zero. What you see instead is the chest facing the camera on a shot filmed from
+behind, and the torso mesh folding around a pelvis pointing the other way —
+which reads as a modelling or weighting problem rather than a basis one. Do not
+chase it by flipping the sign of `across` on its own: `makeBasis` then gets a
+left-handed set, `setFromRotationMatrix` returns nonsense, and the figure swings
+into profile, which looks enough like a different bug to send you the wrong way.
+`suite2.mjs` pins the invariant directly — hips +Z against `up x across`, hips
++X against `-across` — because no pixel or aim-error check catches it.
+
+`across` runs left hip to right hip, matching the body's own left-to-right.
+
+`BONE_AIM` deliberately has **no Spine entry**. The hips basis already takes
+its up axis from the hip-to-shoulder line, so aiming the spine along roughly
+that same line applies the torso rotation a second time and doubles the
+figure over.
+
 `boneKey()` strips non-alphanumerics from bone names. The file stores
 `mixamorig:Hips` but GLTFLoader sanitises node names to `mixamorigHips`, so a
 literal lookup silently matched nothing and left the model in its T-pose.
@@ -78,11 +101,18 @@ Spheres at `JOINTS` (derived from `BONES`) keep a constant radius and give the
 continuous-body look the capsule was reaching for. `toVec()` writes into scratch
 vectors (`_a`, `_b`, `_mid`, …) allocated once in `setupScene()`, since
 `updateRig()` runs over every bone every frame during playback and export.
-MediaPipe world landmarks are metres, origin near the hip centre, y down: y is
-flipped for three.js and x is flipped so the render faces the same way as the
-source.
+MediaPipe world landmarks are metres, origin near the hip centre, y down, and
+z smaller the nearer the camera. `toVec()` is therefore `(x, -y, -z)`: a half
+turn about X, determinant +1. It used to negate x as well, which is a
+**reflection**, not a rotation — that swaps the skeleton's chirality and makes
+`Quaternion.setFromRotationMatrix` return garbage for the hips.
 
-A **neck** cylinder runs from the shoulder midpoint to the head, and the head
+The neck is not aimed and the head just follows the torso. Aiming it along
+shoulders-to-nose threw the head right back on any rear view: the nose is then
+on the far side of the shoulders and barely above them, so a small landmark
+error swings the aim wildly. Less expressive, right far more often.
+
+In the capsule fallback a **neck** cylinder runs from the shoulder midpoint to the head, and the head
 sits on the nose rather than 0.06 beyond it along the shoulders-to-nose line.
 The prototype's placement left the head visibly detached, because that line
 points up and forward and the nose is already the topmost landmark.

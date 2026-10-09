@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Motion Replay">
 <meta name="theme-color" content="#15161A">
 <title>Motion Replay</title>
-<meta name="description" content="Reconstruct a 3D capsule rig from the pose in any video clip, entirely in the browser.">
+<meta name="description" content="Rebuild the pose in any video clip as a 3D figure on a court, entirely in the browser.">
 <link rel="icon" href="../../favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -192,7 +192,7 @@
 
   <header>
     <h1>Motion<span class="dot">.</span>Replay</h1>
-    <p class="sub">Reconstruct a 3D capsule rig from the pose in any clip. Pose accuracy first.</p>
+    <p class="sub">Rebuild the pose in any clip as a figure on a court. Pose accuracy first.</p>
   </header>
 
   <section class="card" id="uploadCard">
@@ -442,7 +442,9 @@ const NECK = 'neck';
    Each entry aims a model bone along the direction of a landmark pair. The
    chain is walked parents first, because aiming a bone moves its children. */
 const BONE_AIM = [
-  ['mixamorig:Spine',        'leftHip',       'leftShoulder',  'torso'],
+  /* No Spine entry on purpose. The hips basis below already orients the whole
+     torso from the hip-to-shoulder line; aiming the spine along roughly that
+     same line applied the rotation a second time and doubled the figure over. */
   ['mixamorig:LeftArm',      'leftShoulder',  'leftElbow'],
   ['mixamorig:LeftForeArm',  'leftElbow',     'leftWrist'],
   ['mixamorig:RightArm',     'rightShoulder', 'rightElbow'],
@@ -788,7 +790,7 @@ function measureRig(){
     for (const k of keys){
       const p = pts[IDX[k]];
       if (!p) continue;
-      const x = -p.x, y = -p.y, z = -p.z;
+      const x = p.x, y = -p.y, z = -p.z;
       rigPoints.push({ x, y, z });
       if (y < minY) minY = y;
       if (y > maxY) maxY = y;
@@ -1000,7 +1002,7 @@ function aimBone(name, targetDir){
 function dirBetween(points, aKey, bKey, out){
   const pa = points[IDX[aKey]], pb = points[IDX[bKey]];
   if (!pa || !pb) return null;
-  out.set(-(pb.x - pa.x), -(pb.y - pa.y), -(pb.z - pa.z));
+  out.set(pb.x - pa.x, -(pb.y - pa.y), -(pb.z - pa.z));
   return out.lengthSq() > 1e-10 ? out.normalize() : null;
 }
 
@@ -1009,18 +1011,25 @@ function updateMannequin(points){
   const hips = bones[boneKey('mixamorig:Hips')];
   if (!hips) return;
 
-  // Root orientation from the body's own basis: across the hips, up the spine.
-  const across = dirBetween(points, 'rightHip', 'leftHip', _mAcross);
+  /* Root orientation from the body's own basis: across the hips, up the spine.
+     The rig's rest pose faces +Z with +Y up, which puts its left-to-right body
+     axis on -X, so the basis columns are (-across, up, facing) and the facing
+     direction is up x across, not across x up. Getting that cross the wrong way
+     round turns the figure a half turn about its own axis: the limbs still
+     track, because they are aimed in world space afterwards, but the chest
+     faces the camera on a shot filmed from behind and the torso mesh folds
+     around a pelvis pointing the other way. */
+  const across = dirBetween(points, 'leftHip', 'rightHip', _mAcross);
   const lh = points[IDX.leftHip], rh = points[IDX.rightHip];
   const ls = points[IDX.leftShoulder], rs = points[IDX.rightShoulder];
   if (across && lh && rh && ls && rs){
-    _mHip.set(-(lh.x + rh.x) / 2, -(lh.y + rh.y) / 2, -(lh.z + rh.z) / 2);
-    _mSho.set(-(ls.x + rs.x) / 2, -(ls.y + rs.y) / 2, -(ls.z + rs.z) / 2);
+    _mHip.set((lh.x + rh.x) / 2, -(lh.y + rh.y) / 2, -(lh.z + rh.z) / 2);
+    _mSho.set((ls.x + rs.x) / 2, -(ls.y + rs.y) / 2, -(ls.z + rs.z) / 2);
     _mUp.copy(_mSho).sub(_mHip);
     if (_mUp.lengthSq() > 1e-10){
       _mUp.normalize();
-      _mFwd.crossVectors(_mAcross, _mUp).normalize();
-      _mAcross.crossVectors(_mUp, _mFwd).normalize();  // re-orthogonalise
+      _mFwd.crossVectors(_mUp, _mAcross).normalize();    // the way the body faces
+      _mAcross.crossVectors(_mUp, _mFwd).normalize();    // = -across, orthogonalised
       _mBasis.makeBasis(_mAcross, _mUp, _mFwd);
       hips.quaternion.setFromRotationMatrix(_mBasis);
       hips.updateWorldMatrix(false, true);
@@ -1031,13 +1040,11 @@ function updateMannequin(points){
     const d = dirBetween(points, aKey, bKey, _mDir);
     if (d) aimBone(boneName, d);
   }
-  // Head follows the shoulders-to-nose line.
-  const nose = points[IDX.nose];
-  if (nose && ls && rs){
-    _mSho.set(-(ls.x + rs.x) / 2, -(ls.y + rs.y) / 2, -(ls.z + rs.z) / 2);
-    _mDir.set(-nose.x, -nose.y, -nose.z).sub(_mSho);
-    if (_mDir.lengthSq() > 1e-10) aimBone('mixamorig:Neck', _mDir.normalize());
-  }
+  /* The head deliberately just follows the torso. Aiming the neck along
+     shoulders-to-nose threw the head right back on any rear view, because the
+     nose is then on the far side of the shoulders and barely above them, so a
+     small landmark error swings the aim wildly. Letting it inherit the hips
+     basis is less expressive but right far more often. */
 }
 
 /* Solve every frame once and record where the bones land, so the camera fit
@@ -1080,10 +1087,17 @@ function resizeRenderer(){
   renderFrame();
 }
 
-/* MediaPipe world landmarks are metres with the origin near the hip centre and
-   y pointing down. Flip y for three.js, and flip x so the render faces the
-   viewer the same way round as the source video. */
-function toVec(out, p){ return out.set(-p.x, -p.y, -p.z); }
+/* MediaPipe world landmarks are metres with the origin near the hip centre,
+   y pointing down and z growing away from the camera. Flipping y and z is a
+   180 degree turn about X: a proper rotation.
+
+   The prototype also flipped x, "so the render faces the viewer the same way
+   as the source". Flipping all three axes is a REFLECTION, determinant -1. A
+   symmetric stick figure survives that, but a skeleton does not: it swaps the
+   model's left and right limbs, and feeding a left-handed basis to
+   Quaternion.setFromRotationMatrix produces a garbage hip orientation, which
+   is what doubled the mannequin over. x is left alone. */
+function toVec(out, p){ return out.set(p.x, -p.y, -p.z); }
 
 function updateRig(points){
   if (!points) return;
