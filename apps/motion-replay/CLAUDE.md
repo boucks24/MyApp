@@ -41,6 +41,35 @@ positions or lengths: MediaPipe world landmarks are already hip-relative, so the
 figure performs in place with the model's own proportions, and noisy landmarks
 cannot stretch a limb.
 
+## Measuring pose accuracy
+
+`mannequin.glb` ships with its own animation clips (`walk`, `run`, `idle`,
+`sneak_pose`, …). That makes a **ground-truth harness** possible: render the
+model playing a known clip to a video, feed that video back through the whole
+pipeline, and compare each reconstructed bone direction against the direction
+the animation actually had. Without it every change here is guesswork, because
+a retargeting bug and a bad camera angle look identical in a screenshot.
+
+What that measured, on a clean full-body three-quarter walk:
+
+- **Per-bone error is about 15 degrees median, and it is mostly MediaPipe, not
+  the retargeting.** Every aimed bone lands on its landmark direction to
+  within 0.00 degrees, so the limb error *is* the landmark error. The `heavy`
+  model only buys about 1.7 degrees over `full`, so there is no easy win there.
+- **Subtracting a constant per-bone bias only takes 18.4 down to 14.6**, so
+  the limbs are noisy rather than skewed, and no fixed calibration fixes them.
+  Do not add one.
+- **The torso was the exception**: hip-to-shoulder read 16 degrees forward of
+  the real spine axis on the walk. That one is systematic and is what made
+  every figure stoop.
+- Watch for a degenerate case: on a near-static clip (`idle`, `sneak_pose`)
+  the "bias" absorbs the entire pose and the residual collapses to about 1
+  degree, which means nothing. Only moving clips say anything.
+
+So the limb fidelity ceiling is the landmarks. What is worth working on is
+everything else: where the body sits, how it deforms, and whether the parts
+nothing drives look deliberate.
+
 The hips basis is the one place a sign error hides. The rig's rest pose faces
 **+Z with +Y up, which puts its left-to-right body axis on -X**, so the basis
 columns are `(-across, up, facing)` and `facing = up x across`, not
@@ -55,14 +84,66 @@ chase it by flipping the sign of `across` on its own: `makeBasis` then gets a
 left-handed set, `setFromRotationMatrix` returns nonsense, and the figure swings
 into profile, which looks enough like a different bug to send you the wrong way.
 `suite2.mjs` pins the invariant directly — hips +Z against `up x across`, hips
-+X against `-across` — because no pixel or aim-error check catches it.
++X against `-across` — because no pixel or aim-error check catches it. Those
+dots no longer read exactly 1, since the pelvis is deliberately pitched off the
+hip-to-shoulder line; the half turn they guard against reads -1.
 
 `across` runs left hip to right hip, matching the body's own left-to-right.
 
-`BONE_AIM` deliberately has **no Spine entry**. The hips basis already takes
-its up axis from the hip-to-shoulder line, so aiming the spine along roughly
-that same line applies the torso rotation a second time and doubles the
-figure over.
+The pelvis does **not** take the whole torso lean. The hips basis uses a
+`pelvisUp` pitched back toward the stance leg (the lower knee: a raised knee
+says nothing about which way the pelvis points), and `Spine`, `Spine1` and
+`Spine2` are aimed along the arc from `pelvisUp` to the hip-to-shoulder line,
+so the waist keeps its shape instead of bending at one joint. On a standing
+figure this took the torso error from 8.2 degrees to 3.9. This is why the old
+"no Spine entry" rule is gone: aiming the spine *was* a double rotation back
+when the hips also used hip-to-shoulder as their up axis, and is correct now
+that they do not.
+
+The **clavicles** (`LeftShoulder`/`RightShoulder`) are aimed from the shoulder
+midpoint out to each shoulder landmark. Without them the arm swings entirely
+at the humerus and the shoulder mesh collapses into the chest on any pose away
+from rest.
+
+The **neck** is aimed at the EAR midpoint, which beat both alternatives on the
+ground-truth harness: 23.6 degrees against 32.5 for not aiming it at all and
+48.6 for aiming at the nose. The ears sit either side of the head's centre so
+their midpoint barely moves as the head turns, where the nose swings right
+round and, on a rear view, sits on the far side of the shoulders.
+
+`relaxHands()` curls the fingers once at load. Nothing in the landmarks drives
+fingers, so they otherwise stay splayed in the rest pose all clip, and a pair
+of starfish hands is the loudest single tell that the body is a puppet. It
+curls about the knuckle line so it does not care what the rig calls its finger
+axes, and it works out which way is "closed" by experiment rather than
+assumption: bend one joint each way and keep the sign that moves the fingertip
+toward the thumb.
+
+**Landmarks below 0.5 visibility are not aimed at.** MediaPipe returns a full
+skeleton whatever it can actually see, and filming from behind hides both ears
+and the far arm; aiming at those guesses as confidently as the rest is what
+made rear views flail. Nothing resets the skeleton between frames, so skipping
+an aim holds the last confident pose, which is what you want. `confidenceNote()`
+surfaces the same signal to the user, because "detected on 100% of frames" with
+every joint at 40% confidence otherwise reads as the app being broken when the
+footage was the problem.
+
+**Grounding.** Only rotations are driven, so the hips stay pinned at the origin
+and the feet land wherever the pose puts them; on a clip where the legs never
+fully extend the whole figure hovers over its own shadow. `groundMannequin()`
+takes the lift out through a saturating curve (`GROUND_GIVE`), so a planted
+foot sits exactly on the floor while a real jump keeps what is left over
+instead of being glued down. It needs the floor before it can run and
+`measureMannequin()` needs grounding before it can measure, so that function
+does two passes: one with grounding off to find the floor, one with it on to
+fit the camera.
+
+The floor goes under the **sole**, not under `manBounds.minY`: those bounds are
+padded outwards so the camera clears the mesh, and using them for the ground
+put the floor a hand's width below the feet. `soleDrop` measures how far the
+foot mesh hangs below the toe bone with `Box3.setFromObject` at load time —
+the one moment that call is trustworthy here, because nothing has been posed
+yet so bind pose and rest pose are the same thing.
 
 `boneKey()` strips non-alphanumerics from bone names. The file stores
 `mixamorig:Hips` but GLTFLoader sanitises node names to `mixamorigHips`, so a
@@ -106,11 +187,6 @@ z smaller the nearer the camera. `toVec()` is therefore `(x, -y, -z)`: a half
 turn about X, determinant +1. It used to negate x as well, which is a
 **reflection**, not a rotation — that swaps the skeleton's chirality and makes
 `Quaternion.setFromRotationMatrix` return garbage for the hips.
-
-The neck is not aimed and the head just follows the torso. Aiming it along
-shoulders-to-nose threw the head right back on any rear view: the nose is then
-on the far side of the shoulders and barely above them, so a small landmark
-error swings the aim wildly. Less expressive, right far more often.
 
 In the capsule fallback a **neck** cylinder runs from the shoulder midpoint to the head, and the head
 sits on the nose rather than 0.06 beyond it along the shoulders-to-nose line.
