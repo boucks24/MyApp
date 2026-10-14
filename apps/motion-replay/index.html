@@ -2338,6 +2338,8 @@ async function buildRelief(frameIdx){
       if (Un < 0 && Ln >= 0) edge(a, Ln);
     }
 
+    taubinSmooth(pos, tri, n*2, 6);
+
     /* Bake the overlay's place-on-the-person transform into the vertices, so
        a cached frame is a plain buffer swap with no matching object
        transform to carry around. */
@@ -2366,6 +2368,52 @@ async function buildRelief(frameIdx){
   } finally {
     reliefBusy = false;
   }
+}
+
+/* Laplacian smoothing over the MESH, not the depth image.
+
+   Smoothing the height field cannot touch the rim, because the front and
+   back sheets are separate there until they are bridged, so the silhouette
+   kept a hard crease all the way round. Running it on the finished mesh
+   smooths across that bridge and rounds the outline off.
+
+   Taubin rather than plain Laplacian: a positive pass then a slightly larger
+   negative one. Repeated Laplacian steps shrink a mesh towards its centroid,
+   which on a body reads as it deflating a little more every iteration. */
+function taubinSmooth(pos, tri, nVerts, iters){
+  const LAMBDA = 0.5, MU = -0.53;
+  // neighbour lists, flattened: each vertex's slice of `nbr`
+  const count = new Uint32Array(nVerts);
+  for (let i = 0; i < tri.length; i += 3){
+    count[tri[i]] += 2; count[tri[i+1]] += 2; count[tri[i+2]] += 2;
+  }
+  const start = new Uint32Array(nVerts + 1);
+  for (let v = 0; v < nVerts; v++) start[v+1] = start[v] + count[v];
+  const nbr = new Uint32Array(start[nVerts]);
+  const fill = Uint32Array.from(start.subarray(0, nVerts));
+  const link = (a, b) => { nbr[fill[a]++] = b; nbr[fill[b]++] = a; };
+  for (let i = 0; i < tri.length; i += 3){
+    link(tri[i], tri[i+1]); link(tri[i+1], tri[i+2]); link(tri[i+2], tri[i]);
+  }
+
+  const tmp = new Float32Array(pos.length);
+  const step = (w) => {
+    for (let v = 0; v < nVerts; v++){
+      const s0 = start[v], s1 = start[v+1];
+      if (s1 <= s0){ tmp[v*3] = pos[v*3]; tmp[v*3+1] = pos[v*3+1]; tmp[v*3+2] = pos[v*3+2]; continue; }
+      let ax = 0, ay = 0, az = 0;
+      for (let k = s0; k < s1; k++){
+        const u = nbr[k]*3;
+        ax += pos[u]; ay += pos[u+1]; az += pos[u+2];
+      }
+      const m = s1 - s0;
+      tmp[v*3]   = pos[v*3]   + w*(ax/m - pos[v*3]);
+      tmp[v*3+1] = pos[v*3+1] + w*(ay/m - pos[v*3+1]);
+      tmp[v*3+2] = pos[v*3+2] + w*(az/m - pos[v*3+2]);
+    }
+    pos.set(tmp);
+  };
+  for (let i = 0; i < iters; i++){ step(LAMBDA); step(MU); }
 }
 
 function showRelief(i){

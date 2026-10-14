@@ -164,6 +164,27 @@ Two traps, both of which produced convincing-looking rubbish:
   a hard edge the model answers with a few extreme pixels; letting those set
   the scale flattened everything else to nothing.
 
+### Smoothing the mesh, not just the depth field
+
+`taubinSmooth()` runs over the finished mesh. Smoothing the height field
+cannot touch the rim, because the front and back sheets are separate there
+until they are bridged, so the silhouette kept a hard crease all the way
+round however much the depth image was blurred.
+
+Taubin rather than plain Laplacian: a positive pass then a slightly larger
+negative one. Repeated Laplacian steps pull every vertex towards the
+centroid, so the body visibly deflates a little more each iteration; the
+negative pass undoes that while keeping the smoothing.
+
+Borrowed from an Open3D article (`filter_smooth_laplacian`). The rest of that
+pipeline is not applicable: it builds its "depth" by stacking the GRAYSCALE
+image into a volume and marching cubes through it, so brightness becomes
+height. That is a lithophane, not a reconstruction — on a lit white figure it
+would carve the lighting into the geometry, highlights bulging and shadows
+caving. The one other idea there worth revisiting is marching cubes itself,
+which would give better topology around concavities than the grid-plus-rim
+mesh here, at the cost of a voxel grid per frame.
+
 ### Take the rig's thickness, not its anatomy
 
 Using the rig's front surface literally stamped the X Bot's own chest onto
