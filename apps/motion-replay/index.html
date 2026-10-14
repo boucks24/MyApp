@@ -136,6 +136,10 @@
     position:relative; aspect-ratio:9/16; overflow:hidden;
   }
   .panel canvas, .panel video{width:100%; height:100%; object-fit:contain; display:block;}
+  .field .hint{
+    display:block; margin-top:6px; font-size:11px; color:var(--muted-dim); line-height:1.4;
+    font-weight:400; letter-spacing:0;
+  }
   .panel canvas.overlay{
     position:absolute; inset:0; pointer-events:none; display:none;
   }
@@ -233,6 +237,14 @@
     </div>
 
     <div class="row">
+      <label class="field" for="bodyInput">
+        Body
+        <input type="file" id="bodyInput" accept=".glb,.gltf,model/gltf-binary">
+        <span class="hint" id="bodyName">Built-in mannequin. Any Mixamo-rigged .glb works.</span>
+      </label>
+    </div>
+
+    <div class="row">
       <button class="primary" id="processBtn" disabled>Choose a video first</button>
     </div>
 
@@ -323,7 +335,15 @@
    failure becomes a message instead of a dead page. */
 const THREE_URL = "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 const GLTF_URL = "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
+/* The default body. The retargeting only needs a Mixamo-named skeleton, so
+   any such .glb can stand in: the pose solve and the appearance are separate
+   problems and this is the seam between them. The one shipped here is an
+   artist's mannequin, which is honest about being a rig rather than
+   pretending to be a person. */
 const MANNEQUIN_URL = "mannequin.glb";
+let bodySource = MANNEQUIN_URL;   // a URL, or an object URL for a chosen file
+let bodyLabel = null;
+let loadedBody = null;        // which body is actually in the scene
 const VISION_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/+esm";
 const WASM_ROOT = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL_URLS = {
@@ -598,15 +618,17 @@ async function runPipeline(file){
 
   setupScene();
 
-  if (!modelReady){
-    progText.textContent = 'Loading mannequin…';
+  if (!modelReady || loadedBody !== bodySource){
+    progText.textContent = 'Loading body…';
     try {
       await loadMannequin();
       if (capsuleGroup) capsuleGroup.visible = false; // the skinned body takes over
     } catch (e){
       // Not fatal: the capsule rig is a complete body on its own.
-      console.warn('Mannequin unavailable, falling back to the capsule rig', e);
-      mannequinNote = ' The mannequin could not be loaded, so this is the capsule rig.';
+      console.warn('Body unavailable, falling back to the capsule rig', e);
+      mannequinNote = ' ' + (bodySource === MANNEQUIN_URL
+        ? 'The mannequin could not be loaded, so this is the capsule rig.'
+        : (e && e.message ? e.message : 'That body could not be loaded.') + ' Showing the capsule rig.');
     }
   }
 
@@ -723,6 +745,22 @@ function applySmoothing(alpha){
   }
 }
 
+const bodyInput = el('bodyInput');
+const bodyName = el('bodyName');
+bodyInput.addEventListener('change', () => {
+  const f = bodyInput.files && bodyInput.files[0];
+  if (!f){
+    if (bodySource !== MANNEQUIN_URL && bodySource.startsWith('blob:')) URL.revokeObjectURL(bodySource);
+    bodySource = MANNEQUIN_URL; bodyLabel = null;
+    bodyName.textContent = 'Built-in mannequin. Any Mixamo-rigged .glb works.';
+    return;
+  }
+  if (bodySource !== MANNEQUIN_URL && bodySource.startsWith('blob:')) URL.revokeObjectURL(bodySource);
+  bodySource = URL.createObjectURL(f);
+  bodyLabel = f.name;
+  bodyName.textContent = f.name + ' — loads when you build the replay.';
+});
+
 overlayBtn.addEventListener('click', () => {
   overlayOn = !overlayOn;
   overlayBtn.setAttribute('aria-pressed', String(overlayOn));
@@ -768,6 +806,7 @@ let _sA, _sB;
 let groundRef = null;        // lowest toe over the clip, before grounding
 let mannequinBaseY = 0;      // where loadMannequin() parked the root
 let soleDrop = 0;            // how far the foot mesh hangs below the toe bone
+let meshPad = 0.10;          // how far the mesh reaches past its bones, any direction
 
 function setupScene(){
   if (renderer) return; // a second video reuses the same scene
@@ -789,6 +828,7 @@ function setupScene(){
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x050507);
+  scene.environment = studioEnvironment();
 
   camera = new THREE.PerspectiveCamera(40, 1, 0.05, 20);
   camera.position.set(0, 0.2, 2.4);
@@ -1028,16 +1068,44 @@ function buildCourt(){
 
 /* The skinned body. Loaded after the scene exists so a failure just leaves the
    capsule rig on screen rather than stopping the reconstruction. */
+/* The bones the retargeting cannot do without. A .glb that lacks them is not
+   a body this app can drive, and saying so beats leaving a T-pose on screen
+   with no explanation. */
+const REQUIRED_BONES = ['mixamorig:Hips','mixamorig:Spine','mixamorig:Spine1','mixamorig:Spine2',
+  'mixamorig:Neck','mixamorig:Head','mixamorig:LeftArm','mixamorig:LeftForeArm','mixamorig:LeftHand',
+  'mixamorig:RightArm','mixamorig:RightForeArm','mixamorig:RightHand','mixamorig:LeftUpLeg',
+  'mixamorig:LeftLeg','mixamorig:LeftFoot','mixamorig:RightUpLeg','mixamorig:RightLeg','mixamorig:RightFoot'];
+
 async function loadMannequin(){
   const { GLTFLoader } = await import(GLTF_URL);
-  const gltf = await new GLTFLoader().loadAsync(MANNEQUIN_URL);
+
+  // a previous body has to leave the scene, and its bones the lookup
+  if (mannequin){
+    scene.remove(mannequin);
+    mannequin.traverse(o => {
+      if (o.isMesh || o.isSkinnedMesh){ if (o.geometry) o.geometry.dispose(); }
+    });
+    mannequin = null;
+  }
+  bones = {};
+  modelReady = false;
+  groundRef = null;
+
+  const gltf = await new GLTFLoader().loadAsync(bodySource);
   const root = gltf.scene;
 
   /* One white material for every surface. The model ships with its own
      textures; the reference look is a clean studio mannequin, so they are
      replaced rather than tinted. */
-  const skin = new THREE.MeshStandardMaterial({
-    color: 0xFBFAF7, roughness: 0.28, metalness: 0.02
+  /* The reference look is a lacquered shop mannequin: a soft white body under
+     a hard clear coat, so the highlights sit ON the surface rather than in it.
+     A plain low roughness cannot do that — it blurs the body tone and the
+     specular together and reads as shiny plastic. Clearcoat keeps them
+     separate: a slightly matte white underneath, a glossy layer over it. */
+  const skin = new THREE.MeshPhysicalMaterial({
+    color: 0xF6F4EF, roughness: 0.42, metalness: 0.0,
+    clearcoat: 1.0, clearcoatRoughness: 0.08,
+    sheen: 0.35, sheenRoughness: 0.7, sheenColor: new THREE.Color(0xFFFFFF)
   });
   root.traverse(o => {
     if (o.isMesh || o.isSkinnedMesh){
@@ -1072,6 +1140,12 @@ async function loadMannequin(){
   mannequinBaseY = -hipY;
   root.updateMatrixWorld(true);
 
+  const missing = REQUIRED_BONES.filter(n => !bones[boneKey(n)]);
+  if (missing.length){
+    throw new Error('That file has no Mixamo skeleton to drive (missing ' +
+      missing[0].replace('mixamorig:','') + '). Export from Mixamo, or any rig using its bone names.');
+  }
+
   relaxHands();
 
   /* How far the foot mesh hangs below the toe bone, so the floor can be put
@@ -1084,11 +1158,34 @@ async function loadMannequin(){
   soleDrop = (isFinite(restToe) && isFinite(restBox.min.y)) ?
              Math.max(0, restToe - restBox.min.y) : 0;
 
+  /* How far the mesh reaches past the bones inside it. This used to be a flat
+     0.10 tuned to the shipped mannequin, which clipped the head off any body
+     whose geometry stands further off its skeleton — a helmet, a hat, hair.
+     Now that the body is swappable it has to be measured per model, and the
+     rest pose is the one place Box3 can be trusted here. */
+  const pb = new THREE.Vector3();
+  let bTop = -Infinity, bLow = Infinity, bSide = 0;
+  for (const k in bones){
+    pb.setFromMatrixPosition(bones[k].matrixWorld);
+    if (pb.y > bTop) bTop = pb.y;
+    if (pb.y < bLow) bLow = pb.y;
+    bSide = Math.max(bSide, Math.abs(pb.x));
+  }
+  meshPad = 0.06;
+  if (isFinite(bTop)){
+    meshPad = Math.max(meshPad,
+      restBox.max.y - bTop,
+      bLow - restBox.min.y,
+      Math.max(Math.abs(restBox.min.x), Math.abs(restBox.max.x)) - bSide);
+  }
+  if (!isFinite(meshPad) || meshPad > 0.6) meshPad = 0.10;
+
   scene.add(root);
   mannequin = root;
   // Cache the rest pose so each frame solves from a known state.
   mannequin.updateMatrixWorld(true);
   modelReady = true;
+  loadedBody = bodySource;
 }
 
 /* The rest pose has every finger straight and splayed. Nothing in the
@@ -1316,6 +1413,44 @@ function updateMannequin(points){
   }
 }
 
+/* A clear coat only shows if there is something to reflect, and with nothing
+   but directional lights it just dulls the body. Rather than fetch an HDRI,
+   paint the studio the reference implies into an equirectangular canvas: a
+   near-black surround, a soft white box overhead, and a lime kicker low and
+   behind. PMREM turns that into the roughness-blurred mip chain the material
+   samples. It only affects PBR materials, so the unlit court is untouched. */
+function studioEnvironment(){
+  const W = 512, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#0A0B0E'; g.fillRect(0, 0, W, H);
+
+  const blob = (x, y, rx, ry, inner, outer) => {
+    g.save();
+    g.translate(x, y); g.scale(1, ry / rx);
+    const rg = g.createRadialGradient(0, 0, 0, 0, 0, rx);
+    rg.addColorStop(0, inner); rg.addColorStop(1, outer);
+    g.fillStyle = rg; g.beginPath(); g.arc(0, 0, rx, 0, Math.PI * 2); g.fill();
+    g.restore();
+  };
+  // overhead softbox, front and slightly right of camera
+  blob(W * 0.62, H * 0.17, W * 0.30, H * 0.26, 'rgba(255,255,255,0.95)', 'rgba(255,255,255,0)');
+  // cool bounce off the floor, so the underside is not dead black
+  blob(W * 0.35, H * 0.92, W * 0.42, H * 0.26, 'rgba(120,140,170,0.35)', 'rgba(120,140,170,0)');
+  // the lime kicker, behind
+  blob(W * 0.10, H * 0.55, W * 0.16, H * 0.34, 'rgba(215,224,91,0.85)', 'rgba(215,224,91,0)');
+  blob(W * 0.92, H * 0.58, W * 0.14, H * 0.30, 'rgba(215,224,91,0.6)', 'rgba(215,224,91,0)');
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromEquirectangular(tex).texture;
+  pmrem.dispose(); tex.dispose();
+  return env;
+}
+
 /* World height of the lowest toe, which is what actually touches the floor. */
 function lowestToeY(){
   let y = Infinity;
@@ -1393,7 +1528,7 @@ function measureMannequin(){
     }
   }
   if (!isFinite(minY)) return;
-  const pad = 0.10;   // the mesh is thicker than the bone line through it
+  const pad = meshPad;   // measured off this body at load, not assumed
   manBounds = { minY: minY - pad, maxY: maxY + pad, halfX: halfX + pad, maxZ: maxZ + pad };
 }
 

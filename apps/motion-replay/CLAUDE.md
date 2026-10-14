@@ -41,6 +41,48 @@ positions or lengths: MediaPipe world landmarks are already hip-relative, so the
 figure performs in place with the model's own proportions, and noisy landmarks
 cannot stretch a limb.
 
+## Pose and appearance are separate problems
+
+The reference this app is aimed at is a lacquered white figure of a tennis
+player: a clothed male athlete, t-shirt with fabric folds, shorts, laced
+shoes. The shipped `mannequin.glb` cannot be that. It is the Mixamo X Bot, a
+segmented genderless rig with ball joints and no clothing, and no amount of
+material or lighting work changes that silhouette.
+
+So **the body is a parameter, not a constant.** `bodySource` is a URL or an
+object URL from the `bodyInput` picker, and the retargeting only needs a
+skeleton using Mixamo's bone names (`REQUIRED_BONES` is the list; a file
+without them is refused by name rather than left standing in a T-pose). The
+shipped mannequin is the default because it is the best thing that can be
+vendored here, and because it is honest about being a rig rather than
+pretending to be a person.
+
+Checked, and rejected, from the three.js examples: `Soldier.glb` is an
+armoured trooper with shoulder plates and pouches, `Michelle.glb` is a
+stylised character in a crop top and wide trousers. Rendered all-white both
+read worse than the X Bot for this. Both do load and pose correctly through
+the picker, which is the useful part: an arbitrary Mixamo rig works.
+
+Once the body can change, anything tuned to the shipped one is a bug. The
+camera pad was a flat `0.10` and clipped the helmet off `Soldier`; `meshPad`
+is now measured per model at load, as the largest distance the rest-pose mesh
+reaches past its own bones.
+
+What is still not solved is the rendering. A closed-form answer needs either
+an asset we do not have (a rigged, clothed athlete that can be redistributed)
+or a different technique entirely — image-space restyling of the source
+footage rather than lighting a mesh. The pose pipeline is deliberately
+decoupled from that choice.
+
+The material is a `MeshPhysicalMaterial` with `clearcoat`, not a low-roughness
+standard material: the reference has its highlights sitting ON the surface,
+and plain low roughness blurs body tone and specular together into shiny
+plastic. A clear coat needs something to reflect, so `studioEnvironment()`
+paints an equirectangular canvas — near-black surround, soft white box
+overhead, lime kicker low and behind — and runs it through `PMREMGenerator`.
+No HDRI fetch, and it only touches PBR materials, so the unlit court is
+unaffected.
+
 ## Measuring pose accuracy
 
 `mannequin.glb` ships with its own animation clips (`walk`, `run`, `idle`,
