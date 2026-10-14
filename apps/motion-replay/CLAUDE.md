@@ -113,6 +113,24 @@ the shirt's shadow as a smudge.
 This needs nothing per frame beyond the matte already stored, so it is cheap
 and there is no extra memory.
 
+### Matcap, not a hand-written light term
+
+`buildMatcap()` bakes a lit sphere once and `styliseFrame()` looks it up with
+`uv = normal.xy * 0.5 + 0.5`: a normal facing the camera samples the middle,
+one turning away samples the rim. It replaced a hand-written
+diffuse-plus-specular formula, which is faster and puts the whole material in
+one function instead of inside a per-pixel loop.
+
+It also fixed where the rim light goes. Driving the rim off the distance
+transform put it a fixed number of pixels inside the outline, so it traced
+the silhouette and nothing else. Keyed off the normal it lands wherever the
+surface turns away, which includes the interior edges — between the arm and
+the body, along the far leg — which is where rim light actually appears.
+
+The height field is in matte pixels, so its gradient scales with how big the
+subject is on screen. Normalise it before building the normal, or a large
+subject comes out flat and a small one looks like crumpled foil.
+
 Two things that bite:
 
 - A canvas cannot hand out both a WebGL and a 2D context, so the figure needs

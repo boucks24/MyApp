@@ -2486,6 +2486,53 @@ function taubinSmooth(pos, tri, nVerts, iters){
    there is nothing extra to keep per frame. */
 const SIL_LIGHT = [-0.46, -0.62, 0.64];     // above, front, camera-left
 
+/* A matcap: a lit sphere, baked once, looked up per pixel by the surface
+   normal. `uv = normal.xy * 0.5 + 0.5` — the normal that faces the camera
+   samples the middle, a normal turning away samples the rim.
+
+   It replaces a hand-written diffuse-plus-specular term with the whole
+   material response in one table, which is both faster and easier to tune:
+   the look lives in this one function rather than in a formula buried in a
+   per-pixel loop. It also fixes where the rim light goes. Driving the rim off
+   the distance transform put it a fixed number of pixels inside the outline,
+   so it traced the silhouette and nothing else; keyed off the normal it lands
+   wherever the surface turns away from the camera, which includes the inside
+   edges — between the arm and the body, along the far leg. */
+const MATCAP_SIZE = 128;
+let matcap = null;
+function buildMatcap(){
+  const n = MATCAP_SIZE;
+  const c = document.createElement('canvas');
+  c.width = n; c.height = n;
+  const g = c.getContext('2d');
+  const img = g.createImageData(n, n);
+  const d = img.data;
+  const key = [-0.40, -0.55, 0.73], fill = [0.62, -0.10, 0.78];
+  const rimA = [-0.86, 0.22, -0.46], rimB = [0.80, 0.16, -0.58];
+  const dot = (a, x, y, z) => Math.max(0, a[0]*x + a[1]*y + a[2]*z);
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++){
+    const x = (i + 0.5)/n*2 - 1, y = 1 - (j + 0.5)/n*2;
+    const r2 = x*x + y*y, o = (j*n + i)*4;
+    if (r2 > 1){ d[o+3] = 0; continue; }
+    const z = Math.sqrt(1 - r2);
+    let v = 0.30 + 0.70*dot(key, x, y, z) + 0.16*dot(fill, x, y, z);
+    v += Math.pow(dot(key, x, y, z), 48) * 0.85;          // lacquer highlight
+    let rr = v, gg = v, bb = v;
+    /* The rims are behind the subject, so they only catch normals already
+       turned away — which is what puts the glow on the outline for free. */
+    const a1 = Math.pow(dot(rimA, x, y, z), 3.4) * 0.80;
+    const a2 = Math.pow(dot(rimB, x, y, z), 3.6) * 0.60;
+    const lime = a1 + a2;
+    rr += lime*0.62; gg += lime*0.76; bb += lime*0.20;
+    d[o]   = Math.min(255, rr*255);
+    d[o+1] = Math.min(255, gg*255);
+    d[o+2] = Math.min(255, bb*255);
+    d[o+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return g.getImageData(0, 0, n, n).data;
+}
+
 function styliseFrame(i){
   const f = frames[i];
   const mt = f && f.matte;
@@ -2533,28 +2580,26 @@ function styliseFrame(i){
   const ctx2 = cv.getContext('2d');
   const img = ctx2.createImageData(MW, MH);
   const od = img.data;
-  const [LX, LY, LZ] = SIL_LIGHT;
-  const rimW = Math.max(2, Math.round(span*0.012));
+  if (!matcap) matcap = buildMatcap();
+  const MS = MATCAP_SIZE;
+  /* The height field is in matte pixels, so its gradient scales with the
+     subject's size on screen; normalise it or a big subject comes out flat
+     and a small one looks like crumpled foil. */
+  const gScale = 14 / Math.max(1, span*0.012);
   for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++){
     const k = y*MW+x;
     const a = Math.min(1, Math.max(0, (matte[k]-0.35)/0.3));
     if (a <= 0){ od[k*4+3] = 0; continue; }
     const xm = x > 0 ? k-1 : k, xp = x < MW-1 ? k+1 : k;
     const ym = y > 0 ? k-MW : k, yp = y < MH-1 ? k+MW : k;
-    let nx = -(hs[xp]-hs[xm])*0.5, ny = -(hs[yp]-hs[ym])*0.5, nz = 1;
+    let nx = -(hs[xp]-hs[xm])*0.5*gScale, ny = -(hs[yp]-hs[ym])*0.5*gScale, nz = 1;
     const len = Math.hypot(nx, ny, nz) || 1;
-    nx /= len; ny /= len; nz /= len;
-    const dif = Math.max(0, nx*LX + ny*LY + nz*LZ);
-    let v = 0.44 + 0.62*dif + Math.pow(dif, 24)*0.55;
-    v = Math.max(0.10, Math.min(1.08, v));
-    let r = v, g = v, b = v;
-    const e = dist[k];
-    if (e < rimW){
-      const t = Math.pow(1 - e/rimW, 1.7);
-      r += t*0.60; g += t*0.72; b += t*0.16;
-    }
-    od[k*4] = Math.min(255, r*255); od[k*4+1] = Math.min(255, g*255);
-    od[k*4+2] = Math.min(255, b*255); od[k*4+3] = a*255;
+    nx /= len; ny /= len;
+    const mx = Math.min(MS-1, Math.max(0, ((nx*0.5 + 0.5)*MS) | 0));
+    const my = Math.min(MS-1, Math.max(0, ((0.5 - ny*0.5)*MS) | 0));
+    const mo = (my*MS + mx)*4;
+    od[k*4] = matcap[mo]; od[k*4+1] = matcap[mo+1];
+    od[k*4+2] = matcap[mo+2]; od[k*4+3] = a*255;
   }
   ctx2.putImageData(img, 0, 0);
 
