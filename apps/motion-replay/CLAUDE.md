@@ -83,6 +83,45 @@ overhead, lime kicker low and behind — and runs it through `PMREMGenerator`.
 No HDRI fetch, and it only touches PBR materials, so the unlit court is
 unaffected.
 
+## Model-free reconstruction, and why it is a shell
+
+Prototyped (scratchpad, not shipped): build the body from the frames instead
+of posing a rig. `PoseLandmarker` takes `outputSegmentationMasks: true` and
+returns a person matte alongside the pose, from the model already loaded, so
+this costs no extra download.
+
+Method: feather the matte, take its distance transform `e`, and blur that
+wide to get a local half-thickness `R`. Depth is then
+`z = w*boneDepth - sqrt(2Re - e^2)`. The square root is the profile of a
+circle of radius `R` at depth `e` in from its edge, so the surface meets the
+silhouette tangentially instead of ending in a cliff. Mesh it as a grid over
+the matte, one vertex per few pixels, faces only where the matte is solid.
+
+Two things that look like bugs and are not:
+
+- Depth must be a **weighted blend over all bones** (inverse square), never
+  the nearest one. Nearest-bone is piecewise constant, so depth jumps along
+  the line where the closest bone changes and the render gets a hard dark
+  crease down the middle of the torso and every limb.
+- The matte has to be **blurred before it is thresholded**. Sampling a hard
+  matte on a grid turns every edge into a staircase, and the shading picks
+  that out as terracing along the whole silhouette.
+
+What it buys: the real person's outline, with their clothes, hair and shoes,
+and no rig to look wrong. On the tennis photo it reads as a white figure of
+that player, which the X Bot never will.
+
+What it costs: **it is a relief, not a body.** One surface, no back. From the
+camera that shot it, convincing; turned 55 degrees, a flat shell. It is only
+valid from the source viewpoint, which means a locked camera, and the app's
+orbit, playback and export all assume otherwise. Masks are also too big to
+keep per frame (a 900-frame clip is tens of MB even downsampled), so it has
+to rebuild on scrub with the landmarker held open, at roughly 150ms a frame.
+
+So it is the right answer for a restyled still or a locked-off shot, and the
+wrong one for a 3D replay you can move around. Shipping it means a second
+mode, not a replacement.
+
 ## Measuring pose accuracy
 
 `mannequin.glb` ships with its own animation clips (`walk`, `run`, `idle`,
