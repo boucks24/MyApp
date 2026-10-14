@@ -341,6 +341,13 @@ const GLTF_URL = "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loader
    problems and this is the seam between them. The one shipped here is an
    artist's mannequin, which is honest about being a rig rather than
    pretending to be a person. */
+const TFJS_URL = "https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js";
+/* ARPortraitDepth, vendored. It is 11MB and only fetched the first time a
+   replay is built, never on page load. */
+const DEPTH_MODEL_URL = "depth/model.json";
+const DEPTH_W = 192, DEPTH_H = 256;   // the model's own input, height-major
+let depthModel = null, depthCanvas = null, depthCtx = null;
+
 const MANNEQUIN_URL = "mannequin.glb";
 let bodySource = MANNEQUIN_URL;   // a URL, or an object URL for a chosen file
 let bodyLabel = null;
@@ -566,6 +573,16 @@ async function runPipeline(file){
   const total = Math.max(1, Math.min(Math.floor(duration * targetFps), 900));
   frameDuration = duration / total;
 
+  progText.textContent = 'Loading depth model…';
+  progFill.style.width = '8%';
+  try {
+    await ensureDepthModel();
+  } catch (e){
+    // not fatal: the rig still supplies the body's volume on its own
+    console.warn('Depth model unavailable; relief will use the rig alone', e);
+    depthModel = null;
+  }
+
   sampleCanvas.width = stageVideo.videoWidth;
   sampleCanvas.height = stageVideo.videoHeight;
 
@@ -582,8 +599,9 @@ async function runPipeline(file){
       const world = result.worldLandmarks[0];
       const image = result.landmarks && result.landmarks[0];
       const fused = fuseImageXY(world, image, sampleCanvas.width, sampleCanvas.height);
-      frames[i] = { t, world: fused, imageMap: fused.imageMap || null,
-                    matte: packMatte(result.segmentationMasks && result.segmentationMasks[0]) };
+      const matte = packMatte(result.segmentationMasks && result.segmentationMasks[0]);
+      frames[i] = { t, world: fused, imageMap: fused.imageMap || null, matte,
+                    depth: matte ? captureDepth(sampleCanvas, matte) : null };
       detected++;
     }
     if (i % 2 === 0 || i === total - 1){
@@ -615,7 +633,8 @@ async function runPipeline(file){
   for (let i = 0; i < frameCount; i++){
     if (frames[i]) lastGood = frames[i];
     else if (lastGood) frames[i] = { t: i * frameDuration, world: lastGood.world,
-                                     imageMap: lastGood.imageMap, matte: lastGood.matte, held: true };
+                                     imageMap: lastGood.imageMap, matte: lastGood.matte,
+                                     depth: lastGood.depth, held: true };
   }
 
   progFill.style.width = '95%';
@@ -752,6 +771,96 @@ function fuseImageXY(world, image, W, H){
    cropped to the subject, resampled to the working grid, and packed one bit
    per pixel. That is about 18KB a frame instead of two megabytes, and the
    detector can be closed at the end of the pass as before. */
+/* ARPortraitDepth: a monocular depth model trained on people. It gives the
+   VISIBLE surface only — there is no back of the body in a single view — so
+   it is used for surface relief and the rig still supplies the thickness.
+
+   TensorFlow.js only ships a UMD bundle, so it goes in as a classic script
+   and is read off `window`, rather than imported like three and MediaPipe. */
+async function ensureDepthModel(){
+  if (depthModel) return true;
+  if (!window.tf){
+    await new Promise((res, rej) => {
+      const el = document.createElement('script');
+      el.src = TFJS_URL;
+      el.onload = res;
+      el.onerror = () => rej(new Error('Could not load TensorFlow.js'));
+      document.head.appendChild(el);
+    });
+  }
+  await window.tf.ready();
+  depthModel = await window.tf.loadGraphModel(DEPTH_MODEL_URL);
+  depthCanvas = document.createElement('canvas');
+  depthCanvas.width = DEPTH_W; depthCanvas.height = DEPTH_H;
+  depthCtx = depthCanvas.getContext('2d', { willReadFrequently: true });
+  return true;
+}
+
+/* The model wants the person cut out on black, [0,255] mapped to [0,1], at
+   192x256. Its output is roughly [0,2] and relative, not metric, which is
+   fine: only the variation across the body is used.
+
+   Stored quantised to a byte over the frame's own range. A float map per
+   frame is 196KB; this is 49KB, which is what makes keeping one per frame
+   affordable at all. */
+function captureDepth(srcCanvas, mt){
+  if (!depthModel || !mt) return null;
+  const tf = window.tf;
+  const { x0, y0, x1, y1, MW, MH, bits } = mt;
+  depthCtx.clearRect(0, 0, DEPTH_W, DEPTH_H);
+  depthCtx.drawImage(srcCanvas, x0, y0, x1-x0+1, y1-y0+1, 0, 0, DEPTH_W, DEPTH_H);
+
+  // black out everything that is not the person, as the model expects
+  const img = depthCtx.getImageData(0, 0, DEPTH_W, DEPTH_H);
+  const px = img.data;
+  for (let y = 0; y < DEPTH_H; y++){
+    const my = Math.min(MH-1, Math.floor(y * MH / DEPTH_H));
+    for (let x = 0; x < DEPTH_W; x++){
+      const mx = Math.min(MW-1, Math.floor(x * MW / DEPTH_W));
+      const mi = my*MW + mx;
+      if (!((bits[mi >> 3] >> (mi & 7)) & 1)){
+        const o = (y*DEPTH_W + x) * 4;
+        px[o] = px[o+1] = px[o+2] = 0;
+      }
+    }
+  }
+  depthCtx.putImageData(img, 0, 0);
+
+  let raw;
+  try {
+    const out = tf.tidy(() => {
+      const t = tf.browser.fromPixels(depthCanvas).toFloat().div(255).expandDims(0);
+      return depthModel.predict(t).squeeze();
+    });
+    raw = out.dataSync();
+    out.dispose();
+  } catch (e){
+    console.warn('depth model failed on a frame', e);
+    return null;
+  }
+
+  let lo = Infinity, hi = -Infinity;
+  for (let y = 0; y < DEPTH_H; y++){
+    const my = Math.min(MH-1, Math.floor(y * MH / DEPTH_H));
+    for (let x = 0; x < DEPTH_W; x++){
+      const mx = Math.min(MW-1, Math.floor(x * MW / DEPTH_W));
+      const mi = my*MW + mx;
+      if ((bits[mi >> 3] >> (mi & 7)) & 1){
+        const v = raw[y*DEPTH_W + x];
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+    }
+  }
+  if (!isFinite(lo) || hi <= lo) return null;
+  const q = new Uint8Array(DEPTH_W*DEPTH_H);
+  const inv = 255/(hi-lo);
+  for (let i = 0; i < q.length; i++){
+    q[i] = Math.max(0, Math.min(255, Math.round((raw[i]-lo)*inv)));
+  }
+  return { q, lo, hi };
+}
+
 function packMatte(mp){
   if (!mp) return null;
   const FW = mp.width, FH = mp.height;
@@ -1878,6 +1987,7 @@ function renderOverlay(){
    ------------------------------------------------------------------ */
 
 const RELIEF_WORK = 384;     // longest side of the cropped working grid
+const DEPTH_DETAIL = 1.6;    // how far the model's relief may push the surface
 
 function distanceTransform(mask, W, H){
   const BIG = 1e9, d = new Float32Array(W*H);
@@ -2055,27 +2165,125 @@ async function buildRelief(frameIdx){
 
     // --- combine: outline from the matte, thickness from the rig ---
     const mPerPx = m.s * sx;      // the crop resample changes the pixel pitch
-    const zF = new Float32Array(MW*MH), zB = new Float32Array(MW*MH);
+
+    /* Take the rig's THICKNESS, not its anatomy.
+
+       Using the rig's front surface literally stamped the X Bot's own chest
+       onto every body — a smooth bulge over the ribs that is the model's
+       shape, not the person's, and precisely what the rig is not supposed to
+       contribute. Both the centre line and the half-thickness are therefore
+       blurred hard across the body first, which keeps what the rig genuinely
+       knows (a torso is thicker than a forearm, and roughly where the body
+       sits in depth) and discards the rest. The surface itself comes from the
+       matte and the depth model. */
+    const cz0 = new Float32Array(MW*MH), hf0 = new Float32Array(MW*MH), ok0 = new Float32Array(MW*MH);
     const feather = Math.max(3, MW/24);
     for (let i = 0; i < MW*MH; i++){
-      if (mask[i] <= 0.5){ zF[i] = NaN; zB[i] = NaN; continue; }
+      if (mask[i] <= 0.5) continue;
       const e = dist[i], Rr = Math.max(thick[i], e, 2);
       const bulge = Math.sqrt(Math.max(0, 2*Rr*e - e*e)) * mPerPx;
       const f = dFront[i], b = dBack[i];
       if (isFinite(f) && isFinite(b) && b > f){
         const t = Math.min(1, e/feather);
-        const cz = (60 - (f+b)/2), half = (b-f)/2;
-        const h = half*t + bulge*(1-t);
-        zF[i] = cz + h; zB[i] = cz - h;
+        cz0[i] = 60 - (f+b)/2;
+        hf0[i] = ((b-f)/2)*t + bulge*(1-t);
       } else {
-        const cz = 60 - (isFinite(f) ? f : (isFinite(b) ? b : 60));
-        zF[i] = cz + bulge; zB[i] = cz - bulge;
+        cz0[i] = 60 - (isFinite(f) ? f : (isFinite(b) ? b : 60));
+        hf0[i] = bulge;
+      }
+      ok0[i] = 1;
+    }
+    const smR = Math.max(4, Math.round(MW/7));
+    const czB = boxBlur(cz0, MW, MH, smR, 2);
+    const hfB = boxBlur(hf0, MW, MH, smR, 2);
+    const okB = boxBlur(ok0, MW, MH, smR, 2);
+
+    const zF = new Float32Array(MW*MH), zB = new Float32Array(MW*MH);
+    for (let i = 0; i < MW*MH; i++){
+      if (mask[i] <= 0.5){ zF[i] = NaN; zB[i] = NaN; continue; }
+      const wgt = okB[i] > 0.02 ? okB[i] : 1;
+      const cz = czB[i]/wgt;
+      /* Never let the blurred thickness exceed the matte's own rounded
+         profile, or the body inflates past its own outline at the wrists and
+         ankles where the blur pulls in the torso's thickness. */
+      const e = dist[i], Rr = Math.max(thick[i], e, 2);
+      const cap = Math.sqrt(Math.max(0, 2*Rr*e - e*e)) * mPerPx;
+      const h = Math.min(hfB[i]/wgt, cap);
+      zF[i] = cz + h; zB[i] = cz - h;
+    }
+    /* Surface detail from the depth model, laid over the rig's volume.
+
+       Only the model's HIGH-FREQUENCY variation is used: what it says minus a
+       blurred copy of itself. That is the fabric folds, the chest, the
+       shoulder blades — the things the rig cannot know. Its low frequencies
+       are thrown away, which neatly sidesteps the fact that its output is
+       relative rather than metric, so there is no scale to calibrate and a
+       bad absolute reading cannot move the body.
+
+       Which way the model counts depth is not documented, so it is settled by
+       experiment: correlate it against the rig's front surface where the two
+       overlap and flip the sign if they disagree. */
+    const dq = frames[frameIdx] && frames[frameIdx].depth;
+    if (dq){
+      const dm = new Float32Array(MW*MH);
+      const span = (dq.hi - dq.lo) / 255;
+      for (let y = 0; y < MH; y++){
+        const sy2 = Math.min(DEPTH_H-1, Math.floor(y * DEPTH_H / MH));
+        for (let x = 0; x < MW; x++){
+          const sx2 = Math.min(DEPTH_W-1, Math.floor(x * DEPTH_W / MW));
+          dm[y*MW+x] = dq.q[sy2*DEPTH_W + sx2] * span + dq.lo;
+        }
+      }
+      const hpR = Math.max(2, Math.round(MW/22));
+      const base = boxBlur(dm, MW, MH, hpR, 2);
+
+      /* Compare like with like. High-passing the model but correlating it
+         against the rig's RAW depth compares fine detail to the body's
+         overall shape, which is close to uncorrelated, so the sign came out
+         of the noise and half the time the relief was inverted — hollows
+         where the chest should stand out. High-pass the rig the same way
+         first; then the two measure the same thing. */
+      const rigZ = new Float32Array(MW*MH);
+      const rigOK = new Float32Array(MW*MH);
+      for (let i = 0; i < MW*MH; i++){
+        if (mask[i] > 0.5 && isFinite(dFront[i])){ rigZ[i] = 60 - dFront[i]; rigOK[i] = 1; }
+      }
+      const rigBlur = boxBlur(rigZ, MW, MH, hpR, 2);
+      const okBlur = boxBlur(rigOK, MW, MH, hpR, 2);
+      let cov = 0;
+      for (let i = 0; i < MW*MH; i++){
+        if (!rigOK[i] || okBlur[i] < 0.25) continue;
+        cov += (dm[i]-base[i]) * (rigZ[i] - rigBlur[i]/okBlur[i]);
+      }
+      const sgn = cov < 0 ? -1 : 1;
+
+      /* Scale against the body's own thickness so the relief reads at any
+         subject size. The amplitude is a high percentile rather than the
+         maximum: the masked cut-out leaves a hard edge the model answers with
+         a few extreme pixels, and letting those set the scale flattened
+         everything else to nothing. */
+      const amps = [];
+      for (let i = 0; i < MW*MH; i++){
+        if (mask[i] > 0.5) amps.push(Math.abs(dm[i]-base[i]));
+      }
+      amps.sort((a, b) => a - b);
+      const amp = amps[Math.floor(amps.length*0.9)] || 0;
+      if (amp > 1e-6){
+        const lim = SKELETON_HEIGHT * 0.022 * DEPTH_DETAIL;
+        const gain = sgn * lim / amp;
+        for (let i = 0; i < MW*MH; i++){
+          if (!isFinite(zF[i])) continue;
+          let d = (dm[i]-base[i]) * gain;
+          if (d > lim) d = lim; else if (d < -lim) d = -lim;
+          zF[i] += d;
+        }
       }
     }
+
     /* Smooth across the body only. Averaging over neighbours that are outside
        the matte would drag the surface down towards zero at every edge and
        shrink the silhouette a pixel per pass. */
-    for (let pass = 0; pass < 16; pass++){
+    for (let pass = 0; pass < 6; pass++){
       const a = Float32Array.from(zF), c = Float32Array.from(zB);
       for (let y = 1; y < MH-1; y++) for (let x = 1; x < MW-1; x++){
         const i = y*MW+x; if (!isFinite(a[i])) continue;

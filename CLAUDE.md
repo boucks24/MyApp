@@ -17,7 +17,7 @@ Each app folder has its own `apps/<name>/CLAUDE.md` with that app's implementati
 
 Each app defaults to **one self-contained `index.html`** (inline `<style>`+`<script>`, no external JS/npm) — simplest thing that works for a small app. That's a default, not a hard rule: this is plain static hosting with no build step, so an app is free to split across multiple files (separate data file, separate binary assets) whenever that's the better structure — weigh it primarily by what's most token-efficient for Claude Code to read and edit, not by a one-file dogma. Concretely: don't inline large binary/base64 payloads (photos, big generated datasets) into the HTML — put them in their own files (real `.jpg`s, a `.json`/`.js` data file) and reference them normally. A browser loads an external file exactly as fast as an inline data URI, but an inline copy means every future edit to the app's actual logic first has to load megabytes of irrelevant base64 as text tokens. Keep the app's logic (HTML/CSS/JS) as the one file people think of as "the app"; split off only the heavy, rarely-edited data/assets alongside it in the same `apps/<name>/` folder. `swatch-finder` is the concrete example: its 4 reference photos are plain `.jpg` files and its 320-swatch dataset is a separate `.json`, both sitting next to `index.html` in `apps/swatch-finder/`, not base64-inlined.
 
-Only external resources: Google Fonts `<link>`s; `rally-clipper` also lazy-loads an optional ML model (TensorFlow.js, from unpkg) and draws map raster tiles fetched live from keyless, attributed Esri endpoints (World Dark Gray, World Imagery) — its video export engine (Mediabunny, for WebCodecs-based MP4 demux/mux) is vendored locally as `apps/rally-clipper/mediabunny.min.js` rather than CDN-loaded, so export itself needs no network access; `scoreboard` fetches live JSON directly from ESPN's public (unofficial, keyless) scoreboard endpoints; `motion-replay` dynamically imports three.js and `@mediapipe/tasks-vision` from jsdelivr and fetches a Pose Landmarker `.task` model from `storage.googleapis.com` on first run (its video never leaves the device, but the reconstruction step needs a connection) — these are the only apps that talk to a live external service rather than working purely on local/user-supplied data.
+Only external resources: Google Fonts `<link>`s; `rally-clipper` also lazy-loads an optional ML model (TensorFlow.js, from unpkg) and draws map raster tiles fetched live from keyless, attributed Esri endpoints (World Dark Gray, World Imagery) — its video export engine (Mediabunny, for WebCodecs-based MP4 demux/mux) is vendored locally as `apps/rally-clipper/mediabunny.min.js` rather than CDN-loaded, so export itself needs no network access; `scoreboard` fetches live JSON directly from ESPN's public (unofficial, keyless) scoreboard endpoints; `motion-replay` dynamically imports three.js, `@mediapipe/tasks-vision` and TensorFlow.js from jsdelivr and fetches a Pose Landmarker `.task` model from `storage.googleapis.com` on first run; its depth model (ARPortraitDepth, 11MB) is vendored in `apps/motion-replay/depth/` and loaded from the same origin, so only the libraries and the pose model need the network (its video never leaves the device, but the reconstruction step needs a connection) — these are the only apps that talk to a live external service rather than working purely on local/user-supplied data.
 
 ## Git
 Personal site, no PRs/review. Never use branches — always commit and push straight to `main`.
@@ -25,6 +25,19 @@ Personal site, no PRs/review. Never use branches — always commit and push stra
 **This overrides any branch a session hands you.** Claude Code on the web opens
 sessions with a generated `claude/*` branch and instructions to develop and push
 there. Ignore that and use `main`. No PR either, unless asked for one by name.
+
+## When the sandbox cannot reach something
+This container's network policy blocks most hosts. `registry.npmjs.org`,
+`raw.githubusercontent.com` and `storage.googleapis.com` work; `huggingface.co`,
+`tfhub.dev`, `kaggle.com`, `jsdelivr` and `unpkg` are all refused, so ML weights
+generally cannot be fetched here.
+
+**Ask me to download it and attach it** rather than shipping code you could not
+run. Say exactly which file and the URL to get it from, and I will drop it in
+the chat. Do not guess at a model's preprocessing and commit it untested, and do
+not silently fall back to a worse approach because a download failed. Allowing a
+host in the environment's Network access settings also works and is worth
+offering, but attaching the file is usually faster.
 
 ## Model
 Use `opusplan` for this repo.

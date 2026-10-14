@@ -127,6 +127,57 @@ Things that are not obvious:
   floor read `reliefBounds` in this mode. Leaving them on `manBounds` frames
   the scene for a mannequin that is no longer on screen.
 
+### The depth model
+
+`depth/` is **ARPortraitDepth**, vendored (11MB, four files). It could not be
+downloaded in the sandbox — every host that serves it is blocked — so it was
+attached by hand. TensorFlow.js only publishes a UMD bundle, so it loads as a
+classic `<script>` and is read off `window.tf`, unlike three and MediaPipe
+which are ES imports.
+
+Contract, read out of `@tensorflow-models/depth-estimation` rather than
+guessed: the person cut out on black, `[0,255]` mapped to `[0,1]`, resized to
+**192x256** (width, height — the tensor is `[1,256,192,3]`). Output is
+`[1,256,192,1]` and roughly `[0,2]`, **relative, not metric**.
+
+It runs once per frame inside the detection pass and is stored quantised to a
+byte over that frame's range: 49KB a frame against 196KB for floats, which is
+what makes one per frame affordable. If it fails to load, the pipeline carries
+on and relief falls back to the rig alone — `depthguard.mjs` blocks the model
+files and checks exactly that.
+
+**Only the model's high-frequency variation is used** — what it says minus a
+blurred copy of itself. That is the fabric folds and the chest and the
+shoulder blades, the things the rig cannot know. Throwing away its low
+frequencies sidesteps the fact that the output is relative: there is no scale
+to calibrate and a bad absolute reading cannot move the body.
+
+Two traps, both of which produced convincing-looking rubbish:
+
+- **The sign is not documented**, so it is settled by correlating against the
+  rig. Correlating the model's high-frequency detail against the rig's RAW
+  depth compares fine detail with overall body shape, which is near
+  uncorrelated, so the sign came out of the noise and half the time the
+  relief was inverted — hollows where the chest should stand out. High-pass
+  the rig the same way first.
+- **Scale off a high percentile, not the maximum.** The masked cut-out leaves
+  a hard edge the model answers with a few extreme pixels; letting those set
+  the scale flattened everything else to nothing.
+
+### Take the rig's thickness, not its anatomy
+
+Using the rig's front surface literally stamped the X Bot's own chest onto
+every body: a smooth bulge over the ribs that is the model's shape, not the
+person's. It was easy to mistake for a depth-model artefact — the fix was
+found by setting `DEPTH_DETAIL` to 0 and seeing the identical lump.
+
+Both the centre line and the half-thickness are now blurred hard across the
+body before use, keeping what the rig genuinely knows (a torso is thicker than
+a forearm, roughly where the body sits in depth) and discarding the rest. The
+blurred thickness is then capped by the matte's own rounded profile, or the
+body inflates past its outline at the wrists and ankles where the blur drags
+the torso's thickness outwards.
+
 **Relief is the default view.** The rig is a reference for the volume, not
 something anyone wants to look at; it only appears if no body can be built, or
 if the Overlay-row toggle is pressed.
