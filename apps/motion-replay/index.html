@@ -136,6 +136,17 @@
     position:relative; aspect-ratio:9/16; overflow:hidden;
   }
   .panel canvas, .panel video{width:100%; height:100%; object-fit:contain; display:block;}
+  .panel canvas.overlay{
+    position:absolute; inset:0; pointer-events:none; display:none;
+  }
+  .panel canvas.overlay.on{display:block;}
+  .transport button.toggle{
+    width:auto; padding:0 14px; font-size:12px; font-weight:700;
+    letter-spacing:.07em; text-transform:uppercase;
+  }
+  button.toggle[aria-pressed="true"]{
+    background:var(--iron); border-color:var(--iron); color:#fff;
+  }
   .panel .tag{
     position:absolute; top:7px; left:7px;
     font-size:10px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
@@ -245,6 +256,7 @@
         <div class="panel">
           <span class="tag">Original</span>
           <video id="origVideo" playsinline muted></video>
+          <canvas id="overlayCanvas" class="overlay"></canvas>
         </div>
         <div class="panel">
           <span class="tag">Render</span>
@@ -258,6 +270,7 @@
           <button id="playBtn" aria-label="Play">&#9654;</button>
           <button id="stepBack" aria-label="Previous frame">&#9664;</button>
           <button id="stepFwd" aria-label="Next frame">&#9654;</button>
+          <button id="overlayBtn" class="toggle" aria-pressed="false">Overlay</button>
           <div class="frameinfo" id="frameInfo">0 / 0</div>
         </div>
       </div>
@@ -337,6 +350,8 @@ const uploadCard = el('uploadCard');
 const viewer = el('viewer');
 const origVideo = el('origVideo');
 const renderCanvas = el('renderCanvas');
+const overlayCanvas = el('overlayCanvas');
+const overlayBtn = el('overlayBtn');
 const scrubber = el('scrubber');
 const playBtn = el('playBtn');
 const stepBack = el('stepBack');
@@ -541,7 +556,10 @@ async function runPipeline(file){
     sampleCtx.drawImage(stageVideo, 0, 0, sampleCanvas.width, sampleCanvas.height);
     const result = landmarker.detect(sampleCanvas);
     if (result.worldLandmarks && result.worldLandmarks.length){
-      frames[i] = { t, world: result.worldLandmarks[0] };
+      const world = result.worldLandmarks[0];
+      const image = result.landmarks && result.landmarks[0];
+      const fused = fuseImageXY(world, image, sampleCanvas.width, sampleCanvas.height);
+      frames[i] = { t, world: fused, imageMap: fused.imageMap || null };
       detected++;
     }
     if (i % 2 === 0 || i === total - 1){
@@ -613,6 +631,63 @@ async function runPipeline(file){
   goToFrame(0);
 }
 
+/* MediaPipe returns the pose twice: `worldLandmarks`, a metric 3D skeleton
+   hung off the hip centre, and `landmarks`, where each joint sits in the
+   IMAGE. Only the second one is actually observed. The 3D set's depth is
+   inferred from a single view, and driving the rig from all three of its axes
+   meant the one guessed axis was corrupting the two measured ones — the limb
+   would sit several degrees off where you can plainly see it in the frame.
+
+   So take x and y from the image and keep z from the 3D set, which is the only
+   depth there is. The image landmarks are normalised to the frame, so they are
+   put in pixels first and then fitted to the metric skeleton with one uniform
+   scale and offset, solved per frame by least squares over the visible joints.
+   Fitting rather than assuming a scale keeps this working as the subject walks
+   towards the camera.
+
+   This is an orthographic approximation: it ignores that a nearer joint
+   projects larger. Over one body at a normal shooting distance that is a small
+   error, and much smaller than the depth noise it replaces. */
+function fuseImageXY(world, image, W, H){
+  if (!image || image.length !== world.length) return world;
+  let sw = 0, px = 0, py = 0, wx = 0, wy = 0;
+  for (let i = 0; i < world.length; i++){
+    const v = world[i].visibility === undefined ? 1 : world[i].visibility;
+    if (!(v > 0)) continue;
+    sw += v;
+    px += v * image[i].x * W; py += v * image[i].y * H;
+    wx += v * world[i].x;     wy += v * world[i].y;
+  }
+  if (sw <= 0) return world;
+  px /= sw; py /= sw; wx /= sw; wy /= sw;
+
+  let num = 0, den = 0;
+  for (let i = 0; i < world.length; i++){
+    const v = world[i].visibility === undefined ? 1 : world[i].visibility;
+    if (!(v > 0)) continue;
+    const dpx = image[i].x * W - px, dpy = image[i].y * H - py;
+    num += v * (dpx * (world[i].x - wx) + dpy * (world[i].y - wy));
+    den += v * (dpx * dpx + dpy * dpy);
+  }
+  if (!(den > 1e-9)) return world;
+  const s = num / den;
+  if (!isFinite(s) || s === 0) return world;
+
+  const out = world.map((p, i) => ({
+    x: s * (image[i].x * W - px) + wx,
+    y: s * (image[i].y * H - py) + wy,
+    z: p.z,
+    visibility: p.visibility
+  }));
+  /* Kept so the overlay can run the same mapping backwards, from the posed
+     skeleton to where it belongs on the frame. NOT named `map`: this rides on
+     an array, and the pipeline calls `world.map(...)` all over the place, so
+     that name silently shadows Array.prototype.map and the run dies in
+     applySmoothing with the viewer never appearing. */
+  out.imageMap = { s, px, py, wx, wy, W, H };
+  return out;
+}
+
 function seekTo(video, t){
   return new Promise(res => {
     const onSeeked = () => { video.removeEventListener('seeked', onSeeked); res(); };
@@ -643,9 +718,18 @@ function applySmoothing(alpha){
         };
       });
     }
+    if (smoothedFrames[i] && cur) smoothedFrames[i].imageMap = cur.imageMap;
     prev = smoothedFrames[i];
   }
 }
+
+overlayBtn.addEventListener('click', () => {
+  overlayOn = !overlayOn;
+  overlayBtn.setAttribute('aria-pressed', String(overlayOn));
+  overlayCanvas.classList.toggle('on', overlayOn);
+  if (!overlayOn) clearOverlay();
+  renderFrame();
+});
 
 smoothSlider.addEventListener('input', () => {
   smoothOut.textContent = parseFloat(smoothSlider.value).toFixed(2);
@@ -658,6 +742,9 @@ smoothSlider.addEventListener('input', () => {
 let renderer, scene, camera;
 let boneMeshes = {}, jointMeshes = {}, headMesh, floorMesh;
 let netMesh = null;
+let overlayOn = false;
+let overlayCam = null;
+let overlayCtx = null;
 let shadowMesh = null;
 let capsuleGroup = null;      // the primitive rig, kept as the fallback body
 let mannequin = null;         // the skinned humanoid, once loaded
@@ -697,7 +784,7 @@ function setupScene(){
   _mTmp = new THREE.Vector3(); _mKnee = new THREE.Vector3();
   _sA = new THREE.Vector3(); _sB = new THREE.Vector3();
 
-  renderer = new THREE.WebGLRenderer({ canvas: renderCanvas, antialias: true, preserveDrawingBuffer: true });
+  renderer = new THREE.WebGLRenderer({ canvas: renderCanvas, antialias: true, preserveDrawingBuffer: true, alpha: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
   scene = new THREE.Scene();
@@ -1408,7 +1495,119 @@ function updateContactShadow(){
 }
 
 function renderFrame(){
-  if (renderer) renderer.render(scene, camera);
+  if (!renderer) return;
+  renderer.render(scene, camera);
+  if (overlayOn) renderOverlay();
+}
+
+/* Draw the posed mannequin back onto the frame it came from.
+
+   The reconstruction is only believable if it lines up with the footage, and
+   the only way to know whether it does is to look at the two together. The
+   fusion already solved a mapping from image pixels to the metric skeleton;
+   running it backwards gives the camera that puts the model where the person
+   is. It is an orthographic camera, because that mapping is a uniform scale
+   with no perspective in it.
+
+   The model keeps its own proportions, so only the hips are placed exactly and
+   the limbs land where the model's bone lengths put them. That mismatch is the
+   point: a limb that sits off the person is the reconstruction being wrong,
+   and now you can see it rather than guess. */
+function renderOverlay(){
+  const pts = smoothedFrames[currentFrame];
+  const m = pts && pts.imageMap;
+  if (!m || !mannequin || !origVideo.videoWidth){ clearOverlay(); return; }
+
+  const host = overlayCanvas.parentElement;
+  const cw = host.clientWidth, ch = host.clientHeight;
+  if (!cw || !ch) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (overlayCanvas.width !== Math.round(cw*dpr) || overlayCanvas.height !== Math.round(ch*dpr)){
+    overlayCanvas.width = Math.round(cw*dpr); overlayCanvas.height = Math.round(ch*dpr);
+  }
+  if (!overlayCtx) overlayCtx = overlayCanvas.getContext('2d');
+
+  /* The video is object-fit: contain, so work out the letterboxed rectangle it
+     actually occupies; the overlay has to sit in that box, not the whole panel. */
+  const vw = origVideo.videoWidth, vh = origVideo.videoHeight;
+  const scale = Math.min(cw / vw, ch / vh);
+  const dw = vw * scale, dh = vh * scale;
+  const dx = (cw - dw) / 2, dy = (ch - dh) / 2;
+
+  if (!overlayCam) overlayCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 200);
+  // pixels -> metric skeleton is  w = s*(p - pbar) + wbar, so run it backwards
+  overlayCam.left   = m.wx + m.s * (0      - m.px);
+  overlayCam.right  = m.wx + m.s * (m.W    - m.px);
+  overlayCam.top    = -(m.wy + m.s * (0    - m.py));
+  overlayCam.bottom = -(m.wy + m.s * (m.H  - m.py));
+  overlayCam.position.set(0, 0, 60);
+  overlayCam.lookAt(0, 0, 0);
+  overlayCam.updateProjectionMatrix();
+
+  /* Put the model's hips on the hips that were detected. Everything upstream
+     works on differences between landmarks, so the fused set is centred on the
+     joint centroid rather than the hips and this offset is not zero. */
+  const lh = pts[IDX.leftHip], rh = pts[IDX.rightHip];
+  if (!lh || !rh){ clearOverlay(); return; }
+  _mTmp.set((lh.x + rh.x) / 2, -(lh.y + rh.y) / 2, -(lh.z + rh.z) / 2);
+  mannequin.updateMatrixWorld(true);
+  _bA.setFromMatrixPosition(bones[boneKey('mixamorig:Hips')].matrixWorld);
+
+  /* Match the model to the person's size before placing it. The mannequin is
+     normalised to SKELETON_HEIGHT, the landmarks are in their own metric, and
+     without this the overlay is a correct pose at the wrong scale, which reads
+     as the reconstruction being wrong. Torso length is the yardstick: it is
+     the one span that barely changes as a body moves. */
+  const keepScale = mannequin.scale.clone();
+  const keepPos = mannequin.position.clone();
+  const keepFloor = floorMesh ? floorMesh.visible : false;
+  const keepNet = netMesh ? netMesh.visible : false;
+  const keepShadow = shadowMesh ? shadowMesh.visible : false;
+  const keepBg = scene.background;
+
+  const sp2 = bones[boneKey('mixamorig:Spine2')];
+  if (sp2){
+    _bB.setFromMatrixPosition(sp2.matrixWorld);
+    const modelTorso = _bB.distanceTo(_bA);
+    const ls2 = pts[IDX.leftShoulder], rs2 = pts[IDX.rightShoulder];
+    if (modelTorso > 1e-6 && ls2 && rs2){
+      _mPelvis.set((ls2.x + rs2.x)/2, -(ls2.y + rs2.y)/2, -(ls2.z + rs2.z)/2);
+      const seenTorso = _mPelvis.distanceTo(_mTmp);
+      const k = seenTorso / modelTorso;
+      if (isFinite(k) && k > 0.2 && k < 5){
+        mannequin.scale.multiplyScalar(k);
+        mannequin.updateMatrixWorld(true);
+        _bA.setFromMatrixPosition(bones[boneKey('mixamorig:Hips')].matrixWorld);
+      }
+    }
+  }
+  mannequin.position.add(_mTmp).sub(_bA);
+  if (floorMesh) floorMesh.visible = false;
+  if (netMesh) netMesh.visible = false;
+  if (shadowMesh) shadowMesh.visible = false;
+  scene.background = null;
+  renderer.setClearAlpha(0);
+  renderer.render(scene, overlayCam);
+
+  overlayCtx.setTransform(1, 0, 0, 1, 0, 0);
+  overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+  overlayCtx.globalAlpha = 0.62;
+  overlayCtx.drawImage(renderCanvas, dx*dpr, dy*dpr, dw*dpr, dh*dpr);
+  overlayCtx.globalAlpha = 1;
+
+  // put everything back and redraw the real view, which shares this canvas
+  mannequin.position.copy(keepPos);
+  mannequin.scale.copy(keepScale);
+  if (floorMesh) floorMesh.visible = keepFloor;
+  if (netMesh) netMesh.visible = keepNet;
+  if (shadowMesh) shadowMesh.visible = keepShadow;
+  scene.background = keepBg;
+  renderer.setClearAlpha(1);
+  renderer.render(scene, camera);
+}
+
+function clearOverlay(){
+  if (overlayCtx) overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 }
 
 /* ---------------- transport ---------------- */

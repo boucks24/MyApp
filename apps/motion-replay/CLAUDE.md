@@ -70,6 +70,61 @@ So the limb fidelity ceiling is the landmarks. What is worth working on is
 everything else: where the body sits, how it deforms, and whether the parts
 nothing drives look deliberate.
 
+## The two landmark sets, and which one to believe
+
+MediaPipe returns the pose twice. `worldLandmarks` is a metric 3D skeleton
+hung off the hip centre; `landmarks` puts each joint in the IMAGE. Only the
+second is actually observed — the 3D set's depth is inferred from one view —
+and driving the rig from all three of its axes let the one guessed axis
+corrupt the two measured ones.
+
+`fuseImageXY()` takes x and y from the image and keeps z from the 3D set,
+which is the only depth there is. Image landmarks are normalised to the frame,
+so they are put in pixels and then fitted to the metric skeleton with one
+uniform scale and offset, solved per frame by weighted least squares over the
+visible joints. Fitting rather than assuming a scale keeps it working as the
+subject walks toward the camera. It is an orthographic approximation — it
+ignores that a nearer joint projects larger — which over one body at a normal
+shooting distance is much smaller than the depth noise it replaces.
+
+Measured on the ground-truth harness, fusion on against off:
+
+| clip | limb median off | on |
+| --- | --- | --- |
+| walk | 12.3 deg | **11.0** |
+| run  | 23.3 deg | **22.3** |
+
+Every bone on the walk improved except `Spine2`, and the torso (`Hips`) went
+20.3 to 14.3. So it is a consistent win, but a modest one on limbs and nearly
+nothing on fast motion, where motion blur degrades the 2D landmarks too. Do
+not expect it to rescue bad footage.
+
+**The fused array carries its mapping as `imageMap`, never `map`.** It rides on
+an array and the pipeline calls `world.map(...)` in several places, so that
+name silently shadows `Array.prototype.map`; the symptom is the run dying
+inside `applySmoothing` with the viewer simply never appearing.
+
+Fusion also moves the origin: the fused set is centred on the joint centroid
+rather than the hip centre. Nothing downstream cares, because the retargeting
+only ever uses differences between landmarks — but the overlay does, and has
+to place the hips explicitly.
+
+## Overlay
+
+`renderOverlay()` draws the posed mannequin back onto the frame it came from,
+because the only way to know whether a reconstruction matches the footage is
+to look at the two together. It runs the fusion's mapping backwards to get an
+orthographic camera — orthographic because that mapping is a uniform scale
+with no perspective in it — then scales the model so its torso matches the
+observed one and puts its hips on the detected hips.
+
+The model keeps its own proportions, so only the hips land exactly. That
+mismatch is the point: a limb sitting off the person is the reconstruction
+being wrong, where before you could only guess. It shares the one WebGL canvas
+with the main view (render overlay camera, copy the canvas out to a 2D canvas
+over the video, restore and re-render), so `suite2.mjs` checks both that the
+overlay paints and that the normal render survives the toggle.
+
 The hips basis is the one place a sign error hides. The rig's rest pose faces
 **+Z with +Y up, which puts its left-to-right body axis on -X**, so the basis
 columns are `(-across, up, facing)` and `facing = up x across`, not
