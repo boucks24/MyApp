@@ -127,17 +127,48 @@ Things that are not obvious:
   floor read `reliefBounds` in this mode. Leaving them on `manBounds` frames
   the scene for a mannequin that is no longer on screen.
 
-Masks are far too big to keep per frame, so the body is rebuilt for whichever
-frame is showing, with the landmarker held open rather than closed at the end
-of the pipeline. `reliefBusy` drops requests that arrive mid-build so a scrub
-does not queue dozens of them.
+**Relief is the default view.** The rig is a reference for the volume, not
+something anyone wants to look at; it only appears if no body can be built, or
+if the Overlay-row toggle is pressed.
 
-**Where it stands:** structurally right and shipping, visually a first pass.
-The surface is lumpy and the head is a blob, and both get worse the smaller
-the subject is in frame, because everything here is resolution-bound by the
-matte. The honest next lever is a real monocular depth model over the matte
-instead of a rig prior; that is a download in the tens of MB and a different
-trade.
+Three things had to be true before it could be the default, and each was wrong
+at first:
+
+- **Build it once, not during playback.** Each build allocates full-frame
+  float buffers and does two GPU readbacks, so doing that inside the playback
+  loop pinned the main thread and the page stopped answering. Every frame's
+  body is now built up front by `precomputeRelief()` with a progress bar, and
+  playback is a buffer swap into one reused geometry. `RELIEF_CACHE_MAX` caps
+  the clip length; past it relief is refused with a note rather than
+  attempted.
+- **Crop to the subject.** A player can be a fraction of the frame, so the
+  distance transform, the blurs and the readbacks were spending nearly all
+  their time on empty court and then throwing that resolution away decimating
+  the mesh. Everything now runs on the matte's bounding box resampled to
+  `RELIEF_WORK`. It is both the speed fix and the quality fix: the body gets
+  the working grid to itself.
+- **Keep the matte from the detection pass.** Re-detecting per frame to get a
+  matte doubled the pipeline's work and was the single biggest cost. A float
+  matte per frame is tens of MB, which is why it was not kept; but cropped,
+  resampled to the working grid and packed one bit per pixel it is about 18KB
+  a frame, so `packMatte()` stores it during detection and the landmarker is
+  closed at the end of the pass as before.
+
+**Scale matters because the court does not move.** The body is normalised to
+`SKELETON_HEIGHT`, the same height the rig uses, over the whole clip at once.
+Left at the subject's own metric scale it came out shorter than the rig and
+waded through a net built for someone else. `reliefBounds` is padded by about
+7% as well, because `frameCamera()` shrinks what it is handed by 8% (the rig's
+`manBounds` already carries `meshPad`), and exact bounds cropped the head off
+every frame. The floor still reads the unpadded minimum, so the feet stay on
+the ground.
+
+**Where it stands:** the body is the person's, closed, correctly scaled
+against the court, and it animates. The head is still blobby — a cap merges
+into the skull — and fine surface detail is not there, because all of it is
+bounded by the matte's resolution. The next real lever is a monocular depth
+model over the matte in place of the rig prior, which needs a host this
+environment currently denies.
 
 ## Measuring pose accuracy
 
