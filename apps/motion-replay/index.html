@@ -273,6 +273,7 @@
         <div class="panel">
           <span class="tag">Render</span>
           <canvas id="renderCanvas"></canvas>
+          <canvas id="silCanvas" class="overlay on"></canvas>
         </div>
       </div>
 
@@ -282,7 +283,7 @@
           <button id="playBtn" aria-label="Play">&#9654;</button>
           <button id="stepBack" aria-label="Previous frame">&#9664;</button>
           <button id="stepFwd" aria-label="Next frame">&#9654;</button>
-          <button id="reliefBtn" class="toggle" aria-pressed="false">From frames</button>
+          <button id="reliefBtn" class="toggle" aria-pressed="true">Silhouette</button>
           <button id="overlayBtn" class="toggle" aria-pressed="false">Overlay</button>
           <div class="frameinfo" id="frameInfo">0 / 0</div>
         </div>
@@ -380,6 +381,7 @@ const origVideo = el('origVideo');
 const renderCanvas = el('renderCanvas');
 const overlayCanvas = el('overlayCanvas');
 const overlayBtn = el('overlayBtn');
+const silCanvas = el('silCanvas');
 const scrubber = el('scrubber');
 const playBtn = el('playBtn');
 const stepBack = el('stepBack');
@@ -587,7 +589,7 @@ async function runPipeline(file){
   sampleCanvas.height = stageVideo.videoHeight;
 
   frames = new Array(total).fill(null);
-  reliefCache = []; reliefFrame = -1; reliefBounds = null;
+  reliefCache = []; reliefFrame = -1; reliefBounds = null; silCache = [];
   let detected = 0;
 
   for (let i = 0; i < total; i++){
@@ -689,20 +691,18 @@ async function runPipeline(file){
     progText.textContent = `Building the body from the frames… ${Math.round(f*100)}%`;
   });
   progWrap.classList.remove('show');
-  if (built && showRelief(0)){
-    viewMode = 'relief';
-    reliefBtn.setAttribute('aria-pressed', 'true');
-    frameCamera();
-    renderFrame();
+  if (built) showRelief(0);
+  silCache = [];
+  if (styliseFrame(0)){
+    viewMode = 'silhouette';
   } else {
-    viewMode = 'model';
-    reliefBtn.setAttribute('aria-pressed', 'false');
-    reliefBtn.disabled = true;
-    detectNote.textContent += frameCount > RELIEF_CACHE_MAX
-      ? ` This clip is ${frameCount} frames, too many to build a body for each one, so this is the reference rig.`
-      : ' A body could not be built from these frames, so this is the reference rig.';
-    renderFrame();
+    viewMode = built ? 'relief' : 'model';
+    detectNote.textContent += ' No body could be cut out of these frames, so this is the reference rig.';
   }
+  reliefBtn.textContent = VIEW_LABEL[viewMode];
+  reliefBtn.setAttribute('aria-pressed', String(viewMode !== 'model'));
+  frameCamera();
+  renderFrame();
 }
 
 /* MediaPipe returns the pose twice: `worldLandmarks`, a metric 3D skeleton
@@ -956,11 +956,14 @@ bodyInput.addEventListener('change', () => {
 
 const reliefBtn = el('reliefBtn');
 reliefBtn.setAttribute('aria-pressed', 'true');   // relief is the default view
+const VIEW_ORDER = ['silhouette', 'relief', 'model'];
+const VIEW_LABEL = { silhouette:'Silhouette', relief:'Mesh', model:'Rig' };
 reliefBtn.addEventListener('click', () => {
-  const want = viewMode === 'model' ? 'relief' : 'model';
-  if (want === 'relief' && !showRelief(currentFrame)) return;
+  let want = VIEW_ORDER[(VIEW_ORDER.indexOf(viewMode) + 1) % VIEW_ORDER.length];
+  if (want === 'relief' && !showRelief(currentFrame)) want = 'model';
   viewMode = want;
-  reliefBtn.setAttribute('aria-pressed', String(viewMode === 'relief'));
+  reliefBtn.textContent = VIEW_LABEL[viewMode];
+  reliefBtn.setAttribute('aria-pressed', String(viewMode !== 'model'));
   frameCamera();
   renderFrame();
 });
@@ -990,8 +993,9 @@ let overlayCtx = null;
 
 let reliefMesh = null, reliefFrame = -1, reliefBusy = false, reliefBounds = null;
 let reliefCache = [], reliefScale = 1, reliefLift = 0;
+let silCache = [], silFrame = -1, sil2d = null;
 const RELIEF_CACHE_MAX = 240;   // past this the clip is too long to hold
-let viewMode = 'model';
+let viewMode = 'silhouette';
 let bodyMaterial = null;      // 'model' = the posed rig, 'relief' = built from frames
 let shadowMesh = null;
 let capsuleGroup = null;      // the primitive rig, kept as the fallback body
@@ -1852,7 +1856,43 @@ function renderFrame(){
   if (mannequin) mannequin.visible = (viewMode === 'model');
   if (reliefMesh) reliefMesh.visible = (viewMode === 'relief');
   renderer.render(scene, camera);
+  if (viewMode === 'silhouette') drawSilhouette();
+  else if (sil2d) sil2d.clearRect(0, 0, silCanvas.width, silCanvas.height);
   if (overlayOn) renderOverlay();
+}
+
+/* The court, net and shadow are still a 3D scene; only the body is drawn
+   flat on top of it. Placed by projecting the floor and a figure's height
+   into screen space, so it stands on the court at the right size instead of
+   being pasted at a guessed scale. */
+function drawSilhouette(){
+  let sf = silCache[currentFrame];
+  if (sf === undefined){
+    sf = styliseFrame(currentFrame) || null;
+    silCache[currentFrame] = sf;
+  }
+  if (!sf) return;
+  const cv = sf.cv;
+  /* Its own canvas over the render, because a canvas cannot hand out both a
+     WebGL and a 2D context. */
+  if (silCanvas.width !== renderCanvas.width || silCanvas.height !== renderCanvas.height){
+    silCanvas.width = renderCanvas.width; silCanvas.height = renderCanvas.height;
+    sil2d = null;
+  }
+  if (!sil2d) sil2d = silCanvas.getContext('2d');
+  if (!sil2d) return;
+
+  const floorY = (groundRef !== null) ? groundRef : -SKELETON_HEIGHT/2;
+  _bA.set(0, floorY, 0).project(camera);
+  _bB.set(0, floorY + SKELETON_HEIGHT, 0).project(camera);
+  const W = silCanvas.width, H = silCanvas.height;
+  const footPx = (1 - _bA.y) * 0.5 * H;
+  const headPx = (1 - _bB.y) * 0.5 * H;
+  const tall = Math.max(24, footPx - headPx);
+  const k = tall / (sf.bot - sf.top + 1);          // scale by the BODY, not the canvas
+  const w = cv.width * k, hgt = cv.height * k;
+  sil2d.clearRect(0, 0, W, H);
+  sil2d.drawImage(cv, (W - w)/2, footPx - (sf.bot + 1)*k, w, hgt);
 }
 
 /* Relief is rebuilt for whichever frame is showing, so the render has to wait
@@ -1923,6 +1963,8 @@ function renderOverlay(){
      the one span that barely changes as a body moves. */
   const keepScale = mannequin.scale.clone();
   const keepPos = mannequin.position.clone();
+  const keepVis = mannequin.visible;
+  const keepRelief = reliefMesh ? reliefMesh.visible : false;
   const keepFloor = floorMesh ? floorMesh.visible : false;
   const keepNet = netMesh ? netMesh.visible : false;
   const keepShadow = shadowMesh ? shadowMesh.visible : false;
@@ -1945,6 +1987,11 @@ function renderOverlay(){
     }
   }
   mannequin.position.add(_mTmp).sub(_bA);
+  /* The overlay exists to show the RIG against the footage, so it has to be
+     drawn whatever the main view is showing. Without this it silently drew
+     nothing in every mode that hides the rig. */
+  mannequin.visible = true;
+  if (reliefMesh) reliefMesh.visible = false;
   if (floorMesh) floorMesh.visible = false;
   if (netMesh) netMesh.visible = false;
   if (shadowMesh) shadowMesh.visible = false;
@@ -1961,6 +2008,8 @@ function renderOverlay(){
   // put everything back and redraw the real view, which shares this canvas
   mannequin.position.copy(keepPos);
   mannequin.scale.copy(keepScale);
+  mannequin.visible = keepVis;
+  if (reliefMesh) reliefMesh.visible = keepRelief;
   if (floorMesh) floorMesh.visible = keepFloor;
   if (netMesh) netMesh.visible = keepNet;
   if (shadowMesh) shadowMesh.visible = keepShadow;
@@ -2416,6 +2465,112 @@ function taubinSmooth(pos, tri, nVerts, iters){
   for (let i = 0; i < iters; i++){ step(LAMBDA); step(MU); }
 }
 
+/* ---------------------------------------------------------------
+   Silhouette shading: the look, done in 2D.
+
+   Reconstructing geometry and lighting it keeps running into the same wall —
+   the mesh is only ever as good as a monocular depth guess, and every
+   artefact in it shows up as a lump. But the thing being aimed at is a flat
+   image of a white figure, and that can be made directly.
+
+   Isolating the body and recolouring the PHOTO does not work: a shirt,
+   shorts and shoes are torso-sized patches of different albedo, so any blur
+   wide enough to even them out also flattens the shading, and anything
+   narrower leaves hair and shoes as black holes. Shading the MATTE instead
+   makes the body uniformly white by construction. The distance transform
+   gives a rounded cross-section, its gradient gives a surface normal, and
+   that takes a light. The depth model, when it loaded, adds its relief to
+   that height field first, so the folds and the chest come through.
+
+   This needs no pixels from the frame beyond the matte already stored, so
+   there is nothing extra to keep per frame. */
+const SIL_LIGHT = [-0.46, -0.62, 0.64];     // above, front, camera-left
+
+function styliseFrame(i){
+  const f = frames[i];
+  const mt = f && f.matte;
+  if (!mt) return null;
+  const { MW, MH } = mt;
+  const N = MW*MH;
+  const matte = boxBlur(unpackMatte(mt), MW, MH, 2, 2);
+  const dist = distanceTransform(matte, MW, MH);
+  const span = Math.max(MW, MH);
+
+  const thickB = boxBlur(dist, MW, MH, Math.max(4, Math.round(span*0.05)), 2);
+  const h = new Float32Array(N);
+  for (let k = 0; k < N; k++){
+    const e = dist[k], R = Math.max(thickB[k], e, 2);
+    h[k] = Math.sqrt(Math.max(0, 2*R*e - e*e));
+  }
+
+  // the depth model's relief, on top of the rounded base
+  const dq = f.depth;
+  if (dq){
+    const dm = new Float32Array(N);
+    const sp = (dq.hi - dq.lo)/255;
+    for (let y = 0; y < MH; y++){
+      const sy2 = Math.min(DEPTH_H-1, Math.floor(y*DEPTH_H/MH));
+      for (let x = 0; x < MW; x++){
+        dm[y*MW+x] = dq.q[sy2*DEPTH_W + Math.min(DEPTH_W-1, Math.floor(x*DEPTH_W/MW))]*sp + dq.lo;
+      }
+    }
+    const lowf = boxBlur(dm, MW, MH, Math.max(3, Math.round(span/22)), 2);
+    const amps = [];
+    for (let k = 0; k < N; k++) if (matte[k] > 0.5) amps.push(Math.abs(dm[k]-lowf[k]));
+    amps.sort((a, b) => a - b);
+    const amp = amps[Math.floor(amps.length*0.9)] || 0;
+    if (amp > 1e-6){
+      let cov = 0;
+      for (let k = 0; k < N; k++) if (matte[k] > 0.5) cov += (dm[k]-lowf[k]) * (h[k] - thickB[k]);
+      const g = (cov < 0 ? -1 : 1) * (span*0.035) / amp;
+      for (let k = 0; k < N; k++) h[k] += (dm[k]-lowf[k])*g;
+    }
+  }
+  const hs = boxBlur(h, MW, MH, Math.max(2, Math.round(span*0.012)), 2);
+
+  const cv = document.createElement('canvas');
+  cv.width = MW; cv.height = MH;
+  const ctx2 = cv.getContext('2d');
+  const img = ctx2.createImageData(MW, MH);
+  const od = img.data;
+  const [LX, LY, LZ] = SIL_LIGHT;
+  const rimW = Math.max(2, Math.round(span*0.012));
+  for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++){
+    const k = y*MW+x;
+    const a = Math.min(1, Math.max(0, (matte[k]-0.35)/0.3));
+    if (a <= 0){ od[k*4+3] = 0; continue; }
+    const xm = x > 0 ? k-1 : k, xp = x < MW-1 ? k+1 : k;
+    const ym = y > 0 ? k-MW : k, yp = y < MH-1 ? k+MW : k;
+    let nx = -(hs[xp]-hs[xm])*0.5, ny = -(hs[yp]-hs[ym])*0.5, nz = 1;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    nx /= len; ny /= len; nz /= len;
+    const dif = Math.max(0, nx*LX + ny*LY + nz*LZ);
+    let v = 0.44 + 0.62*dif + Math.pow(dif, 24)*0.55;
+    v = Math.max(0.10, Math.min(1.08, v));
+    let r = v, g = v, b = v;
+    const e = dist[k];
+    if (e < rimW){
+      const t = Math.pow(1 - e/rimW, 1.7);
+      r += t*0.60; g += t*0.72; b += t*0.16;
+    }
+    od[k*4] = Math.min(255, r*255); od[k*4+1] = Math.min(255, g*255);
+    od[k*4+2] = Math.min(255, b*255); od[k*4+3] = a*255;
+  }
+  ctx2.putImageData(img, 0, 0);
+
+  /* Where the body actually starts and stops inside the canvas. The matte is
+     cropped with padding, so the canvas edge is empty space; aligning that to
+     the floor left the figure hovering above the court. */
+  let top = MH, bot = -1;
+  for (let y = 0; y < MH; y++){
+    for (let x = 0; x < MW; x++){
+      if (matte[y*MW+x] > 0.5){ if (y < top) top = y; if (y > bot) bot = y; break; }
+    }
+  }
+  if (bot < top) return null;
+  return { cv, top, bot };
+}
+
 function showRelief(i){
   const c = reliefCache[i];
   if (!c) return false;
@@ -2562,7 +2717,14 @@ exportBtn.addEventListener('click', async () => {
     if (typeof MediaRecorder === 'undefined' || !renderCanvas.captureStream){
       throw new Error('This browser cannot record a canvas');
     }
-    const stream = renderCanvas.captureStream(Math.round(1 / frameDuration));
+    /* Capture a composite, not the WebGL canvas. The silhouette is drawn on
+       a separate 2D layer over the render, so streaming renderCanvas alone
+       exported an empty court — a 39KB file of nothing, which is easy to miss
+       because the export still "worked". */
+    const exportCanvas = document.createElement('canvas');
+    exportCanvas.width = renderCanvas.width; exportCanvas.height = renderCanvas.height;
+    const exportCtx = exportCanvas.getContext('2d');
+    const stream = exportCanvas.captureStream(Math.round(1 / frameDuration));
     const chunks = [];
     const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
     const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 });
@@ -2574,6 +2736,10 @@ exportBtn.addEventListener('click', async () => {
     // playback pace rather than as fast as they can be drawn.
     for (let i = 0; i < frameCount; i++){
       goToFrame(i);
+      exportCtx.drawImage(renderCanvas, 0, 0);
+      if (viewMode === 'silhouette' && silCanvas.width){
+        exportCtx.drawImage(silCanvas, 0, 0, exportCanvas.width, exportCanvas.height);
+      }
       exportProgFill.style.width = Math.round((i / frameCount) * 100) + '%';
       exportProgText.textContent = `Encoding… frame ${i+1} of ${frameCount}`;
       await new Promise(r => setTimeout(r, Math.max(16, frameDuration * 1000)));

@@ -83,6 +83,51 @@ overhead, lime kicker low and behind — and runs it through `PMREMGenerator`.
 No HDRI fetch, and it only touches PBR materials, so the unlit court is
 unaffected.
 
+## Silhouette: the default, and the one that actually looks right
+
+Reconstructing geometry and lighting it keeps hitting the same wall — the
+mesh is only ever as good as a monocular depth guess, and every artefact in
+it shows up as a lump. But the thing being aimed at is a flat image of a
+white figure, and that can be made directly.
+
+`styliseFrame()` isolates the body and shades it in 2D, and the court, net
+and shadow stay a real 3D scene underneath. `drawSilhouette()` places the
+figure by projecting the floor and a figure's height into screen space, so it
+stands on the court at the right size.
+
+**Recolouring the photo does not work, and this is the thing to understand
+before trying again.** A shirt, shorts and shoes are torso-sized patches of
+different albedo. Dividing by a blurred copy of the luminance evens them out
+— but any blur wide enough to flatten a torso also flattens the shading, and
+anything narrower leaves hair, cap and shoes as black holes. Both were tried;
+both look wrong in different ways.
+
+**Shading the MATTE makes the body uniformly white by construction.** The
+distance transform gives a rounded cross-section, its gradient gives a
+surface normal, and that normal takes a light. The depth model's relief is
+added to that height field first, so folds and the chest come through. The
+photo's own tones are not used at all: a `photoMix` term was tried and the
+version with it at zero was cleaner, because what it mostly contributed was
+the shirt's shadow as a smudge.
+
+This needs nothing per frame beyond the matte already stored, so it is cheap
+and there is no extra memory.
+
+Two things that bite:
+
+- A canvas cannot hand out both a WebGL and a 2D context, so the figure needs
+  `silCanvas` over the render rather than drawing into it.
+- **Export must capture a composite.** `renderCanvas.captureStream()` records
+  the WebGL layer only, so the export silently produced an empty court — a
+  valid 39KB file of nothing, which is easy to miss because the export still
+  "succeeded". `suite2.mjs` asserts on file size for exactly this.
+- Align the figure by where the matte actually starts and stops, not by the
+  canvas edge: the crop carries padding, and using the edge left it hovering.
+
+The view button cycles **Silhouette → Mesh → Rig**. Overlay still draws the
+rig whatever the main view is, because that is its whole purpose; it forces
+the mannequin visible for its pass and restores it afterwards.
+
 ## Relief mode: outline from the frame, volume from the rig
 
 The reference look is a clothed athlete, and no rig that can be vendored here
