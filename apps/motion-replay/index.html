@@ -282,6 +282,7 @@
           <button id="playBtn" aria-label="Play">&#9654;</button>
           <button id="stepBack" aria-label="Previous frame">&#9664;</button>
           <button id="stepFwd" aria-label="Next frame">&#9654;</button>
+          <button id="reliefBtn" class="toggle" aria-pressed="false">From frames</button>
           <button id="overlayBtn" class="toggle" aria-pressed="false">Overlay</button>
           <div class="frameinfo" id="frameInfo">0 / 0</div>
         </div>
@@ -538,6 +539,7 @@ async function runPipeline(file){
     baseOptions: { modelAssetPath: MODEL_URLS[modelSelect.value] || MODEL_URLS.full, delegate: 'GPU' },
     runningMode: 'IMAGE',
     numPoses: 1,
+    outputSegmentationMasks: true,
     minPoseDetectionConfidence: 0.5,
     minPosePresenceConfidence: 0.5,
     minTrackingConfidence: 0.5
@@ -548,7 +550,7 @@ async function runPipeline(file){
 
   if (videoURL) URL.revokeObjectURL(videoURL);
   videoURL = URL.createObjectURL(file);
-  const stageVideo = document.createElement('video');
+  const stageVideo = reliefVideo = document.createElement('video');
   stageVideo.src = videoURL;
   stageVideo.muted = true;
   stageVideo.playsInline = true;
@@ -588,7 +590,10 @@ async function runPipeline(file){
     }
   }
 
-  landmarker.close();
+  /* Kept open, not closed. Relief mode needs the matte for whichever frame is
+     on screen, and a matte per frame is tens of MB on a long clip, so it is
+     recomputed on demand instead of stored. */
+  reliefLandmarker = landmarker;
   frameCount = total;
   detectedRatio = detected / total;
 
@@ -761,6 +766,25 @@ bodyInput.addEventListener('change', () => {
   bodyName.textContent = f.name + ' — loads when you build the replay.';
 });
 
+const reliefBtn = el('reliefBtn');
+reliefBtn.addEventListener('click', async () => {
+  const want = viewMode === 'model' ? 'relief' : 'model';
+  if (want === 'relief'){
+    reliefBtn.disabled = true;
+    reliefBtn.textContent = 'Building…';
+    const ok = await buildRelief(currentFrame);
+    reliefBtn.disabled = false;
+    reliefBtn.textContent = 'From frames';
+    if (!ok){
+      detectNote.textContent += ' Could not build a body from this frame.';
+      return;
+    }
+  }
+  viewMode = want;
+  reliefBtn.setAttribute('aria-pressed', String(viewMode === 'relief'));
+  renderFrame();
+});
+
 overlayBtn.addEventListener('click', () => {
   overlayOn = !overlayOn;
   overlayBtn.setAttribute('aria-pressed', String(overlayOn));
@@ -783,6 +807,10 @@ let netMesh = null;
 let overlayOn = false;
 let overlayCam = null;
 let overlayCtx = null;
+let reliefLandmarker = null, reliefVideo = null;
+let reliefMesh = null, reliefFrame = -1, reliefBusy = false, reliefBounds = null;
+let viewMode = 'model';
+let bodyMaterial = null;      // 'model' = the posed rig, 'relief' = built from frames
 let shadowMesh = null;
 let capsuleGroup = null;      // the primitive rig, kept as the fallback body
 let mannequin = null;         // the skinned humanoid, once loaded
@@ -949,12 +977,17 @@ function frameCamera(){
      measureMannequin() walks the clip and records where the bones actually go,
      so the fit covers every pose in the take. */
   if (modelReady && manBounds){
-    const halfH = Math.max((manBounds.maxY - manBounds.minY) / 2, 0.6) * 0.92;
-    const midY = (manBounds.maxY + manBounds.minY) / 2;
-    const halfW = Math.max(manBounds.halfX, 0.45);
+    const B = (viewMode === 'relief' && reliefBounds)
+      ? { minY: reliefBounds.min.y, maxY: reliefBounds.max.y,
+          halfX: Math.max(Math.abs(reliefBounds.min.x), Math.abs(reliefBounds.max.x)),
+          maxZ: reliefBounds.max.z }
+      : manBounds;
+    const halfH = Math.max((B.maxY - B.minY) / 2, 0.6) * 0.92;
+    const midY = (B.maxY + B.minY) / 2;
+    const halfW = Math.max(B.halfX, 0.45);
     const vFov = camera.fov * Math.PI / 180;
     const tanV = Math.tan(vFov / 2), tanH = tanV * camera.aspect;
-    const dist = Math.max(halfH / tanV, halfW / tanH) * 1.02 + manBounds.maxZ;
+    const dist = Math.max(halfH / tanV, halfW / tanH) * 1.02 + B.maxZ;
     /* Slightly above, aimed slightly below centre. Dead level puts the floor's
        horizon at eye height, so the court only appears far behind the figure
        and it looks like it is floating. */
@@ -965,7 +998,8 @@ function frameCamera(){
     /* manBounds is padded outwards so the camera clears the mesh; using it for
        the ground put the floor a hand's width below the feet and left the
        figure hovering over its own shadow. The floor belongs under the sole. */
-    const ground = (groundRef !== null) ? groundRef - soleDrop : manBounds.minY;
+    const ground = (viewMode === 'relief' && reliefBounds) ? reliefBounds.min.y
+                 : ((groundRef !== null) ? groundRef - soleDrop : manBounds.minY);
     if (floorMesh) floorMesh.position.y = ground;
     if (netMesh) netMesh.position.y = ground + 0.475;
     if (shadowMesh) shadowMesh.position.y = ground + 0.005;
@@ -1102,10 +1136,11 @@ async function loadMannequin(){
      A plain low roughness cannot do that — it blurs the body tone and the
      specular together and reads as shiny plastic. Clearcoat keeps them
      separate: a slightly matte white underneath, a glossy layer over it. */
-  const skin = new THREE.MeshPhysicalMaterial({
+  const skin = bodyMaterial = bodyMaterial || new THREE.MeshPhysicalMaterial({
     color: 0xF6F4EF, roughness: 0.42, metalness: 0.0,
     clearcoat: 1.0, clearcoatRoughness: 0.08,
-    sheen: 0.35, sheenRoughness: 0.7, sheenColor: new THREE.Color(0xFFFFFF)
+    sheen: 0.35, sheenRoughness: 0.7, sheenColor: new THREE.Color(0xFFFFFF),
+    side: THREE.DoubleSide
   });
   root.traverse(o => {
     if (o.isMesh || o.isSkinnedMesh){
@@ -1631,8 +1666,20 @@ function updateContactShadow(){
 
 function renderFrame(){
   if (!renderer) return;
+  if (mannequin) mannequin.visible = (viewMode === 'model');
+  if (reliefMesh) reliefMesh.visible = (viewMode === 'relief');
   renderer.render(scene, camera);
   if (overlayOn) renderOverlay();
+}
+
+/* Relief is rebuilt for whichever frame is showing, so the render has to wait
+   for it. Scrubbing fires faster than a build takes; reliefBusy drops the
+   intervening requests and the last one wins. */
+async function syncRelief(){
+  if (viewMode !== 'relief') return;
+  if (reliefFrame === currentFrame || reliefBusy) return;
+  const ok = await buildRelief(currentFrame);
+  if (ok) renderFrame();
 }
 
 /* Draw the posed mannequin back onto the frame it came from.
@@ -1741,6 +1788,317 @@ function renderOverlay(){
   renderer.render(scene, camera);
 }
 
+/* ------------------------------------------------------------------
+   Relief: a body built from the frame, with the rig only as a depth prior.
+
+   The photo knows the OUTLINE exactly — this person, their shirt, their
+   shorts, their shoes — and knows nothing about depth. The posed rig knows
+   the VOLUME — a torso is thicker than a forearm, a chest curves — and its
+   outline is some other body's. So take the outline from the matte and the
+   thickness from the rig, and never draw the rig at all.
+
+   The rig's depth is read by rendering it from the source view into a depth
+   buffer twice, front faces then back faces, which gives the near and far
+   surface of the body at every pixel. Where the matte reaches past the rig
+   (hair, a baggy shirt, shoes) there is no rig depth to read, so those pixels
+   fall back to a rounded cross-section off the matte's own distance
+   transform. The two are blended over a few pixels so the seam does not show.
+   ------------------------------------------------------------------ */
+
+const RELIEF_MAX = 640;      // longest side of the matte grid actually meshed
+
+function distanceTransform(mask, W, H){
+  const BIG = 1e9, d = new Float32Array(W*H);
+  for (let i = 0; i < W*H; i++) d[i] = mask[i] > 0.5 ? BIG : 0;
+  const D1 = 1, D2 = Math.SQRT2;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
+    const i = y*W+x; if (d[i] === 0) continue;
+    let v = d[i];
+    if (x > 0)           v = Math.min(v, d[i-1]+D1);
+    if (y > 0)           v = Math.min(v, d[i-W]+D1);
+    if (x > 0 && y > 0)  v = Math.min(v, d[i-W-1]+D2);
+    if (x < W-1 && y>0)  v = Math.min(v, d[i-W+1]+D2);
+    d[i] = v;
+  }
+  for (let y = H-1; y >= 0; y--) for (let x = W-1; x >= 0; x--){
+    const i = y*W+x; if (d[i] === 0) continue;
+    let v = d[i];
+    if (x < W-1)             v = Math.min(v, d[i+1]+D1);
+    if (y < H-1)             v = Math.min(v, d[i+W]+D1);
+    if (x < W-1 && y < H-1)  v = Math.min(v, d[i+W+1]+D2);
+    if (x > 0 && y < H-1)    v = Math.min(v, d[i+W-1]+D2);
+    d[i] = v;
+  }
+  return d;
+}
+
+function boxBlur(src, W, H, r, passes){
+  let a = Float32Array.from(src), b = new Float32Array(W*H);
+  const cl = (v, hi) => v < 0 ? 0 : (v > hi ? hi : v);
+  for (let p = 0; p < passes; p++){
+    for (let y = 0; y < H; y++){
+      let sum = 0; const n = 2*r+1;
+      for (let x = -r; x <= r; x++) sum += a[y*W+cl(x, W-1)];
+      for (let x = 0; x < W; x++){
+        b[y*W+x] = sum/n;
+        sum += a[y*W+cl(x+r+1, W-1)] - a[y*W+cl(x-r, W-1)];
+      }
+    }
+    for (let x = 0; x < W; x++){
+      let sum = 0; const n = 2*r+1;
+      for (let y = -r; y <= r; y++) sum += b[cl(y, H-1)*W+x];
+      for (let y = 0; y < H; y++){
+        a[y*W+x] = sum/n;
+        sum += b[cl(y+r+1, H-1)*W+x] - b[cl(y-r, H-1)*W+x];
+      }
+    }
+  }
+  return a;
+}
+
+/* three.js packs depth across four bytes; this is the inverse of its
+   packDepthToRGBA, and the camera is orthographic so the result is linear in
+   view depth rather than needing a perspective un-divide. */
+const UNPACK = 255/256;
+function unpackDepth(px, o){
+  return (px[o]/255)   * (UNPACK/256) +
+         (px[o+1]/255) * (UNPACK/65536) +
+         (px[o+2]/255) * (UNPACK/16777216) +
+         (px[o+3]/255) * UNPACK;
+}
+
+let reliefTarget = null, reliefDepthMat = null;
+function readRigDepth(cam, W, H, side){
+  if (!reliefTarget || reliefTarget.width !== W || reliefTarget.height !== H){
+    if (reliefTarget) reliefTarget.dispose();
+    reliefTarget = new THREE.WebGLRenderTarget(W, H, {
+      minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true });
+  }
+  if (!reliefDepthMat){
+    reliefDepthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  }
+  reliefDepthMat.side = side;
+  const keepOverride = scene.overrideMaterial;
+  const keepBg = scene.background;
+  const vis = [];
+  for (const o of [floorMesh, netMesh, shadowMesh, capsuleGroup]){
+    if (o){ vis.push([o, o.visible]); o.visible = false; }
+  }
+  scene.overrideMaterial = reliefDepthMat;
+  scene.background = null;
+  renderer.setRenderTarget(reliefTarget);
+  renderer.setClearColor(0xffffff, 1);   // empty = far
+  renderer.clear();
+  renderer.render(scene, cam);
+  const buf = new Uint8Array(W*H*4);
+  renderer.readRenderTargetPixels(reliefTarget, 0, 0, W, H, buf);
+  renderer.setRenderTarget(null);
+  renderer.setClearColor(0x000000, 1);
+  scene.overrideMaterial = keepOverride;
+  scene.background = keepBg;
+  for (const [o, v] of vis) o.visible = v;
+
+  // readRenderTargetPixels gives rows bottom-up; the matte is top-down
+  const out = new Float32Array(W*H);
+  for (let y = 0; y < H; y++){
+    const src = (H-1-y)*W*4, dst = y*W;
+    for (let x = 0; x < W; x++){
+      const d = unpackDepth(buf, src + x*4);
+      out[dst+x] = d >= 0.999 ? NaN : cam.near + d*(cam.far - cam.near);
+    }
+  }
+  return out;
+}
+
+async function buildRelief(frameIdx){
+  if (!reliefLandmarker || !reliefVideo || !modelReady || reliefBusy) return false;
+  const pts = smoothedFrames[frameIdx];
+  const m = pts && pts.imageMap;
+  if (!m) return false;
+  reliefBusy = true;
+  try {
+    // the matte for this exact frame, recomputed rather than stored
+    await seekTo(reliefVideo, Math.min(frameIdx * frameDuration, Math.max(0, reliefVideo.duration - 0.001)));
+    sampleCtx.drawImage(reliefVideo, 0, 0, sampleCanvas.width, sampleCanvas.height);
+    const res = reliefLandmarker.detect(sampleCanvas);
+    const mp = res.segmentationMasks && res.segmentationMasks[0];
+    if (!mp) return false;
+    const MW = mp.width, MH = mp.height;
+    const raw = Float32Array.from(mp.getAsFloat32Array());
+    mp.close();
+
+    /* Feather before thresholding. A hard matte sampled on a grid turns every
+       edge into a staircase and the shading reads it as terracing. */
+    const mask = boxBlur(raw, MW, MH, 2, 2);
+    const dist = distanceTransform(mask, MW, MH);
+    const thick = boxBlur(dist, MW, MH, 14, 2);
+
+    // --- put the rig where the person is, exactly as the overlay does ---
+    updateMannequin(pts); groundMannequin();
+    const keepScale = mannequin.scale.clone(), keepPos = mannequin.position.clone();
+    mannequin.updateMatrixWorld(true);
+    const hipBone = bones[boneKey('mixamorig:Hips')];
+    _bA.setFromMatrixPosition(hipBone.matrixWorld);
+    const lh = pts[IDX.leftHip], rh = pts[IDX.rightHip];
+    _mTmp.set((lh.x+rh.x)/2, -(lh.y+rh.y)/2, -(lh.z+rh.z)/2);
+    const sp2 = bones[boneKey('mixamorig:Spine2')];
+    let k = 1;
+    if (sp2){
+      _bB.setFromMatrixPosition(sp2.matrixWorld);
+      const modelTorso = _bB.distanceTo(_bA);
+      const ls = pts[IDX.leftShoulder], rs = pts[IDX.rightShoulder];
+      if (modelTorso > 1e-6 && ls && rs){
+        _mPelvis.set((ls.x+rs.x)/2, -(ls.y+rs.y)/2, -(ls.z+rs.z)/2);
+        const kk = _mPelvis.distanceTo(_mTmp) / modelTorso;
+        if (isFinite(kk) && kk > 0.2 && kk < 5) k = kk;
+      }
+    }
+    mannequin.scale.multiplyScalar(k);
+    mannequin.updateMatrixWorld(true);
+    _bA.setFromMatrixPosition(hipBone.matrixWorld);
+    mannequin.position.add(_mTmp).sub(_bA);
+    mannequin.updateMatrixWorld(true);
+
+    const cam = new THREE.OrthographicCamera(
+      m.wx + m.s*(0    - m.px), m.wx + m.s*(m.W - m.px),
+      -(m.wy + m.s*(0  - m.py)), -(m.wy + m.s*(m.H - m.py)), 0.01, 200);
+    cam.position.set(0, 0, 60); cam.lookAt(0, 0, 0);
+    cam.near = 58.4; cam.far = 61.6;     // tight, so 24-bit packing is plenty
+    cam.updateProjectionMatrix();
+    cam.updateMatrixWorld(true);
+
+    let dFront = readRigDepth(cam, MW, MH, THREE.FrontSide);
+    let dBack  = readRigDepth(cam, MW, MH, THREE.BackSide);
+    /* The rig's two surfaces pinch together at its own silhouette, and that
+       edge lands in the middle of the person's body wherever the rig is
+       narrower than they are. Blurring the pair first keeps that edge from
+       being stamped into the skin as a ridge. Holes stay holes: NaN marks
+       where the rig simply is not. */
+    const fill = (d) => { const o = Float32Array.from(d);
+      for (let i = 0; i < o.length; i++) if (!isFinite(o[i])) o[i] = 0; return o; };
+    const okF = dFront.map(v => isFinite(v) ? 1 : 0);
+    const bF = boxBlur(fill(dFront), MW, MH, 3, 1), bB = boxBlur(fill(dBack), MW, MH, 3, 1);
+    const w = boxBlur(okF, MW, MH, 3, 1);
+    for (let i = 0; i < MW*MH; i++){
+      if (isFinite(dFront[i]) && w[i] > 0.02){ dFront[i] = bF[i]/w[i]; }
+      if (isFinite(dBack[i])  && w[i] > 0.02){ dBack[i]  = bB[i]/w[i]; }
+    }
+
+    // --- combine: outline from the matte, thickness from the rig ---
+    const mPerPx = m.s;
+    const zF = new Float32Array(MW*MH), zB = new Float32Array(MW*MH);
+    for (let i = 0; i < MW*MH; i++){
+      if (mask[i] <= 0.5){ zF[i] = NaN; continue; }
+      const e = dist[i], R = Math.max(thick[i], e, 2);
+      const bulge = Math.sqrt(Math.max(0, 2*R*e - e*e)) * mPerPx;
+      const f = dFront[i], b = dBack[i];
+      if (isFinite(f) && isFinite(b) && b > f){
+        /* Inside the rig: use its two surfaces. Fade to the matte-only
+           profile over the last few pixels so the places the rig does not
+           reach do not step. */
+        const t = Math.min(1, e/14);
+        const cz = (60 - (f+b)/2), half = (b-f)/2;
+        const h = half*t + bulge*(1-t);
+        zF[i] = cz + h; zB[i] = cz - h;
+      } else {
+        const cz = 60 - (isFinite(f) ? f : (isFinite(b) ? b : 60));
+        zF[i] = cz + bulge; zB[i] = cz - bulge;
+      }
+    }
+    for (let pass = 0; pass < 10; pass++){
+      const a = Float32Array.from(zF), c = Float32Array.from(zB);
+      for (let y = 1; y < MH-1; y++) for (let x = 1; x < MW-1; x++){
+        const i = y*MW+x; if (!isFinite(a[i])) continue;
+        let sf = 0, sb = 0, n = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++){
+          const j = i+dy*MW+dx;
+          if (isFinite(a[j])){ sf += a[j]; sb += c[j]; n++; }
+        }
+        zF[i] = sf/n; zB[i] = sb/n;
+      }
+    }
+
+    // --- mesh: front sheet, back sheet, stitched around the silhouette ---
+    const step = Math.max(1, Math.ceil(Math.max(MW, MH) / RELIEF_MAX));
+    const gx = Math.floor(MW/step), gy = Math.floor(MH/step);
+    const id = new Int32Array(gx*gy).fill(-1);
+    const px = [], py = [], pzF = [], pzB = [];
+    for (let j = 0; j < gy; j++) for (let kx = 0; kx < gx; kx++){
+      const yy = Math.min(MH-1, j*step), xx = Math.min(MW-1, kx*step), i = yy*MW+xx;
+      if (mask[i] > 0.5 && isFinite(zF[i])){
+        id[j*gx+kx] = px.length;
+        px.push(cam.left + (xx+0.5)/MW*(cam.right-cam.left));
+        py.push(cam.top  + (yy+0.5)/MH*(cam.bottom-cam.top));
+        pzF.push(zF[i]); pzB.push(zB[i]);
+      }
+    }
+    if (px.length < 32) return false;
+    const n = px.length;
+    const pos = new Float32Array(n*2*3);
+    for (let v = 0; v < n; v++){
+      pos[v*3] = px[v];      pos[v*3+1] = py[v];      pos[v*3+2] = pzF[v];
+      const w = n+v;
+      pos[w*3] = px[v];      pos[w*3+1] = py[v];      pos[w*3+2] = pzB[v];
+    }
+    const tri = [];
+    for (let j = 0; j < gy-1; j++) for (let kx = 0; kx < gx-1; kx++){
+      const a = id[j*gx+kx], b = id[j*gx+kx+1], c = id[(j+1)*gx+kx+1], d = id[(j+1)*gx+kx];
+      if (a>=0&&b>=0&&c>=0){ tri.push(a,b,c); tri.push(n+a,n+c,n+b); }
+      if (a>=0&&c>=0&&d>=0){ tri.push(a,c,d); tri.push(n+a,n+d,n+c); }
+    }
+    /* Close the rim: wherever a vertex has no neighbour on one side, that is
+       the silhouette, so bridge its front and back copies. Without this the
+       body is two loose sheets and the rim light pours straight through. */
+    const edge = (a, b) => { tri.push(a, b, n+b); tri.push(a, n+b, n+a); };
+    for (let j = 0; j < gy; j++) for (let kx = 0; kx < gx; kx++){
+      const a = id[j*gx+kx]; if (a < 0) continue;
+      const R = kx < gx-1 ? id[j*gx+kx+1] : -1;
+      const D = j < gy-1 ? id[(j+1)*gx+kx] : -1;
+      const L = kx > 0 ? id[j*gx+kx-1] : -1;
+      const U = j > 0 ? id[(j-1)*gx+kx] : -1;
+      if (R < 0 && D >= 0) edge(a, D);
+      if (L < 0 && U >= 0) edge(U, a);
+      if (D < 0 && R >= 0) edge(R, a);
+      if (U < 0 && L >= 0) edge(a, L);
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setIndex(tri);
+    geo.computeVertexNormals();
+    geo.computeBoundingBox();
+
+    if (reliefMesh){ scene.remove(reliefMesh); reliefMesh.geometry.dispose(); }
+    reliefMesh = new THREE.Mesh(geo, bodyMaterial);
+    /* Built in the space the overlay put the rig in, so undo that transform
+       and it lands where the rig stands rather than out in image coordinates. */
+    reliefMesh.scale.setScalar(1/k);
+    reliefMesh.position.copy(keepPos).sub(mannequin.position.clone().multiplyScalar(1/k));
+    scene.add(reliefMesh);
+
+    mannequin.scale.copy(keepScale);
+    mannequin.position.copy(keepPos);
+    mannequin.updateMatrixWorld(true);
+
+    /* This body is the person's size and build, not the rig's, so the camera
+       fit and the floor have to come off the relief itself. Otherwise the
+       scene stays framed for a mannequin that is no longer on screen. */
+    reliefMesh.updateMatrixWorld(true);
+    const rb = new THREE.Box3().setFromObject(reliefMesh);
+    reliefMesh.position.y -= rb.min.y - (groundRef !== null ? groundRef : rb.min.y);
+    reliefMesh.updateMatrixWorld(true);
+    reliefBounds = new THREE.Box3().setFromObject(reliefMesh);
+    frameCamera();
+    reliefFrame = frameIdx;
+    return true;
+  } catch (e){
+    console.warn('relief build failed', e);
+    return false;
+  } finally {
+    reliefBusy = false;
+  }
+}
+
 function clearOverlay(){
   if (overlayCtx) overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 }
@@ -1765,6 +2123,7 @@ function goToFrame(i){
   groundMannequin();
   updateContactShadow();
   renderFrame();
+  syncRelief();
 }
 
 scrubber.addEventListener('input', () => { pause(); goToFrame(parseInt(scrubber.value, 10)); });

@@ -83,44 +83,61 @@ overhead, lime kicker low and behind — and runs it through `PMREMGenerator`.
 No HDRI fetch, and it only touches PBR materials, so the unlit court is
 unaffected.
 
-## Model-free reconstruction, and why it is a shell
+## Relief mode: outline from the frame, volume from the rig
 
-Prototyped (scratchpad, not shipped): build the body from the frames instead
-of posing a rig. `PoseLandmarker` takes `outputSegmentationMasks: true` and
-returns a person matte alongside the pose, from the model already loaded, so
-this costs no extra download.
+The reference look is a clothed athlete, and no rig that can be vendored here
+is one. But the frame already knows the outline exactly — this person, their
+shirt, their shorts, their shoes — and knows nothing about depth. The posed
+rig knows the opposite: that a torso is thicker than a forearm and how a chest
+curves, with somebody else's outline. Relief mode takes the outline from the
+frame and the thickness from the rig, **and never draws the rig**.
 
-Method: feather the matte, take its distance transform `e`, and blur that
-wide to get a local half-thickness `R`. Depth is then
-`z = w*boneDepth - sqrt(2Re - e^2)`. The square root is the profile of a
-circle of radius `R` at depth `e` in from its edge, so the surface meets the
-silhouette tangentially instead of ending in a cliff. Mesh it as a grid over
-the matte, one vertex per few pixels, faces only where the matte is solid.
+`buildRelief()`:
 
-Two things that look like bugs and are not:
+1. `PoseLandmarker` takes `outputSegmentationMasks: true` and returns a person
+   matte beside the pose, from the model already loaded, so this costs no
+   extra download.
+2. Pose the rig and apply the same scale-and-place transform the overlay uses,
+   so it sits on the person.
+3. Render it from the source view into a depth buffer **twice**, front faces
+   then back faces, giving the near and far surface of the body per pixel.
+4. Inside the matte, thickness comes from those two surfaces. Where the matte
+   reaches past the rig — hair, a loose shirt, shoes — there is no rig depth,
+   so it falls back to a rounded cross-section off the matte's own distance
+   transform, `sqrt(2Re - e^2)`, blended in over about 14 pixels.
+5. Mesh front and back sheets and bridge them around the silhouette.
 
-- Depth must be a **weighted blend over all bones** (inverse square), never
-  the nearest one. Nearest-bone is piecewise constant, so depth jumps along
-  the line where the closest bone changes and the render gets a hard dark
-  crease down the middle of the torso and every limb.
-- The matte has to be **blurred before it is thresholded**. Sampling a hard
-  matte on a grid turns every edge into a staircase, and the shading picks
-  that out as terracing along the whole silhouette.
+Things that are not obvious:
 
-What it buys: the real person's outline, with their clothes, hair and shoes,
-and no rig to look wrong. On the tennis photo it reads as a white figure of
-that player, which the X Bot never will.
+- Depth is read with `MeshDepthMaterial` and `RGBADepthPacking`, not a custom
+  shader, because the built-in material gets skinning for free. The camera is
+  **orthographic**, so `gl_FragCoord.z` is linear in view depth and unpacking
+  gives metres with no perspective un-divide. `near`/`far` are pulled tight
+  around the body so 24-bit packing is far more precision than needed.
+- `readRenderTargetPixels` returns rows bottom-up; the matte is top-down.
+- The rig's front and back surfaces **pinch together at its own silhouette**,
+  and that edge lands in the middle of the person wherever the rig is
+  narrower than they are. Blur the depth pair before combining or that edge is
+  stamped into the skin as a ridge.
+- The matte must be blurred **before** it is thresholded, or every edge is a
+  staircase and the shading reads it as terracing.
+- Without the rim bridge the body is two loose sheets and the rim light pours
+  straight through.
+- The relief is the person's build, not the rig's, so `frameCamera()` and the
+  floor read `reliefBounds` in this mode. Leaving them on `manBounds` frames
+  the scene for a mannequin that is no longer on screen.
 
-What it costs: **it is a relief, not a body.** One surface, no back. From the
-camera that shot it, convincing; turned 55 degrees, a flat shell. It is only
-valid from the source viewpoint, which means a locked camera, and the app's
-orbit, playback and export all assume otherwise. Masks are also too big to
-keep per frame (a 900-frame clip is tens of MB even downsampled), so it has
-to rebuild on scrub with the landmarker held open, at roughly 150ms a frame.
+Masks are far too big to keep per frame, so the body is rebuilt for whichever
+frame is showing, with the landmarker held open rather than closed at the end
+of the pipeline. `reliefBusy` drops requests that arrive mid-build so a scrub
+does not queue dozens of them.
 
-So it is the right answer for a restyled still or a locked-off shot, and the
-wrong one for a 3D replay you can move around. Shipping it means a second
-mode, not a replacement.
+**Where it stands:** structurally right and shipping, visually a first pass.
+The surface is lumpy and the head is a blob, and both get worse the smaller
+the subject is in frame, because everything here is resolution-bound by the
+matte. The honest next lever is a real monocular depth model over the matte
+instead of a rig prior; that is a download in the tens of MB and a different
+trade.
 
 ## Measuring pose accuracy
 
