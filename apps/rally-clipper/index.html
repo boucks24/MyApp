@@ -193,6 +193,12 @@
   .shot-item{ transition:border-color .16s var(--ease); }
   .shot-item:hover{ border-color:rgba(244,241,232,0.25); }
 
+  /* Sticky so the player stays on screen while scrolling a long shot list --
+     that list is the thing you scroll, and it is useless to press play on a
+     shot whose video has scrolled out of view. */
+  .results-video-slot{ position:sticky; top:0; z-index:5; margin:0 -16px 14px; padding:0 16px 10px; background:var(--card); }
+  .results-video-slot:empty{ display:none; }
+  .results-video-slot video{ margin:0; }
   @media (prefers-reduced-motion:reduce){
     *{ animation:none !important; transition:none !important; }
   }
@@ -267,11 +273,17 @@
 
   <div class="card hidden" id="resultsCard">
     <h2>3. Detected shots</h2>
+    <!-- #previewVideo is MOVED into this slot (not duplicated) once results
+         exist, so the player sits directly above the shot list and a shot's
+         play button doesn't require scrolling back up to see the video. It
+         moves back to the upload card on reset. -->
+    <div id="resultsVideoSlot" class="results-video-slot"></div>
     <div class="summary">
       <span>Shots found: <b id="shotCount">0</b></span>
       <span>Kept: <b id="keptDuration">0s</b> / <span id="totalDuration">0s</span></span>
     </div>
     <div class="timeline" id="timeline"></div>
+    <div class="status-line" id="resegmentStatus"></div>
     <div id="shotList"></div>
     <div class="note">Cuts snap to the nearest keyframe by default, so exported clips may start a few frames early/late. Toggle a shot off if it's a false positive (camera bump, ball bounce between points), or nudge its start/end below.</div>
   </div>
@@ -415,6 +427,8 @@
 
   const timelineEl = document.getElementById('timeline');
   const shotListEl = document.getElementById('shotList');
+  const resultsVideoSlot = document.getElementById('resultsVideoSlot');
+  const resegmentStatus = document.getElementById('resegmentStatus');
   const shotCountEl = document.getElementById('shotCount');
   const keptDurationEl = document.getElementById('keptDuration');
   const totalDurationEl = document.getElementById('totalDuration');
@@ -430,6 +444,14 @@
   let currentFile = null;
   let shots = []; // {start, end, include}
   let videoDuration = 0;
+  // Raw per-frame/per-window measurements from the last full scan. The scan
+  // (playing the video through, decoding its audio, optionally running the ML
+  // models) is the only expensive part; buildSegments() over these samples is
+  // pure and takes milliseconds, so the sensitivity/length/padding sliders can
+  // re-segment from the cache instead of re-scanning the video. Invalidated
+  // only by a new file -- or by the ML sample interval, which is a property of
+  // the scan itself rather than of the thresholding.
+  let cached = null; // {file, motion, audio, ml, mlInterval}
   let outputBlobUrl = null;
 
   /* ---------------- upload ---------------- */
@@ -451,6 +473,12 @@
 
   function handleFile(file){
     currentFile = file;
+    cached = null;
+    resegmentStatus.textContent = '';
+    // The player lives in the upload card until there are results to sit above.
+    if (previewVideo.parentElement === resultsVideoSlot){
+      document.getElementById('uploadCard').appendChild(previewVideo);
+    }
     uploadStatus.textContent = `Loading "${file.name}"…`;
     const url = URL.createObjectURL(file);
     previewVideo.src = url;
@@ -463,25 +491,69 @@
     previewVideo.onerror = () => { uploadStatus.textContent = `Couldn't load "${file.name}" -- it may be an unsupported format or a corrupted file.`; };
   }
 
+  // Every slider except the ML sample interval only affects how the cached
+  // samples are thresholded, so it re-segments instantly rather than asking for
+  // another scan. The interval changes what gets sampled in the first place,
+  // so it invalidates the cache and says so.
+  const RESEGMENT_SLIDERS = ['motionSlider','audioSlider','minLenSlider','padSlider','mlSlider'];
+
+  function detectionOpts(){
+    return {
+      motionSensitivity: +motionSlider.value,
+      audioSensitivity: +audioSlider.value,
+      minLength: +minLenSlider.value,
+      padding: +padSlider.value,
+      mlSamples: cached ? cached.ml : [],
+      mlSampleInterval: cached ? cached.mlInterval : +mlIntervalSlider.value,
+      mlSensitivity: +mlSlider.value
+    };
+  }
+
+  function resegmentFromCache(){
+    if (!cached || cached.file !== currentFile) return;
+    shots = buildSegments(cached.motion, cached.audio, detectionOpts());
+    renderResults();
+    resultsCard.classList.remove('hidden');
+    exportCard.classList.toggle('hidden', shots.length === 0);
+    resegmentStatus.textContent = shots.length
+      ? `${shots.length} shot${shots.length===1?'':'s'} at these settings (no re-scan needed).`
+      : 'Nothing passes at these settings -- try raising sensitivity or lowering the minimum length.';
+  }
+
   [motionSlider, audioSlider, minLenSlider, padSlider, mlSlider, mlIntervalSlider].forEach(s => {
     const label = {
       motionSlider:'motionVal', audioSlider:'audioVal', minLenSlider:'minLenVal',
       padSlider:'padVal', mlSlider:'mlVal', mlIntervalSlider:'mlIntervalVal'
     }[s.id];
-    s.addEventListener('input', () => { document.getElementById(label).textContent = s.value; });
+    s.addEventListener('input', () => {
+      document.getElementById(label).textContent = s.value;
+      if (RESEGMENT_SLIDERS.includes(s.id)) resegmentFromCache();
+      else if (cached){
+        cached = null;
+        resegmentStatus.textContent = '';
+        analyzeStatus.textContent = 'Sample interval changed -- analyze again to re-scan at that rate.';
+      }
+    });
   });
 
   mlToggle.addEventListener('change', () => {
     mlWeightRow.classList.toggle('hidden', !mlToggle.checked);
+    // Ball/swing data either was or wasn't collected during the scan; it can't
+    // be derived from the cache after the fact either way.
+    if (cached && mlToggle.checked !== (cached.ml.length > 0)){
+      cached = null;
+      resegmentStatus.textContent = '';
+      analyzeStatus.textContent = 'Analyze again to ' + (mlToggle.checked ? 'add' : 'drop') + ' ball & swing tracking.';
+    }
   });
 
   /* ---------------- motion analysis (fast playthrough) ---------------- */
   function analyzeMotion(video, onProgress){
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas');
-      canvas.width = 64; canvas.height = 36;
+      canvas.width = 96; canvas.height = 54;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      let prevData = null;
+      let prevData = null, prevTime = null;
       const samples = [];
       const useRVFC = typeof video.requestVideoFrameCallback === 'function';
 
@@ -495,8 +567,16 @@
               score += Math.abs(frame[i]-prevData[i]) + Math.abs(frame[i+1]-prevData[i+1]) + Math.abs(frame[i+2]-prevData[i+2]);
             }
             score = score / (canvas.width * canvas.height * 3 * 255);
+            // Playing back at 4x means requestVideoFrameCallback only gets a
+            // subset of decoded frames, and the media-time gap between the ones
+            // it does get varies. A raw frame diff therefore scales with that
+            // gap; divide by it so the signal is motion *per second* and a
+            // skipped frame doesn't read as a burst of activity.
+            const dt = Math.min(0.5, Math.max(1/240, mediaTime - prevTime));
+            score = score / dt;
           }
           prevData = frame;
+          prevTime = mediaTime;
           samples.push({ t: mediaTime, score });
           if (video.duration) onProgress(Math.min(1, mediaTime / video.duration));
         } catch(e){ /* frame not ready / cross-origin, skip */ }
@@ -535,32 +615,49 @@
 
   /* ---------------- audio analysis (decoded up front) ---------------- */
   async function analyzeAudio(file){
+    let actx = null;
     try {
       const arrayBuffer = await file.arrayBuffer();
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const actx = new AudioCtx();
+      actx = new AudioCtx();
       const audioBuffer = await new Promise((resolve, reject) => {
-        actx.decodeAudioData(arrayBuffer.slice(0), resolve, reject);
+        // Callback form, because older Safari's decodeAudioData doesn't return
+        // a promise. Where it does (everything current), it rejects that
+        // promise *as well as* calling the error callback -- so without a
+        // no-op catch on it a video with no audio track, or an audio codec the
+        // browser can't decode, raises an unhandled rejection even though the
+        // failure is already handled here.
+        const ret = actx.decodeAudioData(arrayBuffer.slice(0), resolve, reject);
+        if (ret && typeof ret.catch === 'function') ret.catch(() => {});
       });
       const channel = audioBuffer.getChannelData(0);
       const sr = audioBuffer.sampleRate;
-      const windowSize = Math.floor(sr * 0.1);
+      // 25ms windows: a racket impact is a ~10-30ms transient, so the old
+      // 100ms window smeared it into whatever else was in the same tenth of a
+      // second. `hf` is the RMS of the first-order difference of the signal --
+      // a cheap high-pass -- which is what separates a sharp ball/strings
+      // click from wind, voices and court rumble.
+      const windowSize = Math.max(1, Math.floor(sr * 0.025));
       const samples = [];
       for (let i = 0; i < channel.length; i += windowSize){
         const end = Math.min(i + windowSize, channel.length);
-        let sumSq = 0, peak = 0;
+        let sumSq = 0, peak = 0, hfSq = 0;
         for (let j = i; j < end; j++){
           const v = channel[j];
           sumSq += v*v;
           const a = Math.abs(v);
           if (a > peak) peak = a;
+          if (j > 0){ const d = v - channel[j-1]; hfSq += d*d; }
         }
-        samples.push({ t: i / sr, rms: Math.sqrt(sumSq / (end - i)), peak });
+        const n = end - i;
+        samples.push({ t: i / sr, rms: Math.sqrt(sumSq / n), peak, hf: Math.sqrt(hfSq / n) });
       }
       actx.close();
       return samples;
     } catch(e){
-      console.error('Audio analysis failed', e);
+      // Not fatal: a silent video still gets detected on motion alone.
+      console.warn('Audio analysis failed; continuing on motion only.', e);
+      if (actx) try { actx.close(); } catch(_){}
       return [];
     }
   }
@@ -676,9 +773,60 @@
   }
 
   /* ---------------- combine + threshold ---------------- */
-  function normalize(values){
-    const max = Math.max(...values, 1e-6);
-    return values.map(v => v / max);
+  // Scale a signal so that typical *events* land near 1, rather than dividing
+  // by the single global maximum. Dividing by the max meant one outlier -- a
+  // camera pan, a shout, a car going past -- set the scale for a whole video,
+  // squashing every real shot far below the detection threshold; on a long
+  // recording that reliably left exactly one detection (the outlier itself).
+  // The reference is a high percentile of the non-zero values instead, so the
+  // scale is set by the body of real events and a single extreme sample moves
+  // it barely at all.
+  //
+  // The floor is deliberately tied to the *noise* level (the median non-zero
+  // value, which in a baseline-removed signal is background jitter) and not to
+  // the maximum: a max-relative floor would let one outlier drag the reference
+  // back up and bring the original bug with it. Requiring the reference to be
+  // several times the noise is what stops a recording containing no real
+  // events from having its own background stretched up into detections. 12x is
+  // where that stops happening on synthetic noise; it only ever binds when real
+  // events are under ~5% of the video, since above that the percentile is the
+  // larger of the two and the floor drops out.
+  function normalizeRobust(values){
+    const pos = values.filter(v => v > 0).sort((a, b) => a - b);
+    if (!pos.length) return values.map(() => 0);
+    const pct = pos[Math.min(pos.length - 1, Math.floor(pos.length * 0.95))];
+    const noise = pos[pos.length >> 1];
+    const ref = Math.max(pct, noise * 12, 1e-9);
+    return values.map(v => Math.min(1, Math.max(0, v) / ref));
+  }
+
+  // Subtract a rolling median so only the spike above the local background
+  // counts. This is what makes the detector indifferent to slow drift -- the
+  // camera being re-aimed, clouds changing the exposure, a nearby court's
+  // constant chatter -- instead of letting it dominate the signal.
+  function removeLocalBaseline(values, halfWin){
+    const n = values.length;
+    const out = new Array(n).fill(0);
+    for (let i = 0; i < n; i++){
+      const a = Math.max(0, i - halfWin), b = Math.min(n, i + halfWin + 1);
+      const win = values.slice(a, b).sort((x, y) => x - y);
+      const med = win[win.length >> 1];
+      out[i] = Math.max(0, values[i] - med);
+    }
+    return out;
+  }
+
+  // Bins with no sample in them (playback at 4x doesn't present a frame for
+  // every bin) used to read as zero motion, chopping one continuous rally into
+  // sub-minimum-length fragments that the length filter then discarded. Hold
+  // the last known value across those gaps instead.
+  function fillEmptyBins(values, counts){
+    let last = 0;
+    for (let i = 0; i < values.length; i++){
+      if (counts[i]) last = values[i];
+      else values[i] = last;
+    }
+    return values;
   }
 
   function buildSegments(motionSamples, audioSamples, opts){
@@ -692,25 +840,22 @@
       motionCounts[b]++;
     });
     for (let i = 0; i < numBins; i++) if (motionCounts[i]) motionBins[i] /= motionCounts[i];
+    fillEmptyBins(motionBins, motionCounts);
 
-    const audioPeakBins = new Array(numBins).fill(0);
+    const audioHfBins = new Array(numBins).fill(0);
     audioSamples.forEach(s => {
       const b = Math.min(numBins - 1, Math.floor(s.t / binSize));
-      audioPeakBins[b] = Math.max(audioPeakBins[b], s.peak);
+      const v = s.hf !== undefined ? s.hf : s.peak;
+      if (v > audioHfBins[b]) audioHfBins[b] = v;
     });
-    // transient score: how much louder than a trailing local average
-    const audioTransient = new Array(numBins).fill(0);
-    const trailWindow = 15; // 1.5s of history
-    for (let i = 0; i < numBins; i++){
-      const start = Math.max(0, i - trailWindow);
-      let sum = 0, n = 0;
-      for (let j = start; j < i; j++){ sum += audioPeakBins[j]; n++; }
-      const baseline = n ? sum / n : 0;
-      audioTransient[i] = Math.max(0, audioPeakBins[i] - baseline);
-    }
 
-    const motionNorm = normalize(motionBins);
-    const audioNorm = normalize(audioTransient);
+    // Motion drifts slowly, so it gets a wide baseline window (10s); an audio
+    // onset has to stand out against the couple of seconds around it. The old
+    // audio baseline averaged only *trailing* bins, so the 1.5s after any hit
+    // sat on an elevated floor -- which masked exactly the follow-up shots in
+    // a quick exchange. A centred median doesn't have that blind spot.
+    const motionNorm = normalizeRobust(removeLocalBaseline(motionBins, 100));
+    const audioNorm = normalizeRobust(removeLocalBaseline(audioHfBins, 20));
 
     const motionWeight = opts.motionSensitivity / 100;
     const audioWeight = opts.audioSensitivity / 100;
@@ -724,8 +869,8 @@
         ballBins[i] = mlValueAt(opts.mlSamples, opts.mlSampleInterval, t, 'ballSpeed');
         wristBins[i] = mlValueAt(opts.mlSamples, opts.mlSampleInterval, t, 'wristSpeed');
       }
-      const ballNorm = normalize(ballBins);
-      const wristNorm = normalize(wristBins);
+      const ballNorm = normalizeRobust(ballBins);
+      const wristNorm = normalizeRobust(wristBins);
       const mlWeight = (opts.mlSensitivity || 0) / 100;
       combined = combined.map((v, i) => v + (ballNorm[i] * 0.6 + wristNorm[i] * 0.4) * mlWeight);
     }
@@ -794,25 +939,21 @@
     analyzeProgressFill.style.width = '95%';
     analyzeStatus.textContent = 'Combining signals…';
 
-    shots = buildSegments(motionSamples, audioSamples, {
-      motionSensitivity: +motionSlider.value,
-      audioSensitivity: +audioSlider.value,
-      minLength: +minLenSlider.value,
-      padding: +padSlider.value,
-      mlSamples,
-      mlSampleInterval,
-      mlSensitivity: +mlSlider.value
-    });
+    cached = { file: currentFile, motion: motionSamples, audio: audioSamples, ml: mlSamples, mlInterval: mlSampleInterval };
+    shots = buildSegments(motionSamples, audioSamples, detectionOpts());
 
     analyzeProgressFill.style.width = '100%';
     analyzeStatus.textContent = shots.length
-      ? `Found ${shots.length} likely shot${shots.length===1?'':'s'}. Review below before exporting.`
-      : 'No clear shots detected. Try lowering sensitivity or check a different clip.';
+      ? `Found ${shots.length} likely shot${shots.length===1?'':'s'}. Adjust the sliders above to re-cut instantly -- no re-scan.`
+      : 'No clear shots detected. Try raising the motion/sound sensitivity, or lowering the minimum shot length.';
+    resegmentStatus.textContent = '';
 
     renderResults();
     analyzeBtn.disabled = false;
     resultsCard.classList.remove('hidden');
     exportCard.classList.toggle('hidden', shots.length === 0);
+    // Put the player directly above the shot list now that there is one.
+    resultsVideoSlot.appendChild(previewVideo);
   });
 
   function renderResults(){
