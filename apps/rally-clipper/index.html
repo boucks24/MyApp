@@ -196,9 +196,22 @@
   /* Sticky so the player stays on screen while scrolling a long shot list --
      that list is the thing you scroll, and it is useless to press play on a
      shot whose video has scrolled out of view. */
-  .results-video-slot{ position:sticky; top:0; z-index:5; margin:0 -16px 14px; padding:0 16px 10px; background:var(--card); }
+  /* `top` must clear the safe-area inset: a sticky element pins to the top of
+     the viewport and so ignores the body's own env(safe-area-inset-top)
+     padding, which on an iPhone parks it under the notch/status bar and
+     Safari's translucent top bar, clipping the picture. The extra 8px keeps it
+     clear of that bar's lower edge rather than flush against it.
+     The height cap is in dvh (not vh) because iOS resizes the visual viewport
+     as its toolbars collapse: it guarantees the pinned player fits whatever is
+     actually visible, and leaves most of the screen for the shot list it is
+     pinned above. */
+  .results-video-slot{
+    position:sticky; top:calc(env(safe-area-inset-top, 0px) + 8px); z-index:5;
+    margin:0 -16px 14px; padding:0 16px 10px; background:var(--card);
+  }
+  .status-line.warn{ color:var(--ball); }
   .results-video-slot:empty{ display:none; }
-  .results-video-slot video{ margin:0; }
+  .results-video-slot video{ margin:0; max-height:40vh; max-height:40dvh; object-fit:contain; }
   @media (prefers-reduced-motion:reduce){
     *{ animation:none !important; transition:none !important; }
   }
@@ -240,8 +253,8 @@
       <input type="range" id="audioSlider" min="0" max="100" value="50">
     </div>
     <div class="field-row">
-      <label>Minimum shot length (s) <span class="val" id="minLenVal">1.0</span></label>
-      <input type="range" id="minLenSlider" min="0.2" max="4" step="0.1" value="1.0">
+      <label>Minimum activity per shot (s) <span class="val" id="minLenVal">0.3</span></label>
+      <input type="range" id="minLenSlider" min="0.1" max="2" step="0.1" value="0.3">
     </div>
     <div class="field-row">
       <label>Padding around each shot (s) <span class="val" id="padVal">0.4</span></label>
@@ -294,6 +307,7 @@
       <input type="checkbox" id="preciseCutsToggle" style="width:18px;height:18px;accent-color:var(--ball);">
       Frame-accurate cuts (re-encodes to H.264: slower, but exact cut points instead of the nearest keyframe, and guaranteed to play everywhere even if your source is HEVC/H.265)
     </label>
+    <div class="status-line" id="exportSize"></div>
     <button class="primary" id="exportBtn">Export clipped video</button>
     <div class="status-line" id="exportStatus"></div>
     <div class="progress-track hidden" id="exportProgressTrack"><div class="progress-fill" id="exportProgressFill"></div></div>
@@ -427,6 +441,7 @@
 
   const timelineEl = document.getElementById('timeline');
   const shotListEl = document.getElementById('shotList');
+  const exportSizeEl = document.getElementById('exportSize');
   const resultsVideoSlot = document.getElementById('resultsVideoSlot');
   const resegmentStatus = document.getElementById('resegmentStatus');
   const shotCountEl = document.getElementById('shotCount');
@@ -511,7 +526,7 @@
 
   function resegmentFromCache(){
     if (!cached || cached.file !== currentFile) return;
-    shots = buildSegments(cached.motion, cached.audio, detectionOpts());
+    shots = buildSegments(cached.signals, detectionOpts());
     renderResults();
     resultsCard.classList.remove('hidden');
     exportCard.classList.toggle('hidden', shots.length === 0);
@@ -542,7 +557,7 @@
     // be derived from the cache after the fact either way.
     if (cached && mlToggle.checked !== (cached.ml.length > 0)){
       cached = null;
-      resegmentStatus.textContent = '';
+        resegmentStatus.textContent = '';
       analyzeStatus.textContent = 'Analyze again to ' + (mlToggle.checked ? 'add' : 'drop') + ' ball & swing tracking.';
     }
   });
@@ -829,13 +844,22 @@
     return values;
   }
 
-  function buildSegments(motionSamples, audioSamples, opts){
-    const binSize = 0.1; // seconds
-    const numBins = Math.ceil(videoDuration / binSize);
+  const BIN_SIZE = 0.1;          // seconds per analysis bin
+  const THRESHOLD = 0.18;        // fixed; the sensitivity sliders scale contributions instead
+  const MERGE_GAP = 0.6;         // seconds of quiet that still counts as the same shot
+
+  // Binning + baseline removal + normalization, i.e. everything that depends
+  // only on the scan and not on the slider positions. Split out from
+  // thresholding because the rolling medians are the expensive part (~150ms on
+  // a 4-minute video) while thresholding is sub-millisecond: doing it once per
+  // scan is what lets the sliders re-cut live instead of re-scanning the video
+  // on every nudge.
+  function prepareSignals(motionSamples, audioSamples, mlSamples, mlInterval){
+    const numBins = Math.ceil(videoDuration / BIN_SIZE);
     const motionBins = new Array(numBins).fill(0);
     const motionCounts = new Array(numBins).fill(0);
     motionSamples.forEach(s => {
-      const b = Math.min(numBins - 1, Math.floor(s.t / binSize));
+      const b = Math.min(numBins - 1, Math.floor(s.t / BIN_SIZE));
       motionBins[b] += s.score;
       motionCounts[b]++;
     });
@@ -844,7 +868,7 @@
 
     const audioHfBins = new Array(numBins).fill(0);
     audioSamples.forEach(s => {
-      const b = Math.min(numBins - 1, Math.floor(s.t / binSize));
+      const b = Math.min(numBins - 1, Math.floor(s.t / BIN_SIZE));
       const v = s.hf !== undefined ? s.hf : s.peak;
       if (v > audioHfBins[b]) audioHfBins[b] = v;
     });
@@ -854,36 +878,47 @@
     // audio baseline averaged only *trailing* bins, so the 1.5s after any hit
     // sat on an elevated floor -- which masked exactly the follow-up shots in
     // a quick exchange. A centred median doesn't have that blind spot.
-    const motionNorm = normalizeRobust(removeLocalBaseline(motionBins, 100));
-    const audioNorm = normalizeRobust(removeLocalBaseline(audioHfBins, 20));
+    const sig = {
+      numBins,
+      motion: normalizeRobust(removeLocalBaseline(motionBins, 100)),
+      audio: normalizeRobust(removeLocalBaseline(audioHfBins, 20)),
+      ml: null
+    };
 
-    const motionWeight = opts.motionSensitivity / 100;
-    const audioWeight = opts.audioSensitivity / 100;
-    let combined = motionNorm.map((m, i) => m * motionWeight + audioNorm[i] * audioWeight);
-
-    if (opts.mlSamples && opts.mlSamples.length){
+    if (mlSamples && mlSamples.length){
       const ballBins = new Array(numBins).fill(0);
       const wristBins = new Array(numBins).fill(0);
       for (let i = 0; i < numBins; i++){
-        const t = i * binSize;
-        ballBins[i] = mlValueAt(opts.mlSamples, opts.mlSampleInterval, t, 'ballSpeed');
-        wristBins[i] = mlValueAt(opts.mlSamples, opts.mlSampleInterval, t, 'wristSpeed');
+        const t = i * BIN_SIZE;
+        ballBins[i] = mlValueAt(mlSamples, mlInterval, t, 'ballSpeed');
+        wristBins[i] = mlValueAt(mlSamples, mlInterval, t, 'wristSpeed');
       }
       const ballNorm = normalizeRobust(ballBins);
       const wristNorm = normalizeRobust(wristBins);
-      const mlWeight = (opts.mlSensitivity || 0) / 100;
-      combined = combined.map((v, i) => v + (ballNorm[i] * 0.6 + wristNorm[i] * 0.4) * mlWeight);
+      sig.ml = ballNorm.map((b, i) => b * 0.6 + wristNorm[i] * 0.4);
     }
+    return sig;
+  }
 
-    const threshold = 0.18; // fixed; sensitivity sliders scale contribution instead of the bar
-    const active = combined.map(v => v >= threshold);
+  function combineSignals(sig, opts){
+    const mw = opts.motionSensitivity / 100;
+    const aw = opts.audioSensitivity / 100;
+    const mlw = sig.ml ? (opts.mlSensitivity || 0) / 100 : 0;
+    const out = new Array(sig.numBins);
+    for (let i = 0; i < sig.numBins; i++){
+      out[i] = sig.motion[i] * mw + sig.audio[i] * aw + (sig.ml ? sig.ml[i] * mlw : 0);
+    }
+    return out;
+  }
 
-    // merge active bins into raw segments, closing small gaps
-    const mergeGapBins = Math.round(0.6 / binSize);
+  // Runs of above-threshold bins, as [startBin, endBin], with short quiet gaps
+  // closed. Pre-padding and pre-minimum-length.
+  function activeRuns(combined){
+    const mergeGapBins = Math.round(MERGE_GAP / BIN_SIZE);
     const raw = [];
     let curStart = null, lastActive = -999;
-    for (let i = 0; i < numBins; i++){
-      if (active[i]){
+    for (let i = 0; i < combined.length; i++){
+      if (combined[i] >= THRESHOLD){
         if (curStart === null) curStart = i;
         lastActive = i;
       } else if (curStart !== null && (i - lastActive) > mergeGapBins){
@@ -892,16 +927,84 @@
       }
     }
     if (curStart !== null) raw.push([curStart, lastActive]);
+    return raw;
+  }
 
-    const pad = opts.padding;
-    const minLen = opts.minLength;
+  // The minimum length is tested against the DETECTED ACTIVITY, before padding
+  // is added. Testing the padded clip instead couples two knobs that should be
+  // independent: padding counts towards the length, so any padding at or above
+  // half the minimum length silently disables the filter entirely. That was not
+  // a theoretical problem -- on a test fixture, moving padding from 0.3 to 0.5
+  // at the default 1.0 minimum took the result from 9 segments with 1 false
+  // positive to 85 with 54, because single-bin noise blips suddenly qualified.
+  // Filtering first keeps padding purely cosmetic, which is what it is for.
+  function runsToShots(raw, pad, minLen){
     return raw
+      .filter(([s, e]) => (e + 1 - s) * BIN_SIZE >= minLen)
       .map(([s, e]) => ({
-        start: Math.max(0, s * binSize - pad),
-        end: Math.min(videoDuration, (e + 1) * binSize + pad)
-      }))
-      .filter(seg => (seg.end - seg.start) >= minLen)
-      .map(seg => ({ ...seg, include: true }));
+        start: Math.max(0, s * BIN_SIZE - pad),
+        end: Math.min(videoDuration, (e + 1) * BIN_SIZE + pad),
+        include: true
+      }));
+  }
+
+  function buildSegments(sig, opts){
+    return runsToShots(activeRuns(combineSignals(sig, opts)), opts.padding, opts.minLength);
+  }
+
+  /* ---------------- which channels actually carried signal ----------------
+     This started out as an auto-tuner that set the sliders from the recording.
+     It is advice instead, because every version of it measured worse than the
+     fixed defaults on a 17-case bench (15 synthetic recordings plus two
+     rendered video fixtures with known shot times):
+
+       - Otsu's method on the combined score, rescaled onto the fixed bar:
+         recovered 14 of 40 faint synthetic shots the defaults missed, but on
+         the realistic fixture gave 36 false positives against the defaults' 5.
+         Otsu is biased low when the "active" class is a small minority, which
+         is exactly this problem, and a silent video concentrates all of that
+         amplified weight into the motion channel.
+       - Weights scaled by each channel's strength relative to the strongest:
+         91 missed shots of 683, against 28 for the defaults. Two channels can
+         both be informative at quite different amplitudes, and the detector
+         thresholds their sum, so quietening the lesser one just lowers every
+         score.
+       - Switching off only the channels holding nothing but background, the
+         mildest version: still 40 missed of 683 against 28, with identical
+         false positives. Even a noise-only channel sometimes pushes a genuine
+         event over the bar.
+       - Deriving padding and minimum length from the detections: took the
+         realistic fixture from 40 segments with 0 false positives to 45 with 5.
+
+     The two real wins from that work were decoupling the length filter from
+     padding (see runsToShots) and the 0.3s default that followed, which is
+     what took the realistic fixture to 40/40 shots with no false positives.
+     Doing better than a fixed default most likely needs real match footage
+     with hand-marked shots to tune against; guessing from the signals alone
+     measured worse every way it was tried. So this only reports what the
+     signals contain, which tells the user which slider is worth touching. */
+  function percentile(sorted, q){
+    if (!sorted.length) return 0;
+    return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(sorted.length * q)))];
+  }
+
+  // Strength of a channel: how high its clear events sit. Normalization has
+  // already put real events near 1, so a channel whose 98th percentile is
+  // still low has no events to find, only background.
+  function channelStrength(ch){
+    const sorted = [...ch].sort((a, b) => a - b);
+    return percentile(sorted, 0.98);
+  }
+
+  const MIN_STRENGTH = 0.35; // below this a channel holds only background
+
+  function signalAdvice(sig){
+    const motion = channelStrength(sig.motion) >= MIN_STRENGTH;
+    const audio = channelStrength(sig.audio) >= MIN_STRENGTH;
+    if (motion && audio) return '';
+    if (motion) return 'No clear hit sounds in this video (silent or very noisy audio), so this ran on movement alone -- the sound slider will not change much.';
+    if (audio) return 'Little usable movement in this video (camera too far back, or a very wide shot), so this ran on sound alone -- the motion slider will not change much.';
+    return 'Neither movement nor sound stands out clearly in this video, so detection here is a guess at best.';
   }
 
   /* ---------------- run analysis ---------------- */
@@ -939,13 +1042,17 @@
     analyzeProgressFill.style.width = '95%';
     analyzeStatus.textContent = 'Combining signals…';
 
-    cached = { file: currentFile, motion: motionSamples, audio: audioSamples, ml: mlSamples, mlInterval: mlSampleInterval };
-    shots = buildSegments(motionSamples, audioSamples, detectionOpts());
+    const signals = prepareSignals(motionSamples, audioSamples, mlSamples, mlSampleInterval);
+    cached = { file: currentFile, motion: motionSamples, audio: audioSamples, ml: mlSamples, mlInterval: mlSampleInterval, signals };
+
+    shots = buildSegments(signals, detectionOpts());
 
     analyzeProgressFill.style.width = '100%';
-    analyzeStatus.textContent = shots.length
-      ? `Found ${shots.length} likely shot${shots.length===1?'':'s'}. Adjust the sliders above to re-cut instantly -- no re-scan.`
-      : 'No clear shots detected. Try raising the motion/sound sensitivity, or lowering the minimum shot length.';
+    const advice = signalAdvice(signals);
+    analyzeStatus.textContent = (shots.length
+      ? `Found ${shots.length} likely shot${shots.length===1?'':'s'}. Adjust the sliders to re-cut instantly -- no re-scan.`
+      : 'No clear shots detected. Try raising the motion/sound sensitivity, or lowering the minimum activity length.')
+      + (advice ? ' ' + advice : '');
     resegmentStatus.textContent = '';
 
     renderResults();
@@ -965,8 +1072,16 @@
   }
 
   function updateKeptDuration(){
-    const kept = shots.filter(s => s.include).reduce((sum, s) => sum + (s.end - s.start), 0);
+    const included = shots.filter(s => s.include);
+    const kept = included.reduce((sum, s) => sum + (s.end - s.start), 0);
     keptDurationEl.textContent = fmtTime(kept);
+    // Re-estimate as shots are toggled, so the size is visible before the
+    // export rather than only in a warning after pressing the button.
+    if (exportSizeEl){
+      const bytes = estimateExportBytes(included, preciseCutsToggle.checked);
+      exportSizeEl.textContent = bytes ? `Roughly ${fmtBytes(bytes)} to export` : '';
+      exportSizeEl.classList.toggle('warn', bytes > BIG_EXPORT_BYTES);
+    }
   }
 
   function fmtTime(sec){
@@ -1028,6 +1143,8 @@
     shotListEl.querySelectorAll('.incl-check').forEach(el => {
       el.addEventListener('change', e => {
         shots[+e.target.dataset.idx].include = e.target.checked;
+        confirmBigExport = false;
+        exportBtn.textContent = 'Export clipped video';
         updateKeptDuration();
         renderTimeline();
       });
@@ -1114,6 +1231,18 @@
     }
     const audioTrack = await input.getPrimaryAudioTrack();
 
+    // BufferTarget accumulates the whole output as one in-memory ArrayBuffer,
+    // which is the likely ceiling on a long export from a high-bitrate phone
+    // recording (fast mode copies the source's own packets, so several minutes
+    // kept from a 4K clip runs to ~1GB and can take the tab down with it).
+    // Streaming into a WritableStream instead does NOT work here: Mediabunny
+    // seeks back to rewrite the header once sizes are known, so the writes are
+    // not append-only even with fastStart:false, and assembling the chunks by
+    // position produced a file with no readable video track at all (verified
+    // against a VP9/MP4 fixture: 30 packets via BufferTarget, zero via the
+    // stream). Keeping the working target and warning before a large export is
+    // the honest trade; a seekable target (File System Access) would be the
+    // real fix but iOS Safari, this app's main platform, does not have it.
     const output = new Mediabunny.Output({ format: new Mediabunny.Mp4OutputFormat(), target: new Mediabunny.BufferTarget() });
 
     const decoderConfig = await videoTrack.getDecoderConfig();
@@ -1191,6 +1320,38 @@
     return new Blob([output.target.buffer], { type: 'video/mp4' });
   }
 
+  // The muxed output is assembled in memory (see joinShots), so a long export
+  // from a high-bitrate recording can exhaust the tab rather than fail
+  // cleanly -- a crash loses the review work, and no catch runs. Estimating
+  // first turns that into a warning the user can act on by deselecting shots
+  // or switching re-encoding on (which is usually far *smaller* than copying
+  // the source's own packets, so it is the right advice for a big export).
+  const BIG_EXPORT_BYTES = 600 * 1024 * 1024;
+  let confirmBigExport = false;
+
+  function estimateExportBytes(included, precise){
+    const kept = included.reduce((sum, s) => sum + (s.end - s.start), 0);
+    if (!kept) return 0;
+    if (precise) return kept * (4_000_000 + 128_000) / 8;   // the encoder bitrates joinShots asks for
+    if (!currentFile || !videoDuration) return 0;
+    return currentFile.size * (kept / videoDuration);        // fast mode copies the source's packets
+  }
+
+  function fmtBytes(n){
+    if (n >= 1024 * 1024 * 1024) return (n / 1024 / 1024 / 1024).toFixed(1) + 'GB';
+    if (n >= 10 * 1024 * 1024) return Math.round(n / 1024 / 1024) + 'MB';
+    if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + 'MB';
+    return Math.max(1, Math.round(n / 1024)) + 'KB';
+  }
+
+  // Re-encoding and packet-copying give very different sizes, and any change
+  // to the selection invalidates a pending "export anyway".
+  preciseCutsToggle.addEventListener('change', () => {
+    confirmBigExport = false;
+    exportBtn.textContent = 'Export clipped video';
+    updateKeptDuration();
+  });
+
   exportBtn.addEventListener('click', async () => {
     const included = shots.filter(s => s.include);
     if (!included.length || !currentFile) return;
@@ -1199,6 +1360,16 @@
       exportStatus.textContent = 'Exporting needs a browser with video-encoding support (Safari 16.4+, Chrome, Edge, or Firefox 130+).';
       return;
     }
+
+    const estimate = estimateExportBytes(included, preciseCutsToggle.checked);
+    if (estimate > BIG_EXPORT_BYTES && !confirmBigExport){
+      confirmBigExport = true;
+      exportBtn.textContent = 'Export anyway';
+      exportStatus.textContent = `That's about ${fmtBytes(estimate)} of video from ${included.length} shots, which may run the browser out of memory on a phone. Untick some shots${preciseCutsToggle.checked ? '' : ', or turn on "Frame-accurate cuts" (it re-encodes smaller than copying your original)'}, or tap again to go ahead.`;
+      return;
+    }
+    confirmBigExport = false;
+    exportBtn.textContent = 'Export clipped video';
 
     exportBtn.disabled = true;
     exportProgressTrack.classList.remove('hidden');
@@ -2281,7 +2452,26 @@ function findIdxForTime(t, targetT){
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
 
-    const output = new Mediabunny.Output({ format: new Mediabunny.Mp4OutputFormat(), target: new Mediabunny.BufferTarget() });
+    // Stream the muxed output into a list of chunks rather than BufferTarget's
+    // single in-memory ArrayBuffer. BufferTarget has to grow that buffer as the
+    // file gets longer, reallocating and copying, so peak memory is roughly
+    // twice the output size and it must all be one contiguous allocation --
+    // which is what kills the tab on a long export from a high-bitrate phone
+    // recording (fast mode copies the source's own packets, so a few minutes
+    // kept from a 4K clip is easily ~1GB). A Blob assembled from many chunks
+    // can be spilled to disk by the browser instead.
+    //
+    // Mediabunny defaults fastStart to false for a non-buffer target, putting
+    // the moov atom at the end so writes are append-only; the parts are still
+    // ordered by position before assembly rather than trusting arrival order.
+    const parts = [];
+    const writable = new WritableStream({
+      write(chunk){ parts.push({ position: chunk.position, data: new Uint8Array(chunk.data) }); }
+    });
+    const output = new Mediabunny.Output({
+      format: new Mediabunny.Mp4OutputFormat(),
+      target: new Mediabunny.StreamTarget(writable)
+    });
     const source = new Mediabunny.CanvasSource(canvas, { codec: 'avc', bitrate: 6_000_000 });
     output.addVideoTrack(source);
     await output.start();
