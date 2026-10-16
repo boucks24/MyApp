@@ -19,7 +19,49 @@ Audio is sampled in 25ms windows (a racket impact is a ~10-30ms transient that 1
 
 **The expensive scan is cached** (`cached = {file, motion, audio, ml, mlInterval}`). `buildSegments()` is pure over those samples and runs in ~150-250ms on a 4-minute video, so the motion/sound/min-length/padding/ML-weight sliders re-cut via `resegmentFromCache()` with no re-scan (a scan is ~60s for 4 minutes, and before this every slider nudge paid it again). Only two things invalidate: a new file, and the ML *sample interval* or ML toggle — those change what gets measured, not how it's thresholded, so they can't be served from the cache and say so instead. `#previewVideo` is **moved** (never duplicated — one element, one decode) into `#resultsVideoSlot` at the top of the results card once results exist, and moved back to `#uploadCard` on a new file; the slot is `position:sticky` so the player stays on screen while scrolling a long shot list, since pressing play on a shot whose video has scrolled away is useless. Its `top` **must** clear `env(safe-area-inset-top)`: a sticky element pins to the top of the viewport and so ignores the body's own safe-area padding, which on an iPhone parks it under the notch/status bar and Safari's translucent top bar, clipping the picture (reported from a real device). The height cap is in `dvh`, not `vh`, because iOS resizes the visual viewport as its toolbars collapse. `#uploadStatus` surfaces upload-step failures that used to fail silently (an empty `fileInput.files` after the native picker closes — seen on iOS Safari, likely a slow/failed iCloud download of the original video before Safari can hand it to the page — and `previewVideo.onerror` for an unplayable file); `fileInput.value` is reset after each `change` so re-picking the same file still fires the event. All three file inputs in this app (`#fileInput`, `#syncVideoInput`, `#syncFitInput`) use a `.visually-hidden-file` CSS class rather than `display:none`, since some mobile browsers are unreliable about firing `change` on a file input that's `display:none` at the moment the native picker hands the file back. Upload/preview/`analyzeMotion()`'s canvas sampling rely entirely on the *browser's own* video decode (no code-side codec handling possible there) — iPhone's default "High Efficiency" HEVC/H.265 recordings play fine on Safari (native hardware decode) but are a gamble elsewhere. "Frame-accurate cuts" is a plain user-toggled checkbox (decode+re-encode to H.264 via `VideoSampleSink`/`VideoSampleSource` vs. the fast keyframe-snapped `EncodedPacketSink`/`EncodedVideoPacketSource` default, see below) — it no longer carries any HEVC-specific caveat in its label since export itself doesn't care what the source codec is (fast mode never decodes at all; precise mode decodes via the platform's own WebCodecs `VideoDecoder`, same as `<video>` playback).
 
-**Export holds the whole output in memory** (`BufferTarget`), which is the ceiling on a long export: fast mode copies the source's own packets, so 5 minutes kept from a 30-minute 4K phone recording is ~1.7GB and can take the tab down — a crash, so no `catch` runs and the review work is lost. `estimateExportBytes()` therefore prices the export up front (source bytes × kept/total for fast mode, the encoder bitrates for precise), shows it live next to the export button, and above 600MB turns the button into a two-tap "Export anyway" with advice to untick shots or switch *on* frame-accurate cuts — re-encoding is ~10x smaller than copying a high-bitrate source (148MB vs 1.7GB for that same cut), so it is the right suggestion for a big export even though it is slower. **Streaming to a `WritableStream` instead does not work and was reverted**: Mediabunny seeks back to rewrite the header once sizes are known, so writes are not append-only even with `fastStart:false`, and assembling the chunks by position yields a file with no readable video track at all (verified against a VP9/MP4 fixture: 30 packets via `BufferTarget`, zero via the stream). A seekable target (File System Access) would be the real fix, but iOS Safari — this app's main platform — doesn't have it.
+**Export streams into a fragmented MP4** rather than holding the whole output
+in memory. `streamingTarget()` is shared top-level code (both `joinShots()` and
+`buildMontage()` use it) and is the second attempt at this; the first one was
+wrong in two ways worth recording.
+
+`BufferTarget` keeps the output as one contiguous `ArrayBuffer` and reallocates
+as it grows, so peak memory is roughly twice the file and it all has to be one
+allocation — that is what took the tab down on a long export (a crash, so no
+`catch` runs and the review work goes with it). But a plain `StreamTarget` does
+not fix it: Mediabunny writes the mdat and then **seeks back to patch sizes**,
+so the writes are not append-only (measured: a seek back of ~80KB on a 2-second
+clip) and the chunks must be held and spliced by position, which saves nothing.
+`fastStart: 'fragmented'` is what actually works — a fragmented MP4 is written
+moof/mdat, moof/mdat, so every write lands at the end and nothing is revisited
+(measured `maxSeekBack` of 0 at 2s and 20s, chunks growing 2 → 11). Each chunk
+then becomes its own `Blob`, which the browser can spill to disk, and only one
+is live in the JS heap. Append-only is asserted at runtime, not assumed: an
+out-of-order write falls back to splicing by position, which costs the memory
+back but cannot emit a corrupt file.
+
+The earlier note here claimed streaming "does not work" and that chunks
+assembled by position yield no readable video track. That is not reproducible —
+the real problem was the missing `fastStart`, and the shipped code had a second
+bug on top: `buildMontage()` had been switched to `StreamTarget` but still
+returned `new Blob([output.target.buffer])`. **`StreamTarget` has no `.buffer`**,
+so that is `new Blob([undefined])` — a 9-byte file containing the text
+"undefined", at any montage length. The montage export was returning that, not a
+video. Both exports are now checked end-to-end against a generated multi-shot
+MP4 with audio: fast mode remuxes and plays, precise mode comes out at 8.78s for
+8.7s of kept footage, and the canvas path gives a playable file at 48 and 480
+frames.
+
+Two things to keep in mind. The output is now a **fragmented** MP4 (`iso5`
+brand); it plays and seeks correctly in a `<video>` element, but it is a
+different container layout from before, so anything downstream that was fussy
+about the file is worth re-checking. And fast mode's output is *longer* than the
+kept duration by design — `getKeyPacket()`/`wholeGopEndBoundary()` snap each
+shot out to whole GOPs, so on a sparse-keyframe source 8.7s of shots can come
+out as 22s. That is not a regression; precise mode is what cuts exactly.
+
+A seekable target (File System Access) would allow a conventional non-fragmented
+MP4 while still streaming, but iOS Safari — this app's main platform — does not
+have it.
 
 `joinShots()` (~`index.html:1032` onward) is the export engine: WebCodecs (`VideoDecoder`/`VideoEncoder`, native, no cross-origin-isolation requirement) plus vendored **Mediabunny** (`mediabunny.min.js`, MPL-2.0, `window.Mediabunny`) for MP4 demux/mux, since WebCodecs itself has no container support. Replaced ffmpeg.wasm entirely (see git history for that era's SharedArrayBuffer/MEMFS-cleanup workarounds, all now moot) after it broke repeatedly on GitHub Pages and hit a "bad memory" WASM-heap ceiling on longer videos — this engine streams packet-by-packet instead, so there's no fixed heap to exhaust. `wholeGopEndBoundary()` rounds a shot's end out to the next keyframe (mirroring `getKeyPacket()` rounding the start back to one) so fast mode never truncates mid-GOP — cutting mid-GOP with B-frames present can hand the muxer an out-of-order timestamp relative to that GOP's own reordering, which is exactly the kind of thing that looks fine on one test clip and breaks on the next; testing against real H.264 and HEVC fixtures (multi-shot, both modes) surfaced this and two related boundary-timestamp bugs before they shipped. Per-track `lastMaxTs` state gates only the *next* shot's starting cursor against the true previous-shot max (via the next GOP's own keyframe timestamp, not by summing packet durations, which some encodes report short/estimated on a GOP's last packet) — never individual packets within a shot, which would corrupt normal B-frame reordering. Browsers without `VideoEncoder`/`VideoDecoder` (Firefox <130, iOS <16.4) get a plain "not supported" message instead of attempting export — no ffmpeg.wasm fallback, by design.
 

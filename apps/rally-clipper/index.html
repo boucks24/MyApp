@@ -1231,19 +1231,8 @@
     }
     const audioTrack = await input.getPrimaryAudioTrack();
 
-    // BufferTarget accumulates the whole output as one in-memory ArrayBuffer,
-    // which is the likely ceiling on a long export from a high-bitrate phone
-    // recording (fast mode copies the source's own packets, so several minutes
-    // kept from a 4K clip runs to ~1GB and can take the tab down with it).
-    // Streaming into a WritableStream instead does NOT work here: Mediabunny
-    // seeks back to rewrite the header once sizes are known, so the writes are
-    // not append-only even with fastStart:false, and assembling the chunks by
-    // position produced a file with no readable video track at all (verified
-    // against a VP9/MP4 fixture: 30 packets via BufferTarget, zero via the
-    // stream). Keeping the working target and warning before a large export is
-    // the honest trade; a seekable target (File System Access) would be the
-    // real fix but iOS Safari, this app's main platform, does not have it.
-    const output = new Mediabunny.Output({ format: new Mediabunny.Mp4OutputFormat(), target: new Mediabunny.BufferTarget() });
+    const sink_ = streamingTarget(Mediabunny);   // see streamingTarget() above
+    const output = new Mediabunny.Output({ format: sink_.format, target: sink_.target });
 
     const decoderConfig = await videoTrack.getDecoderConfig();
     const audioDecoderConfig = audioTrack ? await audioTrack.getDecoderConfig() : null;
@@ -1317,16 +1306,16 @@
     }
 
     await output.finalize();
-    return new Blob([output.target.buffer], { type: 'video/mp4' });
+    return await sink_.toBlob();
   }
 
-  // The muxed output is assembled in memory (see joinShots), so a long export
-  // from a high-bitrate recording can exhaust the tab rather than fail
-  // cleanly -- a crash loses the review work, and no catch runs. Estimating
-  // first turns that into a warning the user can act on by deselecting shots
-  // or switching re-encoding on (which is usually far *smaller* than copying
-  // the source's own packets, so it is the right advice for a big export).
-  const BIG_EXPORT_BYTES = 600 * 1024 * 1024;
+  // The output no longer has to fit in one contiguous ArrayBuffer (see
+  // streamingTarget), which is what used to take the tab down mid-export, so
+  // this threshold is well above the old 600MB. It is kept because a very
+  // large export still costs the browser's blob storage and real time, and
+  // because re-encoding is usually far *smaller* than copying the source's own
+  // packets, which is worth saying before someone waits out a 2GB remux.
+  const BIG_EXPORT_BYTES = 1536 * 1024 * 1024;
   let confirmBigExport = false;
 
   function estimateExportBytes(included, precise){
@@ -1365,7 +1354,7 @@
     if (estimate > BIG_EXPORT_BYTES && !confirmBigExport){
       confirmBigExport = true;
       exportBtn.textContent = 'Export anyway';
-      exportStatus.textContent = `That's about ${fmtBytes(estimate)} of video from ${included.length} shots, which may run the browser out of memory on a phone. Untick some shots${preciseCutsToggle.checked ? '' : ', or turn on "Frame-accurate cuts" (it re-encodes smaller than copying your original)'}, or tap again to go ahead.`;
+      exportStatus.textContent = `That's about ${fmtBytes(estimate)} of video from ${included.length} shots, which will take a while and a lot of storage. Untick some shots${preciseCutsToggle.checked ? '' : ', or turn on "Frame-accurate cuts" (it re-encodes smaller than copying your original)'}, or tap again to go ahead.`;
       return;
     }
     confirmBigExport = false;
@@ -1409,6 +1398,54 @@
     a.click();
   });
 })();
+
+/* Both exports mux into this rather than BufferTarget.
+
+   BufferTarget keeps the whole output as one contiguous ArrayBuffer and has
+   to reallocate and copy as the file grows, so peak memory is roughly twice
+   the output and it must all be one allocation. That is what took the tab
+   down on a long export: a crash, so no catch runs and the review work goes
+   with it.
+
+   A plain StreamTarget is NOT enough, which is what the earlier attempt here
+   missed. Mediabunny writes the mdat and then seeks back to patch sizes, so
+   the writes are not append-only (measured: a seek back of ~80KB on a 2
+   second clip) and the chunks have to be held and spliced by position --
+   which saves no memory at all. `fastStart: 'fragmented'` changes that:
+   a fragmented MP4 is written moof/mdat, moof/mdat, so every write lands at
+   the end of the file and nothing is ever revisited (measured: maxSeekBack
+   of 0 at both 2s and 20s, with the chunk count growing 2 -> 11 as it
+   should). Each chunk can then go straight into its own Blob, which the
+   browser is free to spill to disk, and only one chunk is ever live in the
+   JS heap.
+
+   Append-only is asserted rather than assumed: if a write ever arrives out
+   of order the parts are spliced by position instead, which costs the memory
+   back but cannot produce a corrupt file. */
+function streamingTarget(Mediabunny){
+  const parts = [];
+  let cursor = 0, appendOnly = true;
+  const target = new Mediabunny.StreamTarget(new WritableStream({
+    write(chunk){
+      if (chunk.position !== cursor) appendOnly = false;
+      cursor = Math.max(cursor, chunk.position + chunk.data.byteLength);
+      parts.push({ position: chunk.position, data: new Blob([chunk.data]) });
+    }
+  }));
+  return {
+    target,
+    format: new Mediabunny.Mp4OutputFormat({ fastStart: 'fragmented' }),
+    async toBlob(){
+      if (appendOnly) return new Blob(parts.map(p => p.data), { type: 'video/mp4' });
+      const sorted = parts.slice().sort((a, b) => a.position - b.position);
+      const bufs = await Promise.all(sorted.map(p => p.data.arrayBuffer()));
+      const end = sorted.reduce((m, p, i) => Math.max(m, p.position + bufs[i].byteLength), 0);
+      const flat = new Uint8Array(end);
+      sorted.forEach((p, i) => flat.set(new Uint8Array(bufs[i]), p.position));
+      return new Blob([flat], { type: 'video/mp4' });
+    }
+  };
+}
 
 /* ============================================================
    TOOL TAB SWITCHING
@@ -2452,26 +2489,8 @@ function findIdxForTime(t, targetT){
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d');
 
-    // Stream the muxed output into a list of chunks rather than BufferTarget's
-    // single in-memory ArrayBuffer. BufferTarget has to grow that buffer as the
-    // file gets longer, reallocating and copying, so peak memory is roughly
-    // twice the output size and it must all be one contiguous allocation --
-    // which is what kills the tab on a long export from a high-bitrate phone
-    // recording (fast mode copies the source's own packets, so a few minutes
-    // kept from a 4K clip is easily ~1GB). A Blob assembled from many chunks
-    // can be spilled to disk by the browser instead.
-    //
-    // Mediabunny defaults fastStart to false for a non-buffer target, putting
-    // the moov atom at the end so writes are append-only; the parts are still
-    // ordered by position before assembly rather than trusting arrival order.
-    const parts = [];
-    const writable = new WritableStream({
-      write(chunk){ parts.push({ position: chunk.position, data: new Uint8Array(chunk.data) }); }
-    });
-    const output = new Mediabunny.Output({
-      format: new Mediabunny.Mp4OutputFormat(),
-      target: new Mediabunny.StreamTarget(writable)
-    });
+    const sink_ = streamingTarget(Mediabunny);   // see streamingTarget() above
+    const output = new Mediabunny.Output({ format: sink_.format, target: sink_.target });
     const source = new Mediabunny.CanvasSource(canvas, { codec: 'avc', bitrate: 6_000_000 });
     output.addVideoTrack(source);
     await output.start();
@@ -2540,7 +2559,7 @@ function findIdxForTime(t, targetT){
     }
 
     await output.finalize();
-    return new Blob([output.target.buffer], { type: 'video/mp4' });
+    return await sink_.toBlob();
   }
 
   exportBtn.addEventListener('click', async () => {
