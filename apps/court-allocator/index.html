@@ -102,6 +102,7 @@
   .result-tap:active{transform:scale(.985);}
   .result-tap:focus-visible{outline:2px solid var(--ball);outline-offset:3px;}
   .result-tap.disabled{cursor:not-allowed;opacity:.5;}
+  .result-tap.inert-tap{cursor:default;}
   /* Court lines, drawn to scale: baseline, service line, centre mark.
      Replaces the old decorative corner circle with the real geometry. */
   /* Court plan watermark: an inset baseline rectangle with the centre mark,
@@ -120,7 +121,7 @@
       transparent calc(50% + 1px));
     pointer-events:none;
   }
-  .result-card:hover{background:var(--court-lift);}
+  .result-card:not(.no-tap):hover{background:var(--court-lift);}
 
   .result-label{
     font-size:11px;font-weight:700;
@@ -146,7 +147,10 @@
     margin-top:10px;
     font-size:13px;
     color:rgba(244,241,232,.6);
-    min-height:19px;
+    /* Two lines' worth, always. The longest result sentence wraps on a narrow
+       phone and the shortest prompt does not, and the card must not change
+       height between them. */
+    min-height:38px;
   }
 
   button{
@@ -225,6 +229,15 @@
     display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:3px;
     letter-spacing:-0.01em;
   }
+  /* The overflow court: one open pen rather than two sides, so it reads as a
+     different kind of thing at a glance. */
+  .court.games .court-sides{grid-template-columns:1fr;}
+  .games-side{
+    background:repeating-linear-gradient(135deg,
+      rgba(244,241,232,.05) 0 10px, transparent 10px 20px);
+  }
+  .games-tag{color:var(--ball);}
+
   /* Which skill level has claimed this court, once someone has landed on it. */
   .court-level{
     font-family:'Archivo',sans-serif;
@@ -351,32 +364,27 @@
   }
   .picker-note.warn{color:#F0B4A0;}
 
-  /* Advanced-mode switch, sitting between the two setup questions. */
-  .toggle-row{
-    display:flex;align-items:center;gap:12px;
-    margin:0 0 14px;
+  /* Pairing mode, sitting between the two setup questions. Three choices, so
+     a segmented row rather than the on/off switch this used to be. */
+  .mode-row{
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
+    margin:0 0 10px;
   }
-  .toggle-row label{margin:0;flex:1 1 auto;}
-  .switch{
-    flex:0 0 auto;
-    width:52px;height:30px;
-    padding:0;
-    border-radius:999px;
-    background:var(--deep);
-    border:1px solid rgba(244,241,232,.22);
-    position:relative;
+  .mode-btn{
+    background:rgba(244,241,232,.07);
+    border:1px solid rgba(244,241,232,.18);
+    color:rgba(244,241,232,.82);
+    font-family:'Archivo Black',sans-serif;
+    font-size:13px;
+    padding:14px 4px;
+    border-radius:10px;
   }
-  .switch::after{
-    content:"";
-    position:absolute;top:3px;left:3px;
-    width:22px;height:22px;
-    border-radius:50%;
-    background:rgba(244,241,232,.55);
-    transition:transform .18s var(--ease), background .18s var(--ease);
+  .mode-btn:hover{background:rgba(244,241,232,.14);color:var(--line);}
+  .mode-btn[aria-pressed="true"]{
+    background:var(--ball);
+    border-color:var(--ball);
+    color:var(--ink);
   }
-  .switch:hover{background:var(--court-lift);}
-  .switch[aria-pressed="true"]{background:var(--ball);border-color:var(--ball);}
-  .switch[aria-pressed="true"]::after{transform:translateX(22px);background:var(--ink);}
 
   .setup-note{
     font-size:12.5px;
@@ -406,11 +414,13 @@
     <div class="court-picker" id="courtPicker" role="group" aria-labelledby="courtsLabel"></div>
     <p class="picker-note" id="pickerNote"></p>
 
-    <div class="toggle-row">
-      <label id="advancedLabel" for="advancedToggle">Advanced mode</label>
-      <button type="button" class="switch" id="advancedToggle" aria-pressed="false" aria-labelledby="advancedLabel"></button>
+    <label id="modeLabel">How are we pairing?</label>
+    <div class="mode-row" id="modeRow" role="group" aria-labelledby="modeLabel">
+      <button type="button" class="mode-btn" data-mode="off">Open</button>
+      <button type="button" class="mode-btn" data-mode="sbmm">SBMM</button>
+      <button type="button" class="mode-btn" data-mode="mix">Mixed</button>
     </div>
-    <p class="picker-note" id="advancedNote"></p>
+    <p class="picker-note" id="modeNote"></p>
 
     <label for="playerCount">How many players today?</label>
     <input type="number" id="playerCount" min="4" max="16" step="1" placeholder="e.g. 10" inputmode="numeric">
@@ -449,7 +459,14 @@
     const CAPACITY = 2; // players per side, per court
     const PER_COURT = CAPACITY * SIDES.length;
     const STORE = 'courtAllocator:courts';
-    const ADV_STORE = 'courtAllocator:advanced';
+    const ADV_STORE = 'courtAllocator:advanced';   // legacy boolean, migrated on read
+    const MODE_STORE = 'courtAllocator:mode';
+    const MODES = ['off', 'sbmm', 'mix'];
+    const MODE_NOTE = {
+      off:  'Any player, any free spot.',
+      sbmm: 'Skill-based: you land with your own level, on your group\u2019s own court.',
+      mix:  'Mixed: a beginner is partnered with an advanced player, so the pair is even.'
+    };
 
     // Advanced mode asks each player their level and keeps levels off each
     // other's courts. Keys are what gets stored in `courtLevel`.
@@ -464,10 +481,12 @@
 
     let COURTS = [];       // the courts actually in play this session
     let slots = {};
-    let courtLevel = {};   // court -> level key, set by the first player of that level to land on it
-    let awaitingLevel = false;
+    let courtLevel = {};
+    let sideLevels = {};   // court+side -> the levels already standing there
+    let gamesCourt = null; // the overflow court, when one is needed
+    let gamesCount = 0;   // court -> level key, set by the first player of that level to land on it
     let selectedCourts = loadCourts();   // the pool picked on the setup screen
-    let advancedMode = loadAdvanced();
+    let mode = loadMode();   // 'off' | 'sbmm' | 'mix'
 
     const headerSub = document.getElementById('headerSub');
     const setupCard = document.getElementById('setupCard');
@@ -478,6 +497,7 @@
     const changeBtn = document.getElementById('changeBtn');
 
     const resultTap = document.getElementById('resultTap');
+    const resultCardEl = document.querySelector('.result-card');
     const resultValue = document.getElementById('resultValue');
     const resultSub = document.getElementById('resultSub');
     const resetBtn = document.getElementById('resetBtn');
@@ -485,8 +505,8 @@
     const fullNote = document.getElementById('fullNote');
     const courtPicker = document.getElementById('courtPicker');
     const pickerNote = document.getElementById('pickerNote');
-    const advancedToggle = document.getElementById('advancedToggle');
-    const advancedNote = document.getElementById('advancedNote');
+    const modeRow = document.getElementById('modeRow');
+    const modeNote = document.getElementById('modeNote');
     const levelPicker = document.getElementById('levelPicker');
 
     /* The pool is remembered between visits: which courts are free tends to be
@@ -504,18 +524,27 @@
       try { localStorage.setItem(STORE, JSON.stringify(selectedCourts)); } catch(e){}
     }
 
-    function loadAdvanced(){
-      try { return localStorage.getItem(ADV_STORE) === '1'; } catch(e){ return false; }
+    function loadMode(){
+      try {
+        const m = localStorage.getItem(MODE_STORE);
+        if (MODES.includes(m)) return m;
+        // before there were three of these it was an advanced-mode boolean
+        return localStorage.getItem(ADV_STORE) === '1' ? 'sbmm' : 'off';
+      } catch(e){ return 'off'; }
     }
-    function saveAdvanced(){
-      try { localStorage.setItem(ADV_STORE, advancedMode ? '1' : '0'); } catch(e){}
+    function saveMode(){
+      try { localStorage.setItem(MODE_STORE, mode); } catch(e){}
     }
 
-    function renderAdvanced(){
-      advancedToggle.setAttribute('aria-pressed', advancedMode ? 'true' : 'false');
-      advancedNote.textContent = advancedMode
-        ? 'Each player picks a level and gets a court with their own group.'
-        : 'Off: any player, any free spot.';
+    // Both SBMM and Mixed ask the player what they are; they differ in who
+    // that answer puts them next to.
+    function levelled(){ return mode !== 'off'; }
+
+    function renderMode(){
+      modeRow.querySelectorAll('.mode-btn').forEach(b => {
+        b.setAttribute('aria-pressed', b.dataset.mode === mode ? 'true' : 'false');
+      });
+      modeNote.textContent = MODE_NOTE[mode];
     }
 
     function renderPicker(){
@@ -555,33 +584,52 @@
         : 'Pick at least one court.';
     }
 
-    function courtsNeeded(count){
+    function courtsNeeded(count, pool){
       const needed = Math.ceil(count / PER_COURT); // 4 players per full court
-      // In advanced mode open at least one court per level (pool permitting), so
-      // the three groups have somewhere of their own to land from the first tap.
-      const least = advancedMode ? Math.min(selectedCourts.length, LEVELS.length) : 1;
-      return Math.min(selectedCourts.length, Math.max(least, needed));
+      // SBMM wants a court per group from the first tap; Mixed deliberately
+      // shares, so it needs no more courts than the head count does.
+      const least = mode === 'sbmm' ? Math.min(pool.length, LEVELS.length) : 1;
+      return Math.min(pool.length, Math.max(least, needed));
+    }
+
+    /* When the pool cannot seat everyone, one court stops being a doubles
+       court and becomes the games court: no sides, no cap, everyone who
+       overflows plays there together. 16 first, then 4. Only ever reserved if
+       a normal court is left over, since turning the only court into the games
+       court would be nobody's idea of a fix. */
+    const GAMES_COURT_PREF = [16, 4];
+    function pickGamesCourt(count){
+      if (count <= selectedCourts.length * PER_COURT) return null;
+      if (selectedCourts.length < 2) return null;
+      const c = GAMES_COURT_PREF.find(g => selectedCourts.includes(g));
+      return c === undefined ? null : c;
     }
 
     function setupCourts(count){
       clearTimeout(revertTimer);
-      const n = courtsNeeded(count);
+      gamesCourt = pickGamesCourt(count);
+      const playable = selectedCourts.filter(c => c !== gamesCourt);
+      const n = courtsNeeded(count, playable);
       // Lowest-numbered picked courts first, so a short night fills from one
       // end of the pool rather than an arbitrary order.
-      COURTS = selectedCourts.slice(0, n);
+      COURTS = playable.slice(0, n);
       slots = {};
       courtLevel = {};
-      hideLevelPicker();
-      COURTS.forEach(c => SIDES.forEach(s => slots[c + s] = 0));
+      sideLevels = {};
+      gamesCount = 0;
+      applyMode();
+      COURTS.forEach(c => SIDES.forEach(s => { slots[c + s] = 0; sideLevels[c + s] = []; }));
 
       const label = courtListLabel(COURTS);
       const spots = COURTS.length * PER_COURT;
       const over = count - spots;
       headerSub.textContent =
         `Tap for a random spot. Court${COURTS.length > 1 ? 's' : ''} ${label}.` +
-        (over > 0 ? ` ${spots} spots for ${count} players, so ${over} will be waiting.` : '');
+        (gamesCourt !== null
+          ? ` Court ${gamesCourt} is the games court: the ${count - spots} who don't fit play there together.`
+          : over > 0 ? ` ${spots} spots for ${count} players, so ${over} will be waiting.` : '');
 
-      resultValue.textContent = 'TAP';
+      resultValue.textContent = restingValue();
       resultSub.textContent = tapPrompt();
 
       setupCard.classList.add('hidden');
@@ -616,7 +664,24 @@
         grid.appendChild(row);
       });
 
-      const allFull = Object.values(slots).every(v => v >= CAPACITY);
+      if (gamesCourt !== null){
+        const row = document.createElement('div');
+        row.className = 'court games';
+        row.innerHTML = `
+          <div class="court-no">${gamesCourt}<span class="court-level games-tag">Games</span></div>
+          <div class="court-sides">
+            <div class="side games-side">
+              <span class="side-name">Everyone</span>
+              <span class="side-count">${gamesCount}</span>
+            </div>
+          </div>
+        `;
+        grid.appendChild(row);
+      }
+
+      // The games court has no cap, so while one is open the night is never
+      // "full" and nothing should go dead.
+      const allFull = gamesCourt === null && Object.values(slots).every(v => v >= CAPACITY);
       if(allFull){
         resultTap.classList.add('disabled');
         resultTap.setAttribute('aria-disabled', 'true');
@@ -624,6 +689,8 @@
         resultTap.classList.remove('disabled');
         resultTap.removeAttribute('aria-disabled');
       }
+      // in SBMM the level buttons are the control, so they are what goes dead
+      levelPicker.querySelectorAll('.level-btn').forEach(b => { b.disabled = allFull; });
       fullNote.style.display = allFull ? 'block' : 'none';
     }
 
@@ -642,8 +709,14 @@
        they share one. No level is pre-assigned a court — a court belongs to the
        first group that lands on it, so an evening of all-beginners still
        spreads across the whole pool. */
+    /* Level is a PREFERENCE, never a gate. Every branch here ends at
+       freeSides(COURTS) — whatever the mode wanted, a player who cannot have
+       it still gets a spot rather than being told to wait. An uneven pairing
+       or a court running as singles beats sitting out. */
     function sidesFor(level){
-      if (!level) return freeSides(COURTS);
+      if (!level || mode === 'off') return freeSides(COURTS);
+      if (mode === 'mix') return sidesForMix(level);
+
       const mine = freeSides(COURTS.filter(c => courtLevel[c] === level));
       if (mine.length) return mine;
       const unclaimed = COURTS.filter(c => !courtLevel[c]);
@@ -651,14 +724,41 @@
       return freeSides(COURTS);
     }
 
+    /* Mixed: your PARTNER is the other end of the ladder, so each pair is
+       about even and a beginner spends the night alongside a good player
+       rather than against a wall of them. Intermediates pair with each other,
+       there being nothing to even out. */
+    const PARTNER_OF = { B: 'A', A: 'B', I: 'I' };
+    function sidesForMix(level){
+      const free = freeSides(COURTS);
+      const want = PARTNER_OF[level];
+      // someone of the complementary level is sitting there alone: join them
+      const pairUp = free.filter(k => sideLevels[k].length === 1 && sideLevels[k][0] === want);
+      if (pairUp.length) return pairUp;
+      // otherwise start a new pair, so partners are not doubled up by accident
+      const empty = free.filter(k => sideLevels[k].length === 0);
+      if (empty.length) return empty;
+      return free;
+    }
+
     function assign(level){
       const available = sidesFor(level);
-      if(available.length === 0) return;
+      if (available.length === 0){
+        // the games court takes everyone the sides cannot, and only when
+        // there is no games court is the night actually over
+        if (gamesCourt !== null) return assignToGames(level);
+        clearTimeout(revertTimer);
+        resultValue.textContent = restingValue();
+        resultSub.textContent = 'All courts are full';
+        return;
+      }
 
       clearTimeout(revertTimer);
 
       const pick = available[Math.floor(Math.random() * available.length)];
+      const partners = sideLevels[pick].slice();   // who was already standing there
       slots[pick]++;
+      if (level) sideLevels[pick].push(level);
 
       resultValue.textContent = pick;
       resultValue.classList.remove('pop');
@@ -668,7 +768,13 @@
       const court = pick.slice(0, -1);
       const side = pick.slice(-1);
       let sub = `Court ${court}, side ${side}. Go grab a spot.`;
-      if (level){
+      if (level && mode === 'mix'){
+        // courts are not owned by a level here, so the useful thing to say is
+        // who you are actually playing with
+        sub += partners.length
+          ? ` With ${levelName(partners[0]).toLowerCase() === 'advanced' ? 'an' : 'a'} ${levelName(partners[0]).toLowerCase()} partner.`
+          : ' Your partner joins you here.';
+      } else if (level){
         const owner = courtLevel[court];
         if (!owner){
           courtLevel[court] = level; // first of this group here: the court is theirs
@@ -684,61 +790,89 @@
       renderGrid();
 
       revertTimer = setTimeout(() => {
-        const stillAvailable = Object.keys(slots).some(k => slots[k] < CAPACITY);
-        resultValue.textContent = 'TAP';
+        const stillAvailable = gamesCourt !== null || Object.keys(slots).some(k => slots[k] < CAPACITY);
+        resultValue.textContent = restingValue();
         resultSub.textContent = stillAvailable
-          ? (advancedMode ? 'Next player, tap and pick your level' : 'Next player, tap this card')
+          ? (levelled() ? 'Next player, pick your level' : 'Next player, tap this card')
           : 'All courts are full';
+      }, REVERT_DELAY);
+    }
+
+    /* Nobody is turned away while the games court exists: once every side is
+       full this is where the rest of the night goes. */
+    function assignToGames(level){
+      if (gamesCourt === null) return;
+      clearTimeout(revertTimer);
+      gamesCount++;
+
+      resultValue.textContent = String(gamesCourt);
+      resultValue.classList.remove('pop');
+      void resultValue.offsetWidth;
+      resultValue.classList.add('pop');
+      resultSub.textContent =
+        `Court ${gamesCourt}, the games court. Everyone here plays together, ${gamesCount} so far.`;
+
+      renderGrid();
+      revertTimer = setTimeout(() => {
+        resultValue.textContent = restingValue();
+        resultSub.textContent = levelled() ? 'Next player, pick your level' : 'Next player, tap this card';
       }, REVERT_DELAY);
     }
 
     function reset(){
       clearTimeout(revertTimer);
-      COURTS.forEach(c => SIDES.forEach(s => slots[c + s] = 0));
+      COURTS.forEach(c => SIDES.forEach(s => { slots[c + s] = 0; sideLevels[c + s] = []; }));
       courtLevel = {};
-      hideLevelPicker();
-      resultValue.textContent = 'TAP';
+      gamesCount = 0;
+      resultValue.textContent = restingValue();
       resultSub.textContent = tapPrompt();
+      applyMode();
       renderGrid();
     }
 
+    /* What the big line shows when nobody has just been given a spot. In SBMM
+       the three level buttons are the thing to press, so a giant "TAP" would
+       be pointing at nothing. */
+    function restingValue(){
+      return levelled() ? '–' : 'TAP';
+    }
+
     function tapPrompt(){
-      return advancedMode
-        ? 'Tap this card, then pick your level'
+      return levelled()
+        ? 'Pick your level'
         : 'Tap this card to get your court';
     }
 
-    function hideLevelPicker(){
-      awaitingLevel = false;
-      levelPicker.classList.add('hidden');
-    }
-
-    /* In advanced mode the tap asks for a level first; the card itself becomes
-       the question, and the three answers appear on the same card so there is
-       nothing else to look at. */
-    function askLevel(){
-      clearTimeout(revertTimer);
-      awaitingLevel = true;
-      resultValue.textContent = '?';
-      resultSub.textContent = 'Pick your level';
-      levelPicker.classList.remove('hidden');
+    /* In SBMM the levels are shown from the start rather than appearing after
+       a tap. Toggling them used to take the card from 182px to 266px and back
+       on every single assignment, which is most of what made the card feel
+       jumpy; leaving them up for the whole mode keeps its height fixed.
+       With the buttons always there the card body has nothing left to do, so
+       it stops being a control: no role, no tab stop, no pointer. */
+    function applyMode(){
+      const lv = levelled();
+      levelPicker.classList.toggle('hidden', !lv);
+      if (lv){
+        resultTap.removeAttribute('role');
+        resultTap.removeAttribute('tabindex');
+        resultTap.removeAttribute('aria-label');
+      } else {
+        resultTap.setAttribute('role', 'button');
+        resultTap.setAttribute('tabindex', '0');
+        resultTap.setAttribute('aria-label', 'Tap to get your court');
+      }
+      resultTap.classList.toggle('inert-tap', lv);
+      resultCardEl.classList.toggle('no-tap', lv);
     }
 
     function tapCard(){
+      if (levelled()) return;              // the level buttons are the control
       if (resultTap.classList.contains('disabled')) return;
-      if (!advancedMode){ assign(null); return; }
-      if (awaitingLevel) return; // the question is already up; answer it
-      askLevel();
+      assign(null);
     }
 
     function chooseLevel(key){
-      hideLevelPicker();
-      if (!sidesFor(key).length){ // nothing left anywhere: don't leave the card on "?"
-        resultValue.textContent = 'TAP';
-        resultSub.textContent = 'All courts are full';
-        return;
-      }
-      assign(key);
+      assign(key);   // assign() owns the full/overflow decision
     }
 
     function backToSetup(){
@@ -746,9 +880,8 @@
       playArea.classList.add('hidden');
       setupCard.classList.remove('hidden');
       headerSub.textContent = 'Tap for a random spot';
-      hideLevelPicker();
       renderPicker();
-      renderAdvanced();
+      renderMode();
     }
 
     startBtn.addEventListener('click', () => {
@@ -769,7 +902,7 @@
     });
 
     renderPicker();
-    renderAdvanced();
+    renderMode();
 
     playerCountInput.addEventListener('keydown', (e) => {
       if(e.key === 'Enter') startBtn.click();
@@ -785,10 +918,13 @@
     levelPicker.querySelectorAll('.level-btn').forEach(btn => {
       btn.addEventListener('click', () => chooseLevel(btn.dataset.level));
     });
-    advancedToggle.addEventListener('click', () => {
-      advancedMode = !advancedMode;
-      saveAdvanced();
-      renderAdvanced();
+    modeRow.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        mode = btn.dataset.mode;
+        saveMode();
+        renderMode();
+        applyMode();
+      });
     });
     resetBtn.addEventListener('click', reset);
     changeBtn.addEventListener('click', backToSetup);

@@ -22,24 +22,72 @@ read as the court numbers in order instead of reflowing into a ragged last row
 (six per row down to 320px).
 
 `assign(level)` is a uniform random pick among the sides `sidesFor(level)` offers;
-with no level (plain mode) that's every side that still has room.
+with no level (Open mode) that's every side that still has room. `assign()` owns
+the "nowhere to put this player" decision — the games court if there is one,
+otherwise the all-full message. `chooseLevel()` used to make that call itself and
+returned early with "All courts are full", which meant the games court was never
+reached.
 
-## Advanced mode
+## Pairing modes
 
-Off by default, toggled by `#advancedToggle` on the setup screen and persisted
-separately (`courtAllocator:advanced`, `loadAdvanced()`/`saveAdvanced()`). When
-on, tapping the result card doesn't assign — `tapCard()` calls `askLevel()`,
-which puts the card into a question ("?" / "Pick your level") and shows
-`#levelPicker`'s three `.level-btn`s. `chooseLevel(key)` then calls
-`assign(key)`; `awaitingLevel` keeps a second tap on the card from re-asking.
-With advanced off, `tapCard()` calls `assign(null)` and nothing changes.
+`mode` is `'off' | 'sbmm' | 'mix'`, persisted at `courtAllocator:mode`.
+`loadMode()` migrates the old `courtAllocator:advanced` boolean (true -> `sbmm`).
+A three-way `.mode-row` replaced the on/off `.switch` this used to be.
+
+`MODES`/`MODE_NOTE` must stay declared **above** `let mode = loadMode()`.
+They were below it, so `loadMode()` hit a temporal dead zone on `MODES`, and its
+own `try/catch` — there for blocked localStorage — quietly turned that
+`ReferenceError` into `'off'`. Both the saved mode and the legacy migration
+silently did nothing, and nothing in the UI looked broken.
+
+- **Open**: any player, any free side.
+- **SBMM**: lands you with your own level. `courtLevel` maps court -> level key,
+  **claimed lazily** — no level owns a court until the first player of that level
+  lands on it, so an all-beginner night still spreads over the whole pool.
+  `courtsNeeded()` opens at least `min(pool, 3)` courts in this mode so the three
+  groups have somewhere of their own from the first tap.
+- **Mixed**: your *partner* is the other end of the ladder (`PARTNER_OF`:
+  B<->A, I with I), so each pair is about even and a beginner spends the night
+  alongside a good player rather than against a wall of them. `sideLevels`
+  (court+side -> the levels already standing there) is what makes this possible;
+  `slots` only counts heads. It prefers a side holding one player of the
+  complementary level, then an empty side (so partners are not doubled up by
+  accident), then anything free.
+
+**Level is a preference, never a gate.** Every branch of `sidesFor()` ends at
+`freeSides(COURTS)`: a player who cannot have the pairing they asked for still
+gets a spot. An uneven pair, or a court running as singles, beats sitting out.
+
+## The games court
+
+When the picked pool cannot seat everyone, `pickGamesCourt()` reserves one court
+— 16 first, then 4 — as the games court: no sides, no cap, everyone who overflows
+plays there together. It is only reserved if a normal court is left over, since
+turning the only court into the games court helps nobody. The reserved court is
+filtered out of `COURTS`, so normal play fills the rest first and `assign()`
+falls through to `assignToGames()` once every side is full. While a games court
+exists the night is never "full": `renderGrid()` skips the all-full state, so the
+card and the level buttons never go dead.
+
+## The result card
+
+In SBMM and Mixed the three `.level-btn`s are shown from the moment the play
+area opens, and the big line rests on an en dash rather than "TAP" — the buttons
+are the thing to press, so a giant TAP would point at nothing. They used to
+appear only after a tap, which took the card from 182px to 266px and back on
+every single assignment; leaving them up for the whole mode is what keeps its
+height fixed. `.result-sub` reserves two lines for the same reason, since the
+longest result sentence wraps on a narrow phone and the shortest prompt does
+not. `applyMode()` owns all of this, and in a levelled mode it also strips the
+card body's `role`/`tabindex` — with the buttons always present the body has
+nothing left to do. In Open mode the card is still the button and still says
+TAP.
 
 `#levelPicker` sits **inside** `.result-card`, under a hairline, so the question
 and its three answers are one object. That is why the card is no longer the
 button it used to be: a `role="button"` with buttons inside it is invalid, and a
 click on a level would bubble to the card's own handler and re-open the question
-it had just answered (`chooseLevel()` clears `awaitingLevel` before the bubble
-arrives, so the guard does not catch it). The tap target is now an inner
+it had just answered. The tap target is now an inner
 `#resultTap`, with the picker as its sibling rather than its descendant, which
 removes the problem structurally instead of patching it with
 `stopPropagation()`. `.disabled`/`aria-disabled` for the all-full state moved
@@ -47,15 +95,8 @@ onto `#resultTap` with it; `.result-card` keeps only the box, the hover tint and
 the `::before` court lines. The buttons carry their own translucent fill because
 a flat `var(--court)` is the card's own colour and vanished against it.
 
-`LEVELS` is `B`/`I`/`A` (name + short form for the court-map badge).
-`courtLevel` maps court -> level key and is **claimed lazily**: no level owns a
-court until the first player of that level lands on it, so an all-beginner night
-still spreads over the whole pool. `sidesFor(level)` picks, in order: a free side
-on a court this level already owns, else both sides of the lowest-numbered
-unclaimed court, else (every court owned by someone else) any free side, with
-the result sub saying they're sharing. `assign()` sets `courtLevel[court]` on
-the claim and appends the level sentence. Both `courtLevel` and the picker are
-cleared by `setupCourts()` and `reset()`.
-
-`courtsNeeded()` opens at least `min(pool, 3)` courts in advanced mode, so the
-three groups have somewhere of their own from the first tap.
+`LEVELS` is `B`/`I`/`A` (name + short form for the court-map badge). In SBMM
+`sidesFor()` picks, in order: a free side on a court this level already owns,
+else both sides of the lowest-numbered unclaimed court, else any free side at
+all, with the result sub saying they're sharing. `courtLevel`, `sideLevels` and
+the games-court tally are all cleared by `setupCourts()` and `reset()`.
