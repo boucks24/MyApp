@@ -32,6 +32,7 @@ on, tapping the result card doesn't assign — `tapCard()` calls `askLevel()`,
 which puts the card into a question ("?" / "Pick your level") and shows
 `#levelPicker`'s three `.level-btn`s. `chooseLevel(key)` then calls
 `assign(key)`; `awaitingLevel` keeps a second tap on the card from re-asking.
+With advanced off, `tapCard()` calls `assign(null)` and nothing changes.
 
 `#levelPicker` sits **inside** `.result-card`, under a hairline, so the question
 and its three answers are one object. That is why the card is no longer the
@@ -45,7 +46,6 @@ removes the problem structurally instead of patching it with
 onto `#resultTap` with it; `.result-card` keeps only the box, the hover tint and
 the `::before` court lines. The buttons carry their own translucent fill because
 a flat `var(--court)` is the card's own colour and vanished against it.
-With advanced off, `tapCard()` calls `assign(null)` and nothing changes.
 
 `LEVELS` is `B`/`I`/`A` (name + short form for the court-map badge).
 `courtLevel` maps court -> level key and is **claimed lazily**: no level owns a
