@@ -21,7 +21,8 @@ reflect the stored pool when you come back. The picker is a fixed
 read as the court numbers in order instead of reflowing into a ragged last row
 (six per row down to 320px).
 
-`assign()` is unchanged: a uniform random pick among sides that still have room.
+`assign(level)` is a uniform random pick among the sides `sidesFor(level)` offers;
+with no level (plain mode) that's every side that still has room.
 
 ## Advanced mode
 
