@@ -29,9 +29,22 @@ with no level (plain mode) that's every side that still has room.
 Off by default, toggled by `#advancedToggle` on the setup screen and persisted
 separately (`courtAllocator:advanced`, `loadAdvanced()`/`saveAdvanced()`). When
 on, tapping the result card doesn't assign — `tapCard()` calls `askLevel()`,
-which puts the card into a question ("?" / "Pick your level below") and shows
+which puts the card into a question ("?" / "Pick your level") and shows
 `#levelPicker`'s three `.level-btn`s. `chooseLevel(key)` then calls
 `assign(key)`; `awaitingLevel` keeps a second tap on the card from re-asking.
+
+`#levelPicker` sits **inside** `.result-card`, under a hairline, so the question
+and its three answers are one object. That is why the card is no longer the
+button it used to be: a `role="button"` with buttons inside it is invalid, and a
+click on a level would bubble to the card's own handler and re-open the question
+it had just answered (`chooseLevel()` clears `awaitingLevel` before the bubble
+arrives, so the guard does not catch it). The tap target is now an inner
+`#resultTap`, with the picker as its sibling rather than its descendant, which
+removes the problem structurally instead of patching it with
+`stopPropagation()`. `.disabled`/`aria-disabled` for the all-full state moved
+onto `#resultTap` with it; `.result-card` keeps only the box, the hover tint and
+the `::before` court lines. The buttons carry their own translucent fill because
+a flat `var(--court)` is the card's own colour and vanished against it.
 With advanced off, `tapCard()` calls `assign(null)` and nothing changes.
 
 `LEVELS` is `B`/`I`/`A` (name + short form for the court-map badge).

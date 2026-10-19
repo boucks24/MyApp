@@ -86,11 +86,22 @@
     text-align:center;
     margin-bottom:12px;
     overflow:hidden;
+    isolation:isolate;
+    transition:background .16s var(--ease);
+  }
+  /* The card holds the level buttons now, so the card itself can no longer be
+     the button: nesting one inside another is invalid, and a click on a level
+     would bubble up and re-open the question it just answered. The tap target
+     is this inner area instead, with the buttons as its sibling. */
+  .result-tap{
     cursor:pointer;
     user-select:none;
-    isolation:isolate;
-    transition:background .16s var(--ease), transform .12s var(--ease);
+    border-radius:8px;
+    transition:transform .12s var(--ease);
   }
+  .result-tap:active{transform:scale(.985);}
+  .result-tap:focus-visible{outline:2px solid var(--ball);outline-offset:3px;}
+  .result-tap.disabled{cursor:not-allowed;opacity:.5;}
   /* Court lines, drawn to scale: baseline, service line, centre mark.
      Replaces the old decorative corner circle with the real geometry. */
   /* Court plan watermark: an inset baseline rectangle with the centre mark,
@@ -110,9 +121,6 @@
     pointer-events:none;
   }
   .result-card:hover{background:var(--court-lift);}
-  .result-card:active{transform:scale(.985);}
-  .result-card:focus-visible{outline:2px solid var(--ball);outline-offset:3px;}
-  .result-card.disabled{cursor:not-allowed;opacity:.5;}
 
   .result-label{
     font-size:11px;font-weight:700;
@@ -160,10 +168,18 @@
   button:focus-visible{outline:2px solid var(--line);outline-offset:2px;}
   button:disabled{background:rgba(215,224,91,.25);color:rgba(22,33,29,.5);cursor:not-allowed;}
 
-  /* Advanced mode: the level question that stands between the tap and a spot. */
-  .level-picker{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;}
+  /* Advanced mode: the level question that stands between the tap and a spot.
+     It lives inside the result card, under a hairline, so the question and the
+     answer are one object rather than a card with a detached row beneath it. */
+  .level-picker{
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;
+    margin:18px -4px 0;
+    padding-top:16px;
+    border-top:1px solid rgba(244,241,232,.12);
+  }
   .level-btn{
-    background:var(--court);
+    /* a flat var(--court) would vanish against the card it now sits on */
+    background:rgba(244,241,232,.07);
     border:1px solid rgba(244,241,232,.2);
     color:rgba(244,241,232,.82);
     font-family:'Archivo Black',sans-serif;
@@ -173,7 +189,7 @@
     border-radius:10px;
     line-height:1.2;
   }
-  .level-btn:hover{background:var(--court-lift);color:var(--line);}
+  .level-btn:hover{background:rgba(244,241,232,.14);color:var(--line);}
   .level-btn[data-level="B"]{border-color:rgba(143,214,180,.5);}
   .level-btn[data-level="I"]{border-color:rgba(215,224,91,.5);}
   .level-btn[data-level="A"]{border-color:rgba(193,98,46,.6);}
@@ -403,16 +419,17 @@
   </div>
 
   <div id="playArea" class="hidden">
-    <div class="result-card" id="resultCard" role="button" tabindex="0" aria-label="Tap to get your court">
-      <div class="result-label">Your spot</div>
-      <strong class="result-value" id="resultValue">TAP</strong>
-      <div class="result-sub" id="resultSub">Tap this card to get your court</div>
-    </div>
-
-    <div class="level-picker hidden" id="levelPicker" role="group" aria-label="Pick your level">
-      <button type="button" class="level-btn" data-level="B">Beginner</button>
-      <button type="button" class="level-btn" data-level="I">Intermediate</button>
-      <button type="button" class="level-btn" data-level="A">Advanced</button>
+    <div class="result-card">
+      <div class="result-tap" id="resultTap" role="button" tabindex="0" aria-label="Tap to get your court">
+        <div class="result-label">Your spot</div>
+        <strong class="result-value" id="resultValue">TAP</strong>
+        <div class="result-sub" id="resultSub">Tap this card to get your court</div>
+      </div>
+      <div class="level-picker hidden" id="levelPicker" role="group" aria-label="Pick your level">
+        <button type="button" class="level-btn" data-level="B">Beginner</button>
+        <button type="button" class="level-btn" data-level="I">Intermediate</button>
+        <button type="button" class="level-btn" data-level="A">Advanced</button>
+      </div>
     </div>
 
     <div class="actions">
@@ -460,7 +477,7 @@
     const playArea = document.getElementById('playArea');
     const changeBtn = document.getElementById('changeBtn');
 
-    const resultCard = document.getElementById('resultCard');
+    const resultTap = document.getElementById('resultTap');
     const resultValue = document.getElementById('resultValue');
     const resultSub = document.getElementById('resultSub');
     const resetBtn = document.getElementById('resetBtn');
@@ -601,11 +618,11 @@
 
       const allFull = Object.values(slots).every(v => v >= CAPACITY);
       if(allFull){
-        resultCard.classList.add('disabled');
-        resultCard.setAttribute('aria-disabled', 'true');
+        resultTap.classList.add('disabled');
+        resultTap.setAttribute('aria-disabled', 'true');
       } else {
-        resultCard.classList.remove('disabled');
-        resultCard.removeAttribute('aria-disabled');
+        resultTap.classList.remove('disabled');
+        resultTap.removeAttribute('aria-disabled');
       }
       fullNote.style.display = allFull ? 'block' : 'none';
     }
@@ -697,17 +714,18 @@
     }
 
     /* In advanced mode the tap asks for a level first; the card itself becomes
-       the question so the three buttons below it are the only thing to do. */
+       the question, and the three answers appear on the same card so there is
+       nothing else to look at. */
     function askLevel(){
       clearTimeout(revertTimer);
       awaitingLevel = true;
       resultValue.textContent = '?';
-      resultSub.textContent = 'Pick your level below';
+      resultSub.textContent = 'Pick your level';
       levelPicker.classList.remove('hidden');
     }
 
     function tapCard(){
-      if (resultCard.classList.contains('disabled')) return;
+      if (resultTap.classList.contains('disabled')) return;
       if (!advancedMode){ assign(null); return; }
       if (awaitingLevel) return; // the question is already up; answer it
       askLevel();
@@ -757,8 +775,8 @@
       if(e.key === 'Enter') startBtn.click();
     });
 
-    resultCard.addEventListener('click', tapCard);
-    resultCard.addEventListener('keydown', (e) => {
+    resultTap.addEventListener('click', tapCard);
+    resultTap.addEventListener('keydown', (e) => {
       if(e.key === 'Enter' || e.key === ' '){
         e.preventDefault();
         tapCard();
