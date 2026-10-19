@@ -22,3 +22,26 @@ read as the court numbers in order instead of reflowing into a ragged last row
 (six per row down to 320px).
 
 `assign()` is unchanged: a uniform random pick among sides that still have room.
+
+## Advanced mode
+
+Off by default, toggled by `#advancedToggle` on the setup screen and persisted
+separately (`courtAllocator:advanced`, `loadAdvanced()`/`saveAdvanced()`). When
+on, tapping the result card doesn't assign — `tapCard()` calls `askLevel()`,
+which puts the card into a question ("?" / "Pick your level below") and shows
+`#levelPicker`'s three `.level-btn`s. `chooseLevel(key)` then calls
+`assign(key)`; `awaitingLevel` keeps a second tap on the card from re-asking.
+With advanced off, `tapCard()` calls `assign(null)` and nothing changes.
+
+`LEVELS` is `B`/`I`/`A` (name + short form for the court-map badge).
+`courtLevel` maps court -> level key and is **claimed lazily**: no level owns a
+court until the first player of that level lands on it, so an all-beginner night
+still spreads over the whole pool. `sidesFor(level)` picks, in order: a free side
+on a court this level already owns, else both sides of the lowest-numbered
+unclaimed court, else (every court owned by someone else) any free side, with
+the result sub saying they're sharing. `assign()` sets `courtLevel[court]` on
+the claim and appends the level sentence. Both `courtLevel` and the picker are
+cleared by `setupCourts()` and `reset()`.
+
+`courtsNeeded()` opens at least `min(pool, 3)` courts in advanced mode, so the
+three groups have somewhere of their own from the first tap.

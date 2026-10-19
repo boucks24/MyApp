@@ -19,6 +19,9 @@
     --line:#F4F1E8;
     --clay:#C1622E;
     --ball:#D7E05B;
+    --lvl-b:#8FD6B4;
+    --lvl-i:#D7E05B;
+    --lvl-a:#D8884F;
     --ink:#16211D;
     --r:14px;
     --ease:cubic-bezier(.16,1,.3,1);
@@ -157,6 +160,24 @@
   button:focus-visible{outline:2px solid var(--line);outline-offset:2px;}
   button:disabled{background:rgba(215,224,91,.25);color:rgba(22,33,29,.5);cursor:not-allowed;}
 
+  /* Advanced mode: the level question that stands between the tap and a spot. */
+  .level-picker{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;}
+  .level-btn{
+    background:var(--court);
+    border:1px solid rgba(244,241,232,.2);
+    color:rgba(244,241,232,.82);
+    font-family:'Archivo Black',sans-serif;
+    font-size:12.5px;
+    letter-spacing:.01em;
+    padding:16px 4px;
+    border-radius:10px;
+    line-height:1.2;
+  }
+  .level-btn:hover{background:var(--court-lift);color:var(--line);}
+  .level-btn[data-level="B"]{border-color:rgba(143,214,180,.5);}
+  .level-btn[data-level="I"]{border-color:rgba(215,224,91,.5);}
+  .level-btn[data-level="A"]{border-color:rgba(193,98,46,.6);}
+
   .actions{display:flex;gap:8px;margin-bottom:22px;}
   .link-btn{
     flex:1 1 0;
@@ -185,9 +206,19 @@
     font-family:'Archivo Black',sans-serif;
     font-size:19px;
     color:rgba(244,241,232,.55);
-    display:flex;align-items:center;justify-content:flex-end;
+    display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:3px;
     letter-spacing:-0.01em;
   }
+  /* Which skill level has claimed this court, once someone has landed on it. */
+  .court-level{
+    font-family:'Archivo',sans-serif;
+    font-size:9.5px;font-weight:700;
+    letter-spacing:.09em;text-transform:uppercase;
+    line-height:1;
+  }
+  .court-level.lvl-B{color:var(--lvl-b);}
+  .court-level.lvl-I{color:var(--lvl-i);}
+  .court-level.lvl-A{color:var(--lvl-a);}
   .court.full .court-no{color:var(--clay);}
   .court-sides{
     display:grid;
@@ -304,6 +335,33 @@
   }
   .picker-note.warn{color:#F0B4A0;}
 
+  /* Advanced-mode switch, sitting between the two setup questions. */
+  .toggle-row{
+    display:flex;align-items:center;gap:12px;
+    margin:0 0 14px;
+  }
+  .toggle-row label{margin:0;flex:1 1 auto;}
+  .switch{
+    flex:0 0 auto;
+    width:52px;height:30px;
+    padding:0;
+    border-radius:999px;
+    background:var(--deep);
+    border:1px solid rgba(244,241,232,.22);
+    position:relative;
+  }
+  .switch::after{
+    content:"";
+    position:absolute;top:3px;left:3px;
+    width:22px;height:22px;
+    border-radius:50%;
+    background:rgba(244,241,232,.55);
+    transition:transform .18s var(--ease), background .18s var(--ease);
+  }
+  .switch:hover{background:var(--court-lift);}
+  .switch[aria-pressed="true"]{background:var(--ball);border-color:var(--ball);}
+  .switch[aria-pressed="true"]::after{transform:translateX(22px);background:var(--ink);}
+
   .setup-note{
     font-size:12.5px;
     color:rgba(244,241,232,.55);
@@ -332,6 +390,12 @@
     <div class="court-picker" id="courtPicker" role="group" aria-labelledby="courtsLabel"></div>
     <p class="picker-note" id="pickerNote"></p>
 
+    <div class="toggle-row">
+      <label id="advancedLabel" for="advancedToggle">Advanced mode</label>
+      <button type="button" class="switch" id="advancedToggle" aria-pressed="false" aria-labelledby="advancedLabel"></button>
+    </div>
+    <p class="picker-note" id="advancedNote"></p>
+
     <label for="playerCount">How many players today?</label>
     <input type="number" id="playerCount" min="4" max="16" step="1" placeholder="e.g. 10" inputmode="numeric">
     <button id="startBtn">Set courts</button>
@@ -343,6 +407,12 @@
       <div class="result-label">Your spot</div>
       <strong class="result-value" id="resultValue">TAP</strong>
       <div class="result-sub" id="resultSub">Tap this card to get your court</div>
+    </div>
+
+    <div class="level-picker hidden" id="levelPicker" role="group" aria-label="Pick your level">
+      <button type="button" class="level-btn" data-level="B">Beginner</button>
+      <button type="button" class="level-btn" data-level="I">Intermediate</button>
+      <button type="button" class="level-btn" data-level="A">Advanced</button>
     </div>
 
     <div class="actions">
@@ -362,10 +432,25 @@
     const CAPACITY = 2; // players per side, per court
     const PER_COURT = CAPACITY * SIDES.length;
     const STORE = 'courtAllocator:courts';
+    const ADV_STORE = 'courtAllocator:advanced';
+
+    // Advanced mode asks each player their level and keeps levels off each
+    // other's courts. Keys are what gets stored in `courtLevel`.
+    const LEVELS = [
+      { key: 'B', name: 'Beginner', short: 'Beg' },
+      { key: 'I', name: 'Intermediate', short: 'Int' },
+      { key: 'A', name: 'Advanced', short: 'Adv' }
+    ];
+    const levelName = k => (LEVELS.find(l => l.key === k) || {}).name || '';
+    // The court map's number column is narrow, so badges use the short form.
+    const levelShort = k => (LEVELS.find(l => l.key === k) || {}).short || '';
 
     let COURTS = [];       // the courts actually in play this session
     let slots = {};
+    let courtLevel = {};   // court -> level key, set by the first player of that level to land on it
+    let awaitingLevel = false;
     let selectedCourts = loadCourts();   // the pool picked on the setup screen
+    let advancedMode = loadAdvanced();
 
     const headerSub = document.getElementById('headerSub');
     const setupCard = document.getElementById('setupCard');
@@ -383,6 +468,9 @@
     const fullNote = document.getElementById('fullNote');
     const courtPicker = document.getElementById('courtPicker');
     const pickerNote = document.getElementById('pickerNote');
+    const advancedToggle = document.getElementById('advancedToggle');
+    const advancedNote = document.getElementById('advancedNote');
+    const levelPicker = document.getElementById('levelPicker');
 
     /* The pool is remembered between visits: which courts are free tends to be
        the same for weeks at a time, so re-picking every session is busywork. */
@@ -397,6 +485,20 @@
     }
     function saveCourts(){
       try { localStorage.setItem(STORE, JSON.stringify(selectedCourts)); } catch(e){}
+    }
+
+    function loadAdvanced(){
+      try { return localStorage.getItem(ADV_STORE) === '1'; } catch(e){ return false; }
+    }
+    function saveAdvanced(){
+      try { localStorage.setItem(ADV_STORE, advancedMode ? '1' : '0'); } catch(e){}
+    }
+
+    function renderAdvanced(){
+      advancedToggle.setAttribute('aria-pressed', advancedMode ? 'true' : 'false');
+      advancedNote.textContent = advancedMode
+        ? 'Each player picks a level and gets a court with their own group.'
+        : 'Off: any player, any free spot.';
     }
 
     function renderPicker(){
@@ -438,7 +540,10 @@
 
     function courtsNeeded(count){
       const needed = Math.ceil(count / PER_COURT); // 4 players per full court
-      return Math.min(selectedCourts.length, Math.max(1, needed));
+      // In advanced mode open at least one court per level (pool permitting), so
+      // the three groups have somewhere of their own to land from the first tap.
+      const least = advancedMode ? Math.min(selectedCourts.length, LEVELS.length) : 1;
+      return Math.min(selectedCourts.length, Math.max(least, needed));
     }
 
     function setupCourts(count){
@@ -448,6 +553,8 @@
       // end of the pool rather than an arbitrary order.
       COURTS = selectedCourts.slice(0, n);
       slots = {};
+      courtLevel = {};
+      hideLevelPicker();
       COURTS.forEach(c => SIDES.forEach(s => slots[c + s] = 0));
 
       const label = courtListLabel(COURTS);
@@ -458,7 +565,7 @@
         (over > 0 ? ` ${spots} spots for ${count} players, so ${over} will be waiting.` : '');
 
       resultValue.textContent = 'TAP';
-      resultSub.textContent = 'Tap this card to get your court';
+      resultSub.textContent = tapPrompt();
 
       setupCard.classList.add('hidden');
       playArea.classList.remove('hidden');
@@ -473,10 +580,11 @@
       grid.innerHTML = '';
       COURTS.forEach(c => {
         const courtFull = SIDES.every(s => slots[c + s] >= CAPACITY);
+        const lvl = courtLevel[c];
         const row = document.createElement('div');
         row.className = 'court' + (courtFull ? ' full' : '');
         row.innerHTML = `
-          <div class="court-no">${c}</div>
+          <div class="court-no">${c}${lvl ? `<span class="court-level lvl-${lvl}">${levelShort(lvl)}</span>` : ''}</div>
           <div class="court-sides">
             ${SIDES.map(s => {
               const count = slots[c + s];
@@ -505,8 +613,29 @@
     let revertTimer = null;
     const REVERT_DELAY = 2200; // ms before the card resets to "TAP" for the next person
 
-    function assign(){
-      const available = Object.keys(slots).filter(k => slots[k] < CAPACITY);
+    function freeSides(courts){
+      const out = [];
+      courts.forEach(c => SIDES.forEach(s => { if (slots[c + s] < CAPACITY) out.push(c + s); }));
+      return out;
+    }
+
+    /* The sides a player of this level may be sent to, in order of preference:
+       their group's own courts, then the lowest-numbered court nobody has
+       claimed yet, and only if every court already belongs to another group do
+       they share one. No level is pre-assigned a court — a court belongs to the
+       first group that lands on it, so an evening of all-beginners still
+       spreads across the whole pool. */
+    function sidesFor(level){
+      if (!level) return freeSides(COURTS);
+      const mine = freeSides(COURTS.filter(c => courtLevel[c] === level));
+      if (mine.length) return mine;
+      const unclaimed = COURTS.filter(c => !courtLevel[c]);
+      if (unclaimed.length) return freeSides([unclaimed[0]]);
+      return freeSides(COURTS);
+    }
+
+    function assign(level){
+      const available = sidesFor(level);
       if(available.length === 0) return;
 
       clearTimeout(revertTimer);
@@ -521,7 +650,19 @@
 
       const court = pick.slice(0, -1);
       const side = pick.slice(-1);
-      resultSub.textContent = `Court ${court}, side ${side}. Go grab a spot.`;
+      let sub = `Court ${court}, side ${side}. Go grab a spot.`;
+      if (level){
+        const owner = courtLevel[court];
+        if (!owner){
+          courtLevel[court] = level; // first of this group here: the court is theirs
+          sub += ` ${levelName(level)} court.`;
+        } else if (owner === level){
+          sub += ` ${levelName(level)} court.`;
+        } else {
+          sub += ` Sharing the ${levelName(owner).toLowerCase()} court — no room left in your group.`;
+        }
+      }
+      resultSub.textContent = sub;
 
       renderGrid();
 
@@ -529,7 +670,7 @@
         const stillAvailable = Object.keys(slots).some(k => slots[k] < CAPACITY);
         resultValue.textContent = 'TAP';
         resultSub.textContent = stillAvailable
-          ? 'Next player, tap this card'
+          ? (advancedMode ? 'Next player, tap and pick your level' : 'Next player, tap this card')
           : 'All courts are full';
       }, REVERT_DELAY);
     }
@@ -537,9 +678,49 @@
     function reset(){
       clearTimeout(revertTimer);
       COURTS.forEach(c => SIDES.forEach(s => slots[c + s] = 0));
+      courtLevel = {};
+      hideLevelPicker();
       resultValue.textContent = 'TAP';
-      resultSub.textContent = 'Tap this card to get your court';
+      resultSub.textContent = tapPrompt();
       renderGrid();
+    }
+
+    function tapPrompt(){
+      return advancedMode
+        ? 'Tap this card, then pick your level'
+        : 'Tap this card to get your court';
+    }
+
+    function hideLevelPicker(){
+      awaitingLevel = false;
+      levelPicker.classList.add('hidden');
+    }
+
+    /* In advanced mode the tap asks for a level first; the card itself becomes
+       the question so the three buttons below it are the only thing to do. */
+    function askLevel(){
+      clearTimeout(revertTimer);
+      awaitingLevel = true;
+      resultValue.textContent = '?';
+      resultSub.textContent = 'Pick your level below';
+      levelPicker.classList.remove('hidden');
+    }
+
+    function tapCard(){
+      if (resultCard.classList.contains('disabled')) return;
+      if (!advancedMode){ assign(null); return; }
+      if (awaitingLevel) return; // the question is already up; answer it
+      askLevel();
+    }
+
+    function chooseLevel(key){
+      hideLevelPicker();
+      if (!sidesFor(key).length){ // nothing left anywhere: don't leave the card on "?"
+        resultValue.textContent = 'TAP';
+        resultSub.textContent = 'All courts are full';
+        return;
+      }
+      assign(key);
     }
 
     function backToSetup(){
@@ -547,7 +728,9 @@
       playArea.classList.add('hidden');
       setupCard.classList.remove('hidden');
       headerSub.textContent = 'Tap for a random spot';
+      hideLevelPicker();
       renderPicker();
+      renderAdvanced();
     }
 
     startBtn.addEventListener('click', () => {
@@ -568,17 +751,26 @@
     });
 
     renderPicker();
+    renderAdvanced();
 
     playerCountInput.addEventListener('keydown', (e) => {
       if(e.key === 'Enter') startBtn.click();
     });
 
-    resultCard.addEventListener('click', assign);
+    resultCard.addEventListener('click', tapCard);
     resultCard.addEventListener('keydown', (e) => {
       if(e.key === 'Enter' || e.key === ' '){
         e.preventDefault();
-        assign();
+        tapCard();
       }
+    });
+    levelPicker.querySelectorAll('.level-btn').forEach(btn => {
+      btn.addEventListener('click', () => chooseLevel(btn.dataset.level));
+    });
+    advancedToggle.addEventListener('click', () => {
+      advancedMode = !advancedMode;
+      saveAdvanced();
+      renderAdvanced();
     });
     resetBtn.addEventListener('click', reset);
     changeBtn.addEventListener('click', backToSetup);
