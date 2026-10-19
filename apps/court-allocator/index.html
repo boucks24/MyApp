@@ -176,27 +176,50 @@
      It lives inside the result card, under a hairline, so the question and the
      answer are one object rather than a card with a detached row beneath it. */
   .level-picker{
-    display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;
+    /* minmax(0,1fr), not 1fr: a plain 1fr will not shrink a column below its
+       min-content, and "Intermediate" is one long unbreakable word, so the
+       three buttons came out 89/122/96 wide instead of even. */
+    display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
     margin:18px -4px 0;
     padding-top:16px;
     border-top:1px solid rgba(244,241,232,.12);
   }
+  /* These are the only thing to press in SBMM and Mixed, so they are sized
+     like it: a big target with the level's own colour and a lit edge.
+
+     The letter carries the size and the word stays small underneath, which is
+     what makes this fit. Setting the whole label at a tap-me size instead
+     meant "Intermediate" could not be made to fit three even columns on a
+     narrow phone without either shrinking every label or breaking the word
+     across lines. */
   .level-btn{
     /* a flat var(--court) would vanish against the card it now sits on */
-    background:rgba(244,241,232,.07);
-    border:1px solid rgba(244,241,232,.2);
-    color:rgba(244,241,232,.82);
+    background:rgba(244,241,232,.1);
+    border:1.5px solid rgba(244,241,232,.26);
+    color:var(--line);
     font-family:'Archivo Black',sans-serif;
-    font-size:12.5px;
-    letter-spacing:.01em;
-    padding:16px 4px;
-    border-radius:10px;
-    line-height:1.2;
+    padding:12px 2px;
+    min-height:84px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+    border-radius:12px;
+    line-height:1;
   }
-  .level-btn:hover{background:rgba(244,241,232,.14);color:var(--line);}
-  .level-btn[data-level="B"]{border-color:rgba(143,214,180,.5);}
-  .level-btn[data-level="I"]{border-color:rgba(215,224,91,.5);}
-  .level-btn[data-level="A"]{border-color:rgba(193,98,46,.6);}
+  .lv-key{font-size:clamp(22px,7vw,28px);line-height:1;}
+  .lv-word{
+    font-family:'Archivo',sans-serif;
+    font-weight:700;
+    /* has to hold "INTERMEDIATE" inside a third of the card at 320px */
+    font-size:clamp(8.5px,2.75vw,11.5px);
+    letter-spacing:.02em;
+    text-transform:uppercase;
+    opacity:.75;
+    white-space:nowrap;
+  }
+  .level-btn:hover{background:rgba(244,241,232,.18);}
+  .level-btn:active{transform:scale(.97);}
+  .level-btn[data-level="B"]{border-color:rgba(143,214,180,.75);color:var(--lvl-b);}
+  .level-btn[data-level="I"]{border-color:rgba(215,224,91,.75);color:var(--lvl-i);}
+  .level-btn[data-level="A"]{border-color:rgba(216,136,79,.8);color:var(--lvl-a);}
 
   .actions{display:flex;gap:8px;margin-bottom:22px;}
   .link-btn{
@@ -436,9 +459,9 @@
         <div class="result-sub" id="resultSub">Tap this card to get your court</div>
       </div>
       <div class="level-picker hidden" id="levelPicker" role="group" aria-label="Pick your level">
-        <button type="button" class="level-btn" data-level="B">Beginner</button>
-        <button type="button" class="level-btn" data-level="I">Intermediate</button>
-        <button type="button" class="level-btn" data-level="A">Advanced</button>
+        <button type="button" class="level-btn" data-level="B"><span class="lv-key">B</span><span class="lv-word">Beginner</span></button>
+        <button type="button" class="level-btn" data-level="I"><span class="lv-key">I</span><span class="lv-word">Intermediate</span></button>
+        <button type="button" class="level-btn" data-level="A"><span class="lv-key">A</span><span class="lv-word">Advanced</span></button>
       </div>
     </div>
 

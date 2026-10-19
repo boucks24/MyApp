@@ -95,6 +95,16 @@ onto `#resultTap` with it; `.result-card` keeps only the box, the hover tint and
 the `::before` court lines. The buttons carry their own translucent fill because
 a flat `var(--court)` is the card's own colour and vanished against it.
 
+Each `.level-btn` is a big letter (`.lv-key`) over a small word (`.lv-word`),
+not one label at a tap-me size. Setting the whole label large meant
+"Intermediate" could not fit three even columns on a narrow phone without
+either shrinking every label or breaking the word across lines; the letter
+carries the size instead and the word stays small underneath. The grid is
+`repeat(3,minmax(0,1fr))` rather than `1fr 1fr 1fr`, because a plain `1fr`
+will not shrink a column below its min-content and that one unbreakable word
+made the three buttons 89/122/96 wide. The word's size is clamped down to
+8.5px purely so "INTERMEDIATE" still fits at 320px.
+
 `LEVELS` is `B`/`I`/`A` (name + short form for the court-map badge). In SBMM
 `sidesFor()` picks, in order: a free side on a court this level already owns,
 else both sides of the lowest-numbered unclaimed court, else any free side at
