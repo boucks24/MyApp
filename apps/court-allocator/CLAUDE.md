@@ -2,8 +2,8 @@
 
 Tennis court randomizer. See root `CLAUDE.md` for repo-wide conventions.
 
-`AVAILABLE_COURTS` is 13-18 (everything the club can give us); the setup screen's
-six `.court-chip` toggles pick which of them are in play. The picked pool lives in
+`AVAILABLE_COURTS` is 1-18 (everything the club can give us); the setup screen's
+eighteen `.court-chip` toggles pick which of them are in play. The picked pool lives in
 `selectedCourts` and is the one piece of state persisted (`localStorage`,
 `courtAllocator:courts`, via `loadCourts()`/`saveCourts()`) — which courts are free
 tends to hold for weeks, so re-picking every session is busywork. `loadCourts()`
@@ -17,7 +17,8 @@ the player count exceeds the pool's capacity the header says how many will be
 waiting rather than silently under-allocating; an empty pool blocks `startBtn`
 with an inline message. `renderPicker()` is re-run by `backToSetup()` so the chips
 reflect the stored pool when you come back. The picker is a fixed
-`repeat(6,minmax(0,1fr))` grid so the chips always read as the court numbers in
-order instead of reflowing into a ragged last row (fits in one row down to 320px).
+`repeat(6,minmax(0,1fr))` grid (18 courts = three full rows) so the chips always
+read as the court numbers in order instead of reflowing into a ragged last row
+(six per row down to 320px).
 
 `assign()` is unchanged: a uniform random pick among sides that still have room.

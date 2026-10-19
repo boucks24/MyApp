@@ -274,13 +274,13 @@
   }
   input[type="number"]::placeholder{color:rgba(244,241,232,.38);}
   input[type="number"]:focus{outline:2px solid var(--ball);outline-offset:1px;}
-  /* Court picker: six toggles, because which courts are free changes week
+  /* Court picker: one toggle per court, because which courts are free changes week
      to week and the old build had 13-16 hard-coded. */
-  /* Six fixed columns, so the chips always read as the court numbers in
-     order rather than reflowing into a ragged last row. */
+  /* Six fixed columns (18 courts = three full rows), so the chips always read
+     as the court numbers in order rather than reflowing into a ragged last row. */
   .court-picker{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:8px;}
   .court-chip{
-    padding:15px 2px;
+    padding:12px 2px;
     border-radius:10px;
     border:1px solid rgba(244,241,232,.2);
     background:var(--deep);
@@ -357,7 +357,7 @@
 
 <script>
   try {
-    const AVAILABLE_COURTS = [13, 14, 15, 16, 17, 18]; // every court the club can give us
+    const AVAILABLE_COURTS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]; // every court the club can give us
     const SIDES = ['A', 'B'];
     const CAPACITY = 2; // players per side, per court
     const PER_COURT = CAPACITY * SIDES.length;
